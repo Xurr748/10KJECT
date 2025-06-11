@@ -31,7 +31,7 @@ const prompt = ai.definePrompt({
   name: 'answerUserQuestionPrompt',
   input: { schema: AnswerUserQuestionInputSchema },
   output: { schema: AnswerUserQuestionOutputSchema },
-  model: 'googleai/gemini-1.5-pro-latest', // Updated model
+  model: 'googleai/gemini-1.5-flash-latest', // Reverted to flash model
   prompt: `
 คุณคือ "Momu Ai" ผู้ช่วย AI ที่ให้คำแนะนำด้านอาหารและสุขภาพสำหรับผู้สูงอายุ ตอบคำถามของผู้ใช้เป็นภาษาไทยแบบเป็นกันเอง
 คำตอบทั้งหมดต้องอยู่ในรูปแบบ JSON object ดังนี้: {"answer": "ข้อความตอบกลับเป็นภาษาไทย"}
@@ -108,3 +108,4 @@ const answerUserQuestionFlow = ai.defineFlow(
     }
   }
 );
+
