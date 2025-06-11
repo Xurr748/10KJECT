@@ -3,32 +3,49 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { LogIn, Utensils } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { auth } from '@/lib/firebase'; // Import Firebase auth
+import { signInWithEmailAndPassword } from 'firebase/auth';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const router = useRouter();
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsLoading(true);
-    // Placeholder for actual login logic
-    console.log('Login attempt with:', { email, password });
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    toast({
-      title: "เข้าสู่ระบบ (ตัวอย่าง)",
-      description: "การยืนยันตัวตนจริงยังไม่ได้ถูกนำมาใช้",
-    });
-    setIsLoading(false);
-    // router.push('/'); // Redirect after successful login
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      toast({
+        title: "เข้าสู่ระบบสำเร็จ",
+        description: "ยินดีต้อนรับกลับ!",
+      });
+      router.push('/'); // Redirect after successful login
+    } catch (error: any) {
+      console.error('Login error:', error);
+      let errorMessage = "เกิดข้อผิดพลาดในการเข้าสู่ระบบ";
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        errorMessage = "อีเมลหรือรหัสผ่านไม่ถูกต้อง";
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = "รูปแบบอีเมลไม่ถูกต้อง";
+      }
+      toast({
+        title: "เข้าสู่ระบบไม่สำเร็จ",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -99,4 +116,3 @@ export default function LoginPage() {
     </div>
   );
 }
-    

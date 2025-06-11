@@ -3,12 +3,15 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { UserPlus, Utensils } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { auth } from '@/lib/firebase'; // Import Firebase auth
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 
 export default function RegisterPage() {
   const [email, setEmail] = useState('');
@@ -16,6 +19,7 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
+  const router = useRouter();
 
   const handleRegister = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -28,16 +32,31 @@ export default function RegisterPage() {
       return;
     }
     setIsLoading(true);
-    // Placeholder for actual registration logic
-    console.log('Register attempt with:', { email, password });
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    toast({
-      title: "ลงทะเบียนสำเร็จ (ตัวอย่าง)",
-      description: "การยืนยันตัวตนจริงยังไม่ได้ถูกนำมาใช้",
-    });
-    setIsLoading(false);
-    // router.push('/login'); // Redirect after successful registration
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+      toast({
+        title: "ลงทะเบียนสำเร็จ",
+        description: "บัญชีของคุณถูกสร้างเรียบร้อยแล้ว โปรดเข้าสู่ระบบ",
+      });
+      router.push('/login'); // Redirect to login page after successful registration
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      let errorMessage = "เกิดข้อผิดพลาดในการลงทะเบียน";
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = "อีเมลนี้ถูกใช้งานแล้ว";
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = "รูปแบบอีเมลไม่ถูกต้อง";
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = "รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร";
+      }
+      toast({
+        title: "ลงทะเบียนไม่สำเร็จ",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -120,4 +139,3 @@ export default function RegisterPage() {
     </div>
   );
 }
-    

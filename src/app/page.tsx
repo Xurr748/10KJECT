@@ -4,8 +4,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { analyzeFoodImage, type AnalyzeFoodImageInput, type AnalyzeFoodImageOutput } from '@/ai/flows/food-image-analyzer';
 import { askQuestion, type AskQuestionInput, type AskQuestionOutput } from '@/ai/flows/interactive-q-and-a';
+import { auth } from '@/lib/firebase'; // Import Firebase auth
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth'; // Import Firebase auth functions
 
 // ShadCN UI Components
 import { Button } from '@/components/ui/button';
@@ -26,7 +29,7 @@ import {
 
 
 // Lucide Icons
-import { UploadCloud, Bot, Brain, Utensils, AlertCircle, CheckCircle, Info, Lightbulb, MessagesSquare, Newspaper, UserCircle, LogIn, UserPlus } from 'lucide-react';
+import { UploadCloud, Bot, Brain, Utensils, AlertCircle, CheckCircle, Info, Lightbulb, MessagesSquare, Newspaper, UserCircle, LogIn, UserPlus, LogOut } from 'lucide-react';
 
 // Chat Message Type
 interface ChatMessage {
@@ -38,6 +41,9 @@ interface ChatMessage {
 
 export default function FSFAPage() {
   const { toast } = useToast();
+  const router = useRouter();
+
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -49,6 +55,31 @@ export default function FSFAPage() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isLoadingQa, setIsLoadingQa] = useState(false);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      toast({
+        title: "ออกจากระบบสำเร็จ",
+      });
+      // Optionally, redirect to login page or home
+      // router.push('/login'); 
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast({
+        title: "เกิดข้อผิดพลาดในการออกจากระบบ",
+        variant: "destructive",
+      });
+    }
+  };
+
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -203,18 +234,32 @@ export default function FSFAPage() {
               <DropdownMenuContent align="end" className="w-56">
                 <DropdownMenuLabel>บัญชีของฉัน</DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/login" className="flex items-center w-full">
-                    <LogIn className="mr-2 h-4 w-4" />
-                    <span>เข้าสู่ระบบ</span>
-                  </Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <Link href="/register" className="flex items-center w-full">
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    <span>ลงทะเบียน</span>
-                  </Link>
-                </DropdownMenuItem>
+                {currentUser ? (
+                  <>
+                    <DropdownMenuItem disabled>
+                      <span className="truncate">{currentUser.email}</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>ออกจากระบบ</span>
+                    </DropdownMenuItem>
+                  </>
+                ) : (
+                  <>
+                    <DropdownMenuItem asChild>
+                      <Link href="/login" className="flex items-center w-full cursor-pointer">
+                        <LogIn className="mr-2 h-4 w-4" />
+                        <span>เข้าสู่ระบบ</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <Link href="/register" className="flex items-center w-full cursor-pointer">
+                        <UserPlus className="mr-2 h-4 w-4" />
+                        <span>ลงทะเบียน</span>
+                      </Link>
+                    </DropdownMenuItem>
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -370,4 +415,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-    
