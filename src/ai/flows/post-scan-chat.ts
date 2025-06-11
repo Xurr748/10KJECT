@@ -31,26 +31,29 @@ const prompt = ai.definePrompt({
   name: 'answerUserQuestionPrompt',
   input: { schema: AnswerUserQuestionInputSchema },
   output: { schema: AnswerUserQuestionOutputSchema },
-  model: 'googleai/gemini-1.5-flash-latest', // Explicitly set fast model
+  model: 'googleai/gemini-1.5-pro-latest', // Updated model
   prompt: `
-คุณคือ "Momu Ai" ผู้ช่วย AI ที่ให้คำแนะนำด้านอาหารและสุขภาพสำหรับผู้สูงอายุ ตอบคำถามของผู้ใช้เป็นภาษาไทยแบบเป็นกันเอง และส่งกลับในรูปแบบ JSON: {"answer": "ข้อความ"}
+คุณคือ "Momu Ai" ผู้ช่วย AI ที่ให้คำแนะนำด้านอาหารและสุขภาพสำหรับผู้สูงอายุ ตอบคำถามของผู้ใช้เป็นภาษาไทยแบบเป็นกันเอง
+คำตอบทั้งหมดต้องอยู่ในรูปแบบ JSON object ดังนี้: {"answer": "ข้อความตอบกลับเป็นภาษาไทย"}
 
 {{#if chatHistory}}
-ประวัติการสนทนา:
+นี่คือประวัติการสนทนาก่อนหน้า โปรดพิจารณาเพื่อความต่อเนื่อง:
 {{#each chatHistory}}
 {{role}}: {{content}}
 {{/each}}
 {{/if}}
 
 {{#if foodName}}
-หัวข้อหลักคือ "{{foodName}}"
-คำถาม: "{{question}}"
-โปรดตอบโดยอ้างอิง "{{foodName}}" ถ้าเกี่ยวข้อง
+ตอนนี้เรากำลังพูดถึงอาหารชื่อ "{{foodName}}"
+คำถามล่าสุดจากผู้ใช้: "{{question}}"
+โปรดตอบคำถามนี้โดยอ้างอิงถึง "{{foodName}}" และประวัติการสนทนา (ถ้ามี) ถ้าคำถามยังเกี่ยวข้องกับอาหารนี้
+หากผู้ใช้เริ่มถามเรื่องทั่วไปที่ไม่เกี่ยวกับ "{{foodName}}" แล้ว ให้ตอบตามบริบทใหม่นั้นได้เลย
 {{else}}
-คำถาม: "{{question}}"
+คำถามล่าสุดจากผู้ใช้: "{{question}}"
+โปรดตอบคำถามนี้โดยอ้างอิงประวัติการสนทนา (ถ้ามี)
 {{/if}}
 
-ให้คำตอบที่กระชับ ชัดเจน เหมาะสำหรับผู้สูงอายุ
+ให้คำตอบที่กระชับ ชัดเจน เหมาะสำหรับผู้สูงอายุ และอยู่ในรูปแบบ JSON ที่กำหนดเท่านั้น
   `,
 });
 
@@ -65,7 +68,6 @@ const answerUserQuestionFlow = ai.defineFlow(
     const trimmedChatHistory = input.chatHistory?.slice(-MAX_HISTORY_LENGTH) ?? [];
 
     const controller = new AbortController();
-    // Timeout for the flow operation, not directly for the model call cancellation
     const timeoutId = setTimeout(() => {
         console.log('Momu Ai chat timeout triggered after 8 seconds for input:', input.question);
         controller.abort();
@@ -77,7 +79,7 @@ const answerUserQuestionFlow = ai.defineFlow(
         chatHistory: trimmedChatHistory,
       });
     
-      clearTimeout(timeoutId); // Clear timeout if prompt resolves in time
+      clearTimeout(timeoutId); 
 
       if (!output || typeof output.answer !== 'string' || output.answer.trim() === '') {
         console.warn('Momu Ai: Invalid or empty response from model for input:', input.question, 'Received output:', output);
@@ -88,16 +90,21 @@ const answerUserQuestionFlow = ai.defineFlow(
     
       return output;
     } catch (error: any) {
-      clearTimeout(timeoutId); // Ensure timeout is cleared on error
+      clearTimeout(timeoutId); 
       if (error.name === 'AbortError') {
         console.log('Momu Ai chat aborted due to 8-second timeout for input:', input.question);
         return { answer: "Momu Ai ใช้เวลาประมวลผลนานกว่าปกติ โปรดลองอีกครั้งนะคะ" };
       }
       console.error('Error in answerUserQuestionFlow for input:', input.question, error);
+      // Log the full error object for more details if it's not an AbortError
+      if (error instanceof Error) {
+        console.error('Full error details:', error.message, error.stack);
+      } else {
+        console.error('Full error object:', error);
+      }
       return {
         answer: "เกิดข้อผิดพลาดในการประมวลผลคำถาม โปรดลองอีกครั้งในภายหลังนะคะ",
       };
     }
   }
 );
-
