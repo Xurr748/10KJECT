@@ -262,7 +262,7 @@ export default function FSFAPage() {
         {showQaSection && <Separator className="my-8 md:my-12" />}
 
         {showQaSection && (
-          <PageSection title="ถามผู้เชี่ยวชาญด้านโภชนาการ 🧑‍⚕️💬" icon={<Bot />} id="q-and-a" className="shadow-md rounded-lg" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
+          <PageSection title="Momu Ai 🧑‍⚕️💬" icon={<Bot />} id="q-and-a" className="shadow-md rounded-lg" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
              {imageAnalysisResult && !imageAnalysisResult.isIdentified && (
               <Card className="max-w-2xl mx-auto mb-6 bg-yellow-50 border-yellow-300 rounded-lg">
                 <CardContent className="p-4">
@@ -274,7 +274,7 @@ export default function FSFAPage() {
             )}
             <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
               <CardHeader>
-                <CardTitle className="text-2xl font-headline text-primary">ถาม-ตอบ แบบโต้ตอบ 💡</CardTitle>
+                <CardTitle className="text-2xl font-headline text-primary">ถาม-ตอบ 💡</CardTitle>
                 <CardDescription className="text-md font-body">มีคำถามเกี่ยวกับความปลอดภัยของอาหารหรือโภชนาการหรือไม่? ถามผู้ช่วย AI ของเรา</CardDescription>
               </CardHeader>
               <CardContent>
