@@ -14,10 +14,10 @@ import {
   answerUserQuestion,
   type AnswerUserQuestionInput,
   type AnswerUserQuestionOutput,
-} from '@/ai/flows/post-scan-chat'; // New Q&A flow
-import { auth, db } from '@/lib/firebase'; // Import db for Firestore
+} from '@/ai/flows/post-scan-chat';
+import { auth, db } from '@/lib/firebase'; 
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, deleteDoc, getDocs } from 'firebase/firestore'; // Firestore functions
+import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, deleteDoc, getDocs } from 'firebase/firestore'; 
 
 // ShadCN UI Components
 import { Button } from '@/components/ui/button';
@@ -35,7 +35,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Textarea } from '@/components/ui/textarea'; // For chat input
+import { Textarea } from '@/components/ui/textarea'; 
 
 // Lucide Icons
 import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Bot, Send, Trash2, Loader2 } from 'lucide-react';
@@ -45,10 +45,10 @@ const GENERIC_NUTRITION_UNAVAILABLE = "ไม่สามารถระบุ�
 const GENERIC_SAFETY_UNAVAILABLE = "ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้";
 
 interface ChatMessage {
-  id?: string;
+  id?: string; // Firestore document ID
   sender: 'user' | 'ai';
   text: string;
-  timestamp?: Date | any; // Allow any for Firestore ServerTimestamp
+  timestamp?: Date | any; 
 }
 
 export default function FSFAPage() {
@@ -82,7 +82,7 @@ export default function FSFAPage() {
       if (user) {
         loadChatHistoryFromFirestore(user.uid);
       } else {
-        setPostScanChatMessages([]); // Clear chat for guest users or on logout
+        setPostScanChatMessages([]); 
       }
     });
     return () => unsubscribeAuth();
@@ -94,7 +94,6 @@ export default function FSFAPage() {
     }
   }, [postScanChatMessages, isLoadingPostScanChat]);
 
-  // Update food context for chat when analysis result changes
   useEffect(() => {
     if (isFoodIdentified && imageAnalysisResult) {
       currentFoodContext.current = imageAnalysisResult.foodItem;
@@ -115,14 +114,14 @@ export default function FSFAPage() {
       console.error("Error loading chat history: ", error);
       toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถโหลดประวัติการสนทนาได้", variant: "destructive" });
     });
-    return unsubscribe; // Return unsubscribe function for cleanup
+    return unsubscribe; 
   };
 
-  const saveChatMessageToFirestore = async (userId: string, message: ChatMessage) => {
+  const saveChatMessageToFirestore = async (userId: string, message: Omit<ChatMessage, 'id'>) => {
     try {
       await addDoc(collection(db, `userPostScanChats/${userId}/messages`), {
         ...message,
-        timestamp: serverTimestamp() // Use server timestamp
+        timestamp: serverTimestamp() 
       });
     } catch (error) {
       console.error("Error saving chat message: ", error);
@@ -141,7 +140,7 @@ export default function FSFAPage() {
         deletePromises.push(deleteDoc(doc.ref));
       });
       await Promise.all(deletePromises);
-      setPostScanChatMessages([]); // Clear messages in UI
+      setPostScanChatMessages([]); 
       toast({ title: "สำเร็จ", description: "ลบประวัติการสนทนาแล้ว" });
     } catch (error) {
       console.error("Error clearing chat history:", error);
@@ -158,7 +157,7 @@ export default function FSFAPage() {
         title: "ออกจากระบบสำเร็จ",
       });
       resetState();
-      setPostScanChatMessages([]); // Clear chat on logout
+      setPostScanChatMessages([]); 
       currentFoodContext.current = null;
     } catch (error: unknown) {
       console.error("Logout error:", error);
@@ -174,7 +173,6 @@ export default function FSFAPage() {
     setPreviewUrl(null);
     setImageAnalysisResult(null);
     setImageError(null);
-    // Do not reset chat messages here, they are user-specific or cleared on logout
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -262,11 +260,12 @@ export default function FSFAPage() {
     setPostScanChatError(null);
 
     if (currentUser) {
-      await saveChatMessageToFirestore(currentUser.uid, newUserMessage);
+      // Pass Omit<ChatMessage, 'id'> as saveChatMessageToFirestore expects it
+      const { id, ...messageToSave } = newUserMessage;
+      await saveChatMessageToFirestore(currentUser.uid, messageToSave);
     }
     
-    // Prepare chat history for AI context
-    const aiChatHistory = postScanChatMessages.slice(-5).map(msg => ({ // Send last 5 messages for context
+    const aiChatHistory = postScanChatMessages.slice(-5).map(msg => ({
       role: msg.sender === 'user' ? 'user' : 'model',
       content: msg.text
     }));
@@ -282,7 +281,8 @@ export default function FSFAPage() {
       const aiResponse: ChatMessage = { sender: 'ai', text: result.answer, timestamp: new Date() };
       setPostScanChatMessages(prev => [...prev, aiResponse]);
       if (currentUser) {
-        await saveChatMessageToFirestore(currentUser.uid, aiResponse);
+        const { id, ...messageToSave } = aiResponse;
+        await saveChatMessageToFirestore(currentUser.uid, messageToSave);
       }
     } catch (error: unknown) {
       console.error('Error getting AI answer:', error);
@@ -292,7 +292,8 @@ export default function FSFAPage() {
       const aiErrorResponse: ChatMessage = { sender: 'ai', text: errorMsg, timestamp: new Date() };
       setPostScanChatMessages(prev => [...prev, aiErrorResponse]);
        if (currentUser) {
-        await saveChatMessageToFirestore(currentUser.uid, aiErrorResponse);
+        const { id, ...messageToSave } = aiErrorResponse;
+        await saveChatMessageToFirestore(currentUser.uid, messageToSave);
       }
     } finally {
       setIsLoadingPostScanChat(false);
@@ -429,7 +430,7 @@ export default function FSFAPage() {
                             <Separator />
                             <div>
                               <h4 className="font-semibold text-lg font-body text-foreground">ข้อมูลทางโภชนาการ:</h4>
-                              <ScrollArea className="max-h-40 pr-2" viewportRef={chatScrollAreaRef}>
+                              <ScrollArea className="max-h-40 pr-2">
                                   <p className="text-md font-body text-foreground/80 whitespace-pre-wrap">{imageAnalysisResult.nutritionalInformation}</p>
                               </ScrollArea>
                             </div>
@@ -467,8 +468,7 @@ export default function FSFAPage() {
           </Card>
         </PageSection>
 
-        {/* Post-Scan Chat Section */}
-        {imageAnalysisResult && ( // Only show chat if analysis has been done
+        {imageAnalysisResult && ( 
           <PageSection title="คุยกับ Momu Ai 🧑‍⚕️💬" icon={<Bot />} id="post-scan-chat" className="bg-secondary/20 rounded-lg shadow-md" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
             <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
               <CardHeader>
@@ -485,7 +485,7 @@ export default function FSFAPage() {
               <CardContent className="space-y-4">
                 <ScrollArea className="h-80 w-full border rounded-md p-4" viewportRef={chatScrollAreaRef}>
                   {postScanChatMessages.map((msg, index) => (
-                    <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} mb-3`}>
+                    <div key={msg.id || `${msg.sender}-${msg.timestamp?.toString()}-${index}`} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} mb-3`}>
                       <div className={`max-w-[70%] p-3 rounded-lg shadow ${msg.sender === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
                         <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
                          {msg.timestamp && typeof msg.timestamp.toDate === 'function' && (
@@ -493,6 +493,11 @@ export default function FSFAPage() {
                             {new Date(msg.timestamp.toDate()).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
                           </p>
                         )}
+                         {msg.timestamp && !(typeof msg.timestamp.toDate === 'function') && msg.timestamp instanceof Date && (
+                            <p className={`text-xs mt-1 ${msg.sender === 'user' ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground/70 text-left'}`}>
+                                {msg.timestamp.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                         )}
                       </div>
                     </div>
                   ))}
@@ -549,4 +554,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-
