@@ -10,31 +10,14 @@ import {
   type ScanFoodImageInput, 
   type ScanFoodImageOutput 
 } from '@/ai/flows/food-image-analyzer';
-import { 
-  answerNutritionQuestion, 
-  type AnswerNutritionQuestionInput, // Corrected to match flow's input name
-  type AnswerNutritionQuestionOutput 
-} from '@/ai/flows/interactive-q-and-a';
-import { auth, db } from '@/lib/firebase';
+import { auth } from '@/lib/firebase'; // db might not be needed anymore if only chat used it.
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { 
-  collection, 
-  addDoc, 
-  query, 
-  orderBy, 
-  onSnapshot, 
-  Timestamp,
-  serverTimestamp,
-  getDocs,
-  writeBatch
-} from 'firebase/firestore';
 
 // ShadCN UI Components
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
@@ -46,28 +29,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
 
 // Lucide Icons
-import { UploadCloud, Bot, Brain, Utensils, AlertCircle, CheckCircle, Info, MessagesSquare, UserCircle, LogIn, UserPlus, LogOut, Trash2, ListChecks } from 'lucide-react';
+import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks } from 'lucide-react';
 
-// Chat Message Type
-interface ChatMessage {
-  id: string;
-  sender: 'user' | 'ai';
-  text: string;
-  timestamp: Date;
-}
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 const GENERIC_NUTRITION_UNAVAILABLE = "ไม่สามารถระบุข้อมูลทางโภชนาการได้";
@@ -85,66 +50,22 @@ export default function FSFAPage() {
   const [isLoadingImageAnalysis, setIsLoadingImageAnalysis] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
 
-  const [showQaSection, setShowQaSection] = useState(false);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
-  const [isLoadingQa, setIsLoadingQa] = useState(false);
-  const [isChatHistoryLoading, setIsChatHistoryLoading] = useState(false);
-
   const isFoodIdentified = imageAnalysisResult && imageAnalysisResult.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       if (!user) {
-        setChatMessages([]);
-        // Optionally reset image analysis state if user logs out
+        // Reset states if user logs out, if desired for image analysis too
         // setSelectedFile(null);
         // setPreviewUrl(null);
         // setImageAnalysisResult(null);
-        // setShowQaSection(false);
       }
     });
     return () => unsubscribeAuth();
   }, []);
 
-  useEffect(() => {
-    if (currentUser) {
-      setIsChatHistoryLoading(true);
-      const messagesRef = collection(db, 'userChats', currentUser.uid, 'messages');
-      const q = query(messagesRef, orderBy('timestamp', 'asc'));
 
-      const unsubscribeFirestore = onSnapshot(q, (querySnapshot) => {
-        const history: ChatMessage[] = [];
-        querySnapshot.forEach((doc) => {
-          const data = doc.data();
-          history.push({
-            id: doc.id,
-            sender: data.sender,
-            text: data.text,
-            timestamp: (data.timestamp as Timestamp)?.toDate() || new Date() 
-          });
-        });
-        setChatMessages(history);
-        setIsChatHistoryLoading(false);
-      }, (error: unknown) => {
-        console.error("Error loading chat history:", error);
-        toast({
-          title: "ข้อผิดพลาด",
-          description: "ไม่สามารถโหลดประวัติการแชทได้",
-          variant: "destructive",
-        });
-        setIsChatHistoryLoading(false);
-      });
-
-      return () => unsubscribeFirestore();
-    } else {
-      setChatMessages([]); 
-    }
-  }, [currentUser, toast]);
-
-
-  const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -165,10 +86,7 @@ export default function FSFAPage() {
     setSelectedFile(null);
     setPreviewUrl(null);
     setImageAnalysisResult(null);
-    setShowQaSection(false);
-    setChatMessages([]); // Clears chat for guest or if user logs out
     setImageError(null);
-    setChatInput('');
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -181,7 +99,6 @@ export default function FSFAPage() {
       };
       reader.readAsDataURL(file);
       setImageAnalysisResult(null); 
-      setShowQaSection(false);
       setImageError(null);
     }
   };
@@ -198,11 +115,10 @@ export default function FSFAPage() {
     const reader = new FileReader();
     reader.readAsDataURL(selectedFile);
     reader.onload = async () => {
-      const foodImage = reader.result as string; // Renamed from foodPhotoDataUri for clarity
+      const foodImage = reader.result as string;
       try {
         const result = await scanFoodImage({ foodImage } as ScanFoodImageInput);
         setImageAnalysisResult(result);
-        setShowQaSection(true); 
         
         const identified = result.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
         if (identified) {
@@ -213,7 +129,7 @@ export default function FSFAPage() {
         } else {
           toast({
             title: "หมายเหตุการวิเคราะห์",
-            description: "ไม่สามารถระบุรายการอาหารได้ คุณสามารถสอบถามรายละเอียดเพิ่มเติมได้ในส่วนถาม-ตอบด้านล่างค่ะ",
+            description: "ไม่สามารถระบุรายการอาหารจากภาพที่ให้มาได้ โปรดลองภาพอื่น",
             variant: "default"
           });
         }
@@ -222,7 +138,7 @@ export default function FSFAPage() {
         setImageError('วิเคราะห์รูปภาพไม่สำเร็จ โปรดลองอีกครั้ง');
         toast({
           title: "เกิดข้อผิดพลาดในการวิเคราะห์",
-          description: "เกิดข้อผิดพลาดระหว่างการวิเคราะห์รูปภาพ",
+          description: (error instanceof Error && error.message) ? error.message : "เกิดข้อผิดพลาดระหว่างการวิเคราะห์รูปภาพ",
           variant: "destructive",
         });
       } finally {
@@ -239,156 +155,6 @@ export default function FSFAPage() {
         });
     };
   };
-
-  const handleSendMessage = async () => {
-    if (!chatInput.trim()) return;
-
-    const userMessageText = chatInput;
-    setChatInput(''); 
-    if (chatInputRef.current) {
-      chatInputRef.current.focus();
-      chatInputRef.current.style.height = 'auto';
-    }
-
-    const timestamp = serverTimestamp();
-    const localTimestamp = new Date();
-
-    if (!currentUser) {
-      const newUserMessage: ChatMessage = {
-        id: `${Date.now()}-user`,
-        sender: 'user',
-        text: userMessageText,
-        timestamp: localTimestamp,
-      };
-      setChatMessages((prevMessages) => [...prevMessages, newUserMessage]);
-    }
-
-
-    if (currentUser) {
-      try {
-        const messagesRef = collection(db, 'userChats', currentUser.uid, 'messages');
-        await addDoc(messagesRef, {
-          sender: 'user',
-          text: userMessageText,
-          timestamp: timestamp,
-        });
-      } catch (error: unknown) {
-        console.error("Error saving user message to Firestore:", error);
-        toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อความของคุณได้", variant: "destructive" });
-      }
-    }
-    
-    setIsLoadingQa(true);
-
-    try {
-      const foodContextName = (imageAnalysisResult && imageAnalysisResult.foodItem !== UNIDENTIFIED_FOOD_MESSAGE) 
-                              ? imageAnalysisResult.foodItem 
-                              : undefined;
-      
-      const inputForAI: AnswerNutritionQuestionInput = { question: userMessageText };
-      if (foodContextName) {
-        inputForAI.foodName = foodContextName;
-      }
-      
-      const aiResponse = await answerNutritionQuestion(inputForAI);
-      
-      if (currentUser) {
-        try {
-          const messagesRef = collection(db, 'userChats', currentUser.uid, 'messages');
-          await addDoc(messagesRef, {
-            sender: 'ai',
-            text: aiResponse.answer,
-            timestamp: timestamp,
-          });
-        } catch (error: unknown) {
-          console.error("Error saving AI message:", error);
-          toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถบันทึกคำตอบของ AI ได้", variant: "destructive" });
-        }
-      } else {
-        const newAiMessage: ChatMessage = {
-          id: `${Date.now()}-ai`,
-          sender: 'ai',
-          text: aiResponse.answer,
-          timestamp: localTimestamp,
-        };
-        setChatMessages((prevMessages) => [...prevMessages, newAiMessage]);
-      }
-
-    } catch (error: unknown) {
-      console.error('Error asking question from AI:', error);
-      const errorText = "ขออภัยค่ะ Momu พบข้อผิดพลาดในการตอบคำถามของคุณ โปรดลองอีกครั้งนะคะ";
-      if (currentUser) {
-        try {
-          const messagesRef = collection(db, 'userChats', currentUser.uid, 'messages');
-          await addDoc(messagesRef, {
-            sender: 'ai',
-            text: errorText,
-            timestamp: timestamp,
-          });
-        } catch (saveError: unknown) {
-          console.error("Error saving AI error message:", saveError);
-        }
-      } else {
-        const errorAiMessage: ChatMessage = {
-          id: `${Date.now()}-ai-error`,
-          sender: 'ai',
-          text: errorText,
-          timestamp: localTimestamp,
-        };
-        setChatMessages((prevMessages) => [...prevMessages, errorAiMessage]);
-      }
-       toast({
-          title: "ข้อผิดพลาด Q&A",
-          description: "เกิดข้อผิดพลาดขณะเรียกดูคำตอบ",
-          variant: "destructive",
-        });
-    } finally {
-      setIsLoadingQa(false);
-    }
-  };
-
-  const handleClearChatHistory = async () => {
-     if (!currentUser || isLoadingQa || isChatHistoryLoading) {
-      toast({ title: "คุณยังไม่ได้เข้าสู่ระบบ", description: "คุณต้องเข้าสู่ระบบเพื่อล้างประวัติการแชท", variant: "destructive" });
-      return;
-    }
-
-    setIsLoadingQa(true); 
-    try {
-      const messagesRef = collection(db, 'userChats', currentUser.uid, 'messages');
-      const q = query(messagesRef);
-      const querySnapshot = await getDocs(q);
-      
-      if (querySnapshot.empty) {
-        toast({ title: "ข้อมูล", description: "ไม่มีประวัติการแชทให้ล้าง" });
-        return;
-      }
-
-      const batch = writeBatch(db);
-      querySnapshot.forEach((doc) => {
-        batch.delete(doc.ref);
-      });
-      await batch.commit();
-      // Firestore onSnapshot will update chatMessages to empty automatically
-      toast({ title: "สำเร็จ", description: "ล้างประวัติการแชทเรียบร้อยแล้ว" });
-    } catch (error: unknown) {
-      console.error("Error clearing chat history:", error);
-      toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถล้างประวัติการแชทได้", variant: "destructive" });
-    } finally {
-      setIsLoadingQa(false);
-    }
-  };
-
-
-  const chatScrollAreaRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (chatScrollAreaRef.current) {
-      chatScrollAreaRef.current.scrollTo({
-        top: chatScrollAreaRef.current.scrollHeight,
-        behavior: 'auto' 
-      });
-    }
-  }, [chatMessages, isLoadingQa, isChatHistoryLoading]); 
 
   const PageSection: React.FC<{title: string; icon: React.ReactNode; children: React.ReactNode; id: string; className?: string; titleBgColor?: string; titleTextColor?: string;}> = ({ title, icon, children, id, className, titleBgColor = "bg-primary", titleTextColor = "text-primary-foreground" }) => (
     <section id={id} className={`py-12 ${className || ''}`}>
@@ -544,7 +310,7 @@ export default function FSFAPage() {
                     ) : (
                        <p className="text-md font-body text-foreground/80">
                          {imageAnalysisResult.foodItem === UNIDENTIFIED_FOOD_MESSAGE 
-                           ? "ขออภัยค่ะ Momu ไม่สามารถระบุรายการอาหารในภาพได้ชัดเจน บางครั้งภาพก็อาจจะซับซ้อน ลองเปลี่ยนมุมถ่ายภาพ ให้มีแสงสว่างเพียงพอ หรืออัปโหลดภาพอื่นได้ไหมคะ? หรือจะถามคำถามเกี่ยวกับอาหารนั้นในส่วน Q&A ด้านล่างก็ได้ค่ะ Momu ยินดีช่วยเหลือค่ะ"
+                           ? "ขออภัยค่ะ ไม่สามารถระบุรายการอาหารในภาพได้ชัดเจน โปรดลองภาพอื่นที่มีแสงสว่างเพียงพอ หรือลองเปลี่ยนมุมถ่ายภาพนะคะ"
                            : `ข้อมูลสำหรับ "${imageAnalysisResult.foodItem}" อาจมีจำกัด`}
                        </p>
                     )}
@@ -555,123 +321,6 @@ export default function FSFAPage() {
           </Card>
         </PageSection>
 
-        {showQaSection && (
-          <PageSection title="Momu Ai 🧑‍⚕️💬" icon={<Bot />} id="qa-section" className="bg-accent/10 rounded-lg shadow-md" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
-            {imageAnalysisResult && !isFoodIdentified && (
-              <Card className="mb-6 bg-yellow-50 border-yellow-300 rounded-lg max-w-2xl mx-auto">
-                <CardContent className="p-4">
-                  <p className="text-center text-yellow-800 font-body text-md">
-                    แม้ว่า Momu จะไม่สามารถระบุอาหารจากภาพได้ แต่คุณสามารถถามคำถามเฉพาะเจาะจงเกี่ยวกับอาหารนั้นหรือหัวข้อโภชนาการทั่วไปได้เลยค่ะ Momu ยินดีตอบค่ะ!
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-            <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-2xl font-headline text-primary">ถาม-ตอบ 💡</CardTitle>
-                  <CardDescription className="text-md font-body">
-                    {currentUser ? `คุยกับ Momu Ai (ประวัติการแชทจะถูกบันทึก)` : `คุยกับ Momu Ai (เข้าสู่ระบบเพื่อบันทึกประวัติ)`}
-                  </CardDescription>
-                </div>
-                {currentUser && chatMessages.length > 0 && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="outline" size="icon" disabled={isLoadingQa || isChatHistoryLoading}>
-                        <Trash2 className="w-4 h-4" />
-                        <span className="sr-only">ล้างประวัติการแชท</span>
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>ยืนยันการล้างประวัติ</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          คุณแน่ใจหรือไม่ว่าต้องการล้างประวัติการสนทนาทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleClearChatHistory} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-                          ยืนยันการล้าง
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-96 w-full pr-4 border border-border rounded-md p-4 mb-4 bg-secondary/20" viewportRef={chatScrollAreaRef}>
-                  {isChatHistoryLoading && (
-                     <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                        <svg className="animate-spin h-8 w-8 mb-2 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <p className="text-lg font-body">กำลังโหลดประวัติการแชท...</p>
-                     </div>
-                  )}
-                  {!isChatHistoryLoading && chatMessages.length === 0 && !isLoadingQa && (
-                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                      <MessagesSquare className="w-16 h-16 mb-4" />
-                      <p className="text-lg font-body">
-                        {isFoodIdentified && imageAnalysisResult?.foodItem 
-                          ? `ถาม Momu Ai เกี่ยวกับ "${imageAnalysisResult.foodItem}" หรือเรื่องอื่นๆ ได้เลยค่ะ`
-                          : "ถามคำถามเพื่อเริ่มการสนทนากับ Momu Ai ค่ะ"}
-                      </p> 
-                       {isFoodIdentified && imageAnalysisResult?.foodItem && (
-                          <p className="text-sm mt-2">เช่น "ให้ข้อมูลเพิ่มเติมเกี่ยวกับ {imageAnalysisResult.foodItem} หน่อยสิ"</p>
-                       )}
-                    </div>
-                  )}
-                  {!isChatHistoryLoading && chatMessages.map((msg) => (
-                    <div key={msg.id} className={`flex mb-4 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`p-3 rounded-xl max-w-[80%] shadow-md ${msg.sender === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                        <p className="text-md font-body whitespace-pre-wrap">{msg.text}</p>
-                        <p className={`text-xs mt-1 ${msg.sender === 'user' ? 'text-primary-foreground/80 text-right' : 'text-muted-foreground/80 text-left'}`}>
-                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                  {isLoadingQa && (
-                    <div className="flex mb-4 justify-start">
-                      <div className="p-3 rounded-xl max-w-[80%] shadow-md bg-muted text-muted-foreground">
-                        <div className="flex items-center">
-                          <Bot className="w-5 h-5 mr-2 animate-pulse" />
-                          <p className="text-md font-body">Momu Ai กำลังพิมพ์...</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </ScrollArea>
-                <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="flex items-center space-x-2">
-                  <Textarea
-                    id="chat-input-momu-ai"
-                    ref={chatInputRef}
-                    placeholder="พิมพ์คำถามของคุณถึง Momu Ai..."
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    className="flex-grow text-lg p-3 min-h-[48px] resize-none focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
-                    rows={1}
-                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
-                    disabled={isLoadingQa || isChatHistoryLoading}
-                  />
-                  <Button type="submit" disabled={isLoadingQa || isChatHistoryLoading || !chatInput.trim()} size="lg" className="text-lg px-6 h-12 bg-accent hover:bg-accent/90">
-                    {isLoadingQa ? (
-                       <>
-                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" strokeDasharray="50,50"></circle>
-                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        กำลังส่ง...
-                      </>
-                    ) : "ถาม"}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </PageSection>
-        )}
       </main>
 
       <footer className="text-center py-8 mt-12 md:mt-16 border-t border-border/50">
