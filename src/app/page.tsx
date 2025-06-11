@@ -57,7 +57,7 @@ export default function FSFAPage() {
 
   const handleImageAnalysis = async () => {
     if (!selectedFile) {
-      setImageError('Please select an image file first.');
+      setImageError('โปรดเลือกไฟล์รูปภาพก่อน');
       return;
     }
     setIsLoadingImageAnalysis(true);
@@ -73,23 +73,23 @@ export default function FSFAPage() {
         setImageAnalysisResult(result);
         if (result.isIdentified) {
           toast({
-            title: "Analysis Complete",
-            description: `Identified: ${result.identification.foodName}`,
+            title: "การวิเคราะห์เสร็จสมบูรณ์",
+            description: `ระบุได้ว่าเป็น: ${result.identification.foodName}`,
           });
           setShowQaSection(true);
         } else {
           toast({
-            title: "Analysis Note",
-            description: "Could not identify the food item. You can ask questions below.",
+            title: "หมายเหตุการวิเคราะห์",
+            description: "ไม่สามารถระบุรายการอาหารได้ คุณสามารถสอบถามด้านล่าง",
           });
            setShowQaSection(true);
         }
       } catch (error) {
         console.error('Error analyzing image:', error);
-        setImageError('Failed to analyze image. Please try again.');
+        setImageError('วิเคราะห์รูปภาพไม่สำเร็จ โปรดลองอีกครั้ง');
         toast({
-          title: "Analysis Error",
-          description: "An error occurred during image analysis.",
+          title: "เกิดข้อผิดพลาดในการวิเคราะห์",
+          description: "เกิดข้อผิดพลาดระหว่างการวิเคราะห์รูปภาพ",
           variant: "destructive",
         });
       } finally {
@@ -97,11 +97,11 @@ export default function FSFAPage() {
       }
     };
     reader.onerror = () => {
-      setImageError('Failed to read the image file.');
+      setImageError('ไม่สามารถอ่านไฟล์รูปภาพที่เลือก');
       setIsLoadingImageAnalysis(false);
        toast({
-          title: "File Read Error",
-          description: "Could not read the selected image file.",
+          title: "ข้อผิดพลาดในการอ่านไฟล์",
+          description: "ไม่สามารถอ่านไฟล์รูปภาพที่เลือก",
           variant: "destructive",
         });
     };
@@ -135,13 +135,13 @@ export default function FSFAPage() {
       const errorAiMessage: ChatMessage = {
         id: `${Date.now()}-ai-error`,
         sender: 'ai',
-        text: "I'm sorry, I encountered an error trying to answer your question. Please try again.",
+        text: "ขออภัย ฉันพบข้อผิดพลาดในการตอบคำถามของคุณ โปรดลองอีกครั้ง",
         timestamp: new Date(),
       };
       setChatMessages((prevMessages) => [...prevMessages, errorAiMessage]);
        toast({
-          title: "Q&A Error",
-          description: "An error occurred while fetching the answer.",
+          title: "ข้อผิดพลาด Q&A",
+          description: "เกิดข้อผิดพลาดขณะเรียกดูคำตอบ",
           variant: "destructive",
         });
     } finally {
@@ -176,31 +176,31 @@ export default function FSFAPage() {
         <div className="container mx-auto px-4">
           <h1 className="text-5xl font-headline font-bold text-primary flex items-center justify-center">
             <Utensils className="w-12 h-12 mr-4" />
-            FSFA <span className="text-3xl font-normal ml-2 text-foreground/90">(Food Security For All)</span>
+            FSFA <span className="text-3xl font-normal ml-2 text-foreground/90">(ความมั่นคงทางอาหารสำหรับทุกคน)</span>
           </h1>
           <p className="mt-2 text-xl text-foreground/80 font-body">
-            Ensuring food security and nutritional well-being for all.
+            สร้างความมั่นคงทางอาหารและสุขภาวะทางโภชนาการที่ดีสำหรับทุกคน
           </p>
         </div>
       </header>
       
       <main className="container mx-auto px-4 space-y-10 md:space-y-16">
         
-        <PageSection title="What's On Your Plate?" icon={<Brain />} id="image-scanner" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-primary" titleTextColor="text-primary-foreground">
+        <PageSection title="มีอะไรอยู่บนจานของคุณ?" icon={<Brain />} id="image-scanner" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-primary" titleTextColor="text-primary-foreground">
           <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
             <CardHeader>
-              <CardTitle className="text-2xl font-headline text-primary">AI Food Analyzer</CardTitle>
-              <CardDescription className="text-md font-body">Upload an image of a food item, and our AI will provide nutritional information and safety advice.</CardDescription>
+              <CardTitle className="text-2xl font-headline text-primary">AI วิเคราะห์อาหาร</CardTitle>
+              <CardDescription className="text-md font-body">อัปโหลดรูปภาพอาหาร แล้ว AI ของเราจะให้ข้อมูลทางโภชนาการและคำแนะนำด้านความปลอดภัย</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div>
-                <Label htmlFor="food-image-upload" className="text-lg font-body text-foreground">Upload Food Image</Label>
+                <Label htmlFor="food-image-upload" className="text-lg font-body text-foreground">อัปโหลดรูปภาพอาหาร</Label>
                 <Input id="food-image-upload" type="file" accept="image/*" onChange={handleFileChange} className="mt-2 file:text-accent file:font-semibold file:mr-2 file:px-3 file:py-1 file:rounded-full file:border-0 file:bg-accent/20 hover:file:bg-accent/30 text-lg p-2" />
               </div>
 
               {previewUrl && (
                 <div className="mt-4 text-center border border-dashed border-border p-4 rounded-md">
-                  <p className="text-md font-body mb-2 text-muted-foreground">Image Preview:</p>
+                  <p className="text-md font-body mb-2 text-muted-foreground">ตัวอย่างรูปภาพ:</p>
                   <Image src={previewUrl} alt="Food preview" width={300} height={300} className="rounded-md shadow-md mx-auto object-contain max-h-64" />
                 </div>
               )}
@@ -214,10 +214,10 @@ export default function FSFAPage() {
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
-                    Analyzing...
+                    กำลังวิเคราะห์...
                   </>
                 ) : (
-                  <> <UploadCloud className="mr-2 h-6 w-6" /> Analyze Image </>
+                  <> <UploadCloud className="mr-2 h-6 w-6" /> วิเคราะห์รูปภาพ </>
                 )}
               </Button>
 
@@ -226,32 +226,30 @@ export default function FSFAPage() {
                   <CardHeader className="pb-2">
                     <CardTitle className="text-xl font-headline text-primary flex items-center">
                       {imageAnalysisResult.isIdentified ? <CheckCircle className="w-6 h-6 mr-2 text-green-500" /> : <Info className="w-6 h-6 mr-2 text-yellow-500" />}
-                      Analysis Result
+                      ผลการวิเคราะห์
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4 pt-2">
                     {imageAnalysisResult.isIdentified ? (
                       <>
                         <div>
-                          <h4 className="font-semibold text-lg font-body text-foreground">Food Identified:</h4>
-                          <p className="text-md font-body text-foreground/80">{imageAnalysisResult.identification.foodName} (Confidence: {(imageAnalysisResult.identification.confidence * 100).toFixed(0)}%)</p>
+                          <h4 className="font-semibold text-lg font-body text-foreground">อาหารที่ระบุได้:</h4>
+                          <p className="text-md font-body text-foreground/80">{imageAnalysisResult.identification.foodName} (ความมั่นใจ: {(imageAnalysisResult.identification.confidence * 100).toFixed(0)}%)</p>
                         </div>
                         <Separator />
                         <div>
-                          <h4 className="font-semibold text-lg font-body text-foreground">Nutrition Information:</h4>
+                          <h4 className="font-semibold text-lg font-body text-foreground">ข้อมูลทางโภชนาการ:</h4>
                           <p className="text-md font-body text-foreground/80 whitespace-pre-wrap">{imageAnalysisResult.nutritionInformation}</p>
                         </div>
                         <Separator />
                         <div>
-                          <h4 className="font-semibold text-lg font-body text-foreground">Safety Advice:</h4>
+                          <h4 className="font-semibold text-lg font-body text-foreground">คำแนะนำด้านความปลอดภัย:</h4>
                           <p className="text-md font-body text-foreground/80 whitespace-pre-wrap">{imageAnalysisResult.safetyAdvice}</p>
                         </div>
                       </>
                     ) : (
                        <p className="text-md font-body text-foreground/80">
-                         I'm sorry, I couldn't quite identify the food item in the image. Sometimes images can be tricky!
-                         Perhaps you could try a different angle, ensure good lighting, or upload another picture?
-                         You can also ask me any questions about it in the Q&A section below.
+                         ขออภัย ฉันไม่สามารถระบุรายการอาหารในภาพได้ชัดเจน บางครั้งภาพก็อาจจะซับซ้อน ลองเปลี่ยนมุมถ่ายภาพ ให้มีแสงสว่างเพียงพอ หรืออัปโหลดภาพอื่นได้ไหมคะ? หรือจะถามคำถามเกี่ยวกับอาหารนั้นในส่วน Q&A ด้านล่างก็ได้ค่ะ
                        </p>
                     )}
                   </CardContent>
@@ -264,29 +262,29 @@ export default function FSFAPage() {
         {showQaSection && <Separator className="my-8 md:my-12" />}
 
         {showQaSection && (
-          <PageSection title="Ask a Nutrition Expert" icon={<Bot />} id="q-and-a" className="shadow-md rounded-lg" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
+          <PageSection title="ถามผู้เชี่ยวชาญด้านโภชนาการ" icon={<Bot />} id="q-and-a" className="shadow-md rounded-lg" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
              {imageAnalysisResult && !imageAnalysisResult.isIdentified && (
               <Card className="max-w-2xl mx-auto mb-6 bg-yellow-50 border-yellow-300 rounded-lg">
                 <CardContent className="p-4">
                   <p className="text-center text-yellow-800 font-body text-md">
-                    While I couldn't identify the food from the image, feel free to ask me any specific questions you have about it or general nutrition topics.
+                    แม้ว่าฉันจะไม่สามารถระบุอาหารจากภาพได้ แต่คุณสามารถถามคำถามเฉพาะเจาะจงเกี่ยวกับอาหารนั้นหรือหัวข้อโภชนาการทั่วไปได้เลยค่ะ
                   </p>
                 </CardContent>
               </Card>
             )}
             <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
               <CardHeader>
-                <CardTitle className="text-2xl font-headline text-primary">Interactive Q&A</CardTitle>
-                <CardDescription className="text-md font-body">Have questions about food safety or nutrition? Ask our AI assistant.</CardDescription>
+                <CardTitle className="text-2xl font-headline text-primary">ถาม-ตอบ แบบโต้ตอบ</CardTitle>
+                <CardDescription className="text-md font-body">มีคำถามเกี่ยวกับความปลอดภัยของอาหารหรือโภชนาการหรือไม่? ถามผู้ช่วย AI ของเรา</CardDescription>
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-96 w-full pr-4 border border-border rounded-md p-4 mb-4 bg-secondary/20" viewportRef={chatScrollAreaRef}>
                   {chatMessages.length === 0 && (
                     <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                       <MessagesSquare className="w-16 h-16 mb-4" />
-                      <p className="text-lg font-body">Ask a question to start the conversation.</p>
+                      <p className="text-lg font-body">ถามคำถามเพื่อเริ่มการสนทนา</p>
                        {imageAnalysisResult?.identification.foodName && imageAnalysisResult?.isIdentified && (
-                          <p className="text-sm mt-2">e.g., "Tell me more about {imageAnalysisResult.identification.foodName}."</p>
+                          <p className="text-sm mt-2">เช่น "บอกข้อมูลเพิ่มเติมเกี่ยวกับ {imageAnalysisResult.identification.foodName}"</p>
                        )}
                     </div>
                   )}
@@ -304,7 +302,7 @@ export default function FSFAPage() {
                 <div className="flex items-center space-x-2">
                   <Input
                     type="text"
-                    placeholder="Type your question..."
+                    placeholder="พิมพ์คำถามของคุณ..."
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && !isLoadingQa && handleSendMessage()}
@@ -318,9 +316,9 @@ export default function FSFAPage() {
                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
-                        Sending...
+                        กำลังส่ง...
                       </>
-                    ) : "Ask"}
+                    ) : "ถาม"}
                   </Button>
                 </div>
               </CardContent>
@@ -330,7 +328,7 @@ export default function FSFAPage() {
       </main>
 
       <footer className="text-center py-8 mt-12 md:mt-16 border-t border-border/50">
-        <p className="text-muted-foreground font-body">&copy; {new Date().getFullYear()} FSFA (Food Security For All). All rights reserved.</p>
+        <p className="text-muted-foreground font-body">&copy; {new Date().getFullYear()} FSFA (ความมั่นคงทางอาหารสำหรับทุกคน) สงวนลิขสิทธิ์</p>
       </footer>
     </div>
   );

@@ -43,6 +43,7 @@ const prompt = ai.definePrompt({
 
 You will identify the food item in the image and provide detailed nutritional information and safety advice.
 If you can't determine the food item, respond with empathy and explain that you couldn't identify it. Set isIdentified to false in this case.
+Please provide all responses in Thai.
 
 Analyze the following food image:
 
@@ -66,11 +67,11 @@ const analyzeFoodImageFlow = ai.defineFlow(
       console.error('Error analyzing food image:', error);
       return {
         identification: {
-          foodName: 'Unknown',
+          foodName: 'ไม่รู้จัก',
           confidence: 0,
         },
-        nutritionInformation: 'Could not retrieve nutritional information.',
-        safetyAdvice: 'Could not provide safety advice.',
+        nutritionInformation: 'ไม่สามารถดึงข้อมูลทางโภชนาการได้',
+        safetyAdvice: 'ไม่สามารถให้คำแนะนำด้านความปลอดภัยได้',
         isIdentified: false,
       };
     }

@@ -30,7 +30,7 @@ const prompt = ai.definePrompt({
   input: {schema: AskQuestionInputSchema},
   output: {schema: AskQuestionOutputSchema},
   prompt: `You are a helpful AI assistant specializing in providing information about food safety and nutrition.
-  Answer the following question based on your knowledge base:
+  Answer the following question based on your knowledge base. Please provide your answer in Thai.
   
   Question: {{{question}}}
   `,
