@@ -2,7 +2,7 @@
 'use server';
 /**
  * @fileOverview A Genkit flow for answering user questions after a food image scan,
- * focusing on the scanned food item if provided.
+ * focusing on the scanned food item if provided, and utilizing chat history for context.
  *
  * - answerUserQuestion - A function that handles the Q&A process.
  * - AnswerUserQuestionInput - The input type for the answerUserQuestion function.
@@ -18,7 +18,7 @@ const AnswerUserQuestionInputSchema = z.object({
   chatHistory: z.array(z.object({
     role: z.enum(['user', 'model']),
     content: z.string(),
-  })).optional().describe('Previous messages in the conversation for context.'),
+  })).optional().describe('Previous messages in the conversation for context. Use this to understand the flow and provide coherent answers.'),
 });
 export type AnswerUserQuestionInput = z.infer<typeof AnswerUserQuestionInputSchema>;
 
@@ -35,42 +35,38 @@ const prompt = ai.definePrompt({
   name: 'answerUserQuestionPrompt',
   input: {schema: AnswerUserQuestionInputSchema},
   output: {schema: AnswerUserQuestionOutputSchema},
-  model: 'googleai/gemini-1.5-flash-latest', // Explicitly using Gemini
+  model: 'googleai/gemini-1.5-flash-latest',
   prompt: `คุณคือ "Momu Ai" ผู้ช่วย AI ที่เป็นมิตรและมีความรู้กว้างขวางเกี่ยวกับอาหาร โภชนาการ และสุขภาพ โดยเฉพาะอย่างยิ่งสำหรับผู้สูงอายุ คุณจะต้องตอบคำถามของผู้ใช้เป็นภาษาไทยเสมอ.
 คำตอบทั้งหมดของคุณต้องอยู่ในรูปแบบ JSON object ที่มี key เดียวคือ "answer" และค่าของ key นี้คือข้อความตอบกลับของคุณเป็นภาษาไทย ตัวอย่างเช่น: {"answer": "นี่คือคำตอบของคุณ"}
 
-{{#if foodName}}
-ตอนนี้เรากำลังพูดถึง "{{foodName}}" เป็นหลัก กรุณาให้ข้อมูลที่เกี่ยวข้องกับ "{{foodName}}" ให้ละเอียดที่สุดเท่าที่จะทำได้เมื่อตอบคำถามของผู้ใช้ อาจรวมถึง:
-*   ข้อมูลทางโภชนาการที่สำคัญ (เช่น แคลอรี่ โปรตีน วิตามิน แร่ธาตุ)
-*   ประโยชน์ต่อสุขภาพ
-*   ข้อควรระวังในการบริโภค (โดยเฉพาะสำหรับผู้สูงอายุ)
-*   เคล็ดลับในการเลือกซื้อ การเก็บรักษา หรือการเตรียม
-*   ไอเดียเมนูง่ายๆ ที่มี "{{foodName}}" เป็นส่วนประกอบ
-*   ข้อเท็จจริงที่น่าสนใจ
-*   หากผู้ใช้ถามคำถามที่ไม่เกี่ยวกับ "{{foodName}}" โดยตรง ให้พยายามเชื่อมโยงกลับมาอย่างสุภาพ หรือตอบคำถามนั้นๆ แล้วเสนอที่จะให้ข้อมูลเพิ่มเติมเกี่ยวกับ "{{foodName}}"
-
-บริบทการสนทนาที่ผ่านมา (ถ้ามี):
 {{#if chatHistory}}
+นี่คือประวัติการสนทนาที่ผ่านมา โปรดใช้ข้อมูลนี้เพื่อทำความเข้าใจบริบทของคำถามปัจจุบัน และเพื่อให้คำตอบของคุณสอดคล้อง:
 {{#each chatHistory}}
 {{#if (eq role "user")}}User: {{content}}{{/if}}
 {{#if (eq role "model")}}Momu Ai: {{content}}{{/if}}
 {{/each}}
-{{/if}}
-
-คำถามล่าสุดจากผู้ใช้: "{{question}}"
 {{else}}
-กรุณาตอบคำถามของผู้ใช้เกี่ยวกับอาหาร โภชนาการ หรือสุขภาพทั่วไป คำแนะนำของคุณควรเป็นประโยชน์และเข้าใจง่ายสำหรับทุกคน โดยเฉพาะผู้สูงอายุ ตอบเป็นภาษาไทยเสมอ.
-คำตอบทั้งหมดของคุณต้องอยู่ในรูปแบบ JSON object ที่มี key เดียวคือ "answer" และค่าของ key นี้คือข้อความตอบกลับของคุณเป็นภาษาไทย ตัวอย่างเช่น: {"answer": "นี่คือคำตอบของคุณ"}
-
-บริบทการสนทนาที่ผ่านมา (ถ้ามี):
-{{#if chatHistory}}
-{{#each chatHistory}}
-{{#if (eq role "user")}}User: {{content}}{{/if}}
-{{#if (eq role "model")}}Momu Ai: {{content}}{{/if}}
-{{/each}}
+นี่เป็นการเริ่มต้นการสนทนาใหม่ หรือไม่มีประวัติการสนทนาก่อนหน้า.
 {{/if}}
 
-คำถามล่าสุดจากผู้ใช้: "{{question}}"
+{{#if foodName}}
+หัวข้อหลักที่กำลังสนทนา (ถ้ายังเกี่ยวข้องจากประวัติการสนทนา) คือ: "{{foodName}}".
+เมื่อพิจารณาประวัติการสนทนา (ถ้ามี) และ "{{foodName}}", กรุณาตอบคำถามล่าสุดของผู้ใช้: "{{question}}".
+คำตอบของคุณควร:
+1.  เกี่ยวข้องกับ "{{foodName}}" หากคำถามของผู้ใช้ยังคงวนเวียนอยู่กับอาหารนี้ หรือสามารถเชื่อมโยงได้อย่างเป็นธรรมชาติจากประวัติการสนทนา.
+2.  สอดคล้องกับประวัติการสนทนาที่ผ่านมา หากผู้ใช้กำลังถามคำถามต่อเนื่อง หรืออ้างอิงถึงข้อมูลที่เคยคุยกันเกี่ยวกับ "{{foodName}}" หรือหัวข้ออื่น.
+3.  ให้ข้อมูลที่เป็นประโยชน์และครอบคลุมเกี่ยวกับ "{{foodName}}" (หากเหมาะสมและเกี่ยวข้องกับคำถามปัจจุบัน):
+    *   ข้อมูลทางโภชนาการที่สำคัญ (เช่น แคลอรี่ โปรตีน วิตามิน แร่ธาตุ)
+    *   ประโยชน์ต่อสุขภาพ
+    *   ข้อควรระวังในการบริโภค (โดยเฉพาะสำหรับผู้สูงอายุ)
+    *   เคล็ดลับในการเลือกซื้อ การเก็บรักษา หรือการเตรียม
+    *   ไอเดียเมนูง่ายๆ ที่มี "{{foodName}}" เป็นส่วนประกอบ
+    *   ข้อเท็จจริงที่น่าสนใจ
+4.  หากผู้ใช้ถามคำถามที่ไม่เกี่ยวกับ "{{foodName}}" โดยตรง และดูเหมือนจะเปลี่ยนหัวข้อไปจากประวัติการสนทนา, ให้ตอบคำถามนั้นๆ โดยไม่จำเป็นต้องพยายามเชื่อมโยงกลับมาที่ "{{foodName}}" ทุกครั้ง. ใช้วิจารณญาณตามความเหมาะสมของบทสนทนา.
+
+{{else}}
+เมื่อพิจารณาประวัติการสนทนา (ถ้ามี), กรุณาตอบคำถามล่าสุดของผู้ใช้: "{{question}}".
+คำแนะนำของคุณควรเป็นประโยชน์และเข้าใจง่ายสำหรับทุกคน โดยเฉพาะผู้สูงอายุ. หากมีประวัติการสนทนา, พยายามให้คำตอบของคุณสอดคล้องและต่อเนื่องจากสิ่งที่คุยกันไปแล้ว.
 {{/if}}
 `,
 });
@@ -84,6 +80,7 @@ const answerUserQuestionFlow = ai.defineFlow(
   async (input) => {
     try {
       const { output } = await prompt(input);
+      console.log('AI Model Raw Output:', output); // For debugging server-side
 
       if (!output || typeof output.answer !== 'string' || output.answer.trim() === '') {
         console.error('answerUserQuestionFlow: AI model did not return a valid answer. Output:', output);
@@ -92,15 +89,13 @@ const answerUserQuestionFlow = ai.defineFlow(
       return output;
     } catch (error) {
       console.error('Error in answerUserQuestionFlow:', error);
-      // Check if the error is a Genkit specific error or a general one
       let errorMessage = "ขออภัยค่ะ เกิดข้อผิดพลาดบางอย่างกับ Momu Ai ทำให้ไม่สามารถตอบคำถามได้ โปรดลองอีกครั้งในภายหลังค่ะ";
+      // Log more detailed error server-side
       if (error instanceof Error && error.message) {
-        // You might want to log error.message for more detailed debugging on the server
-        // but not necessarily show it to the user unless it's a specific, handled case.
-        console.error('Detailed error:', error.message);
+        console.error('Detailed error message:', error.message);
+        if (error.stack) console.error('Error stack:', error.stack);
       }
       return { answer: errorMessage };
     }
   }
 );
-

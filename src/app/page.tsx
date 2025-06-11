@@ -46,7 +46,7 @@ const GENERIC_SAFETY_UNAVAILABLE = "ไม่มีคำแนะนำด้�
 
 interface ChatMessage {
   id?: string; // Firestore document ID
-  sender: 'user' | 'ai';
+  sender: 'user' | 'model';
   text: string;
   timestamp?: Date | any; 
 }
@@ -138,7 +138,14 @@ export default function FSFAPage() {
     const q = query(messagesCol, orderBy("timestamp", "asc"));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const messages = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage));
+      const messages = snapshot.docs.map(doc => {
+ return {
+ id: doc.id,
+ sender: doc.data().sender === 'user' ? 'user' : 'model', // Explicitly map sender to 'user' or 'model'
+        text: doc.data().text,
+ timestamp: doc.data().timestamp,
+      } as ChatMessage;
+    });
       setPostScanChatMessages(messages);
     }, (error) => {
       console.error("Error loading chat history: ", error);
@@ -293,11 +300,12 @@ export default function FSFAPage() {
       await saveChatMessageToFirestore(currentUser.uid, messageToSave);
     }
     
-    const aiChatHistory = postScanChatMessages.slice(-5).map(msg => ({
+    const aiChatHistory = postScanChatMessages
+      .slice(-5)
+      .map(msg => ({
       role: msg.sender === 'user' ? 'user' : 'model',
-      content: msg.text
+      content: msg.text // Keep content as is
     }));
-
 
     try {
       const input: AnswerUserQuestionInput = {
@@ -306,7 +314,7 @@ export default function FSFAPage() {
         chatHistory: aiChatHistory,
       };
       const result = await answerUserQuestion(input);
-      const aiResponse: ChatMessage = { sender: 'ai', text: result.answer, timestamp: new Date() };
+      const aiResponse: ChatMessage = { sender: 'model', text: result.answer, timestamp: new Date() };
       setPostScanChatMessages(prev => [...prev, aiResponse]);
       if (currentUser) {
         const { id, ...messageToSave } = aiResponse; 
@@ -318,8 +326,8 @@ export default function FSFAPage() {
       if (error instanceof Error) errorMsg = error.message;
       setPostScanChatError(errorMsg);
       const aiErrorResponse: ChatMessage = { sender: 'ai', text: errorMsg, timestamp: new Date() };
-      setPostScanChatMessages(prev => [...prev, aiErrorResponse]);
-       if (currentUser) {
+      setPostScanChatMessages(prev => [...prev, { ...aiErrorResponse, sender: 'model' }]); // Ensure sender is 'model' for type consistency
+      if (currentUser) {
         const { id, ...messageToSave } = aiErrorResponse; 
         await saveChatMessageToFirestore(currentUser.uid, messageToSave);
       }
