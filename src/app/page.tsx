@@ -343,11 +343,8 @@ export default function FSFAPage() {
   const chatScrollAreaRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (chatScrollAreaRef.current) {
-      // Scroll to the bottom when chatMessages or isLoadingQa changes
-      // No timeout, scroll immediately after DOM update
       chatScrollAreaRef.current.scrollTo({ 
         top: chatScrollAreaRef.current.scrollHeight
-        // behavior: 'auto' is the default, making it instantaneous
       });
     }
   }, [chatMessages, isLoadingQa]);
@@ -458,58 +455,49 @@ export default function FSFAPage() {
                   <> <UploadCloud className="mr-2 h-6 w-6" /> วิเคราะห์รูปภาพ </>
                 )}
               </Button>
+
+              {/* Analysis Result Section - MOVED HERE */}
+              {imageAnalysisResult && (
+                <Card className="mt-8 shadow-md rounded-lg overflow-hidden bg-card border border-primary/30">
+                  <CardHeader className="pb-2 bg-primary/10">
+                      <CardTitle className="text-xl font-headline text-primary flex items-center">
+                      {imageAnalysisResult.isIdentified ? <CheckCircle className="w-6 h-6 mr-2 text-green-500" /> : <Info className="w-6 h-6 mr-2 text-yellow-500" />}
+                      ผลการวิเคราะห์
+                      </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-4 md:p-6 space-y-4">
+                    {imageAnalysisResult.isIdentified ? (
+                      <>
+                        <div>
+                          <h4 className="font-semibold text-lg font-body text-foreground">อาหารที่ระบุได้:</h4>
+                          <p className="text-md font-body text-foreground/80">{imageAnalysisResult.identification.foodName} (ความมั่นใจ: {(imageAnalysisResult.identification.confidence * 100).toFixed(0)}%)</p>
+                        </div>
+                        <Separator />
+                        <div>
+                          <h4 className="font-semibold text-lg font-body text-foreground">ข้อมูลทางโภชนาการ:</h4>
+                          <ScrollArea className="h-40">
+                              <p className="text-md font-body text-foreground/80 whitespace-pre-wrap pr-2">{imageAnalysisResult.nutritionInformation}</p>
+                          </ScrollArea>
+                        </div>
+                        <Separator />
+                        <div>
+                          <h4 className="font-semibold text-lg font-body text-foreground">คำแนะนำด้านความปลอดภัย:</h4>
+                          <ScrollArea className="h-40">
+                              <p className="text-md font-body text-foreground/80 whitespace-pre-wrap pr-2">{imageAnalysisResult.safetyAdvice}</p>
+                          </ScrollArea>
+                        </div>
+                      </>
+                    ) : (
+                       <p className="text-md font-body text-foreground/80">
+                         ขออภัยค่ะ Momu ไม่สามารถระบุรายการอาหารในภาพได้ชัดเจน บางครั้งภาพก็อาจจะซับซ้อน ลองเปลี่ยนมุมถ่ายภาพ ให้มีแสงสว่างเพียงพอ หรืออัปโหลดภาพอื่นได้ไหมคะ? หรือจะถามคำถามเกี่ยวกับอาหารนั้นในส่วน Q&A ด้านล่างก็ได้ค่ะ Momu ยินดีช่วยเหลือค่ะ
+                       </p>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </CardContent>
           </Card>
         </PageSection>
-
-        {/* Analysis Result Section */}
-        {imageAnalysisResult && (
-          <PageSection 
-            title={imageAnalysisResult.isIdentified ? "ผลการวิเคราะห์ 🧐" : "ผลการวิเคราะห์ 😟"} 
-            icon={imageAnalysisResult.isIdentified ? <CheckCircle /> : <Info />} 
-            id="analysis-result" 
-            className="bg-secondary/30 rounded-lg shadow-md" 
-            titleBgColor="bg-primary" 
-            titleTextColor="text-primary-foreground"
-          >
-            <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
-              <CardHeader className="pb-2">
-                  <CardTitle className="text-xl font-headline text-primary flex items-center">
-                  {imageAnalysisResult.isIdentified ? <CheckCircle className="w-6 h-6 mr-2 text-green-500" /> : <Info className="w-6 h-6 mr-2 text-yellow-500" />}
-                  สรุปผล
-                  </CardTitle>
-              </CardHeader>
-              <CardContent className="p-4 md:p-6 space-y-4">
-                {imageAnalysisResult.isIdentified ? (
-                  <>
-                    <div>
-                      <h4 className="font-semibold text-lg font-body text-foreground">อาหารที่ระบุได้:</h4>
-                      <p className="text-md font-body text-foreground/80">{imageAnalysisResult.identification.foodName} (ความมั่นใจ: {(imageAnalysisResult.identification.confidence * 100).toFixed(0)}%)</p>
-                    </div>
-                    <Separator />
-                    <div>
-                      <h4 className="font-semibold text-lg font-body text-foreground">ข้อมูลทางโภชนาการ:</h4>
-                      <ScrollArea className="h-40">
-                          <p className="text-md font-body text-foreground/80 whitespace-pre-wrap pr-2">{imageAnalysisResult.nutritionInformation}</p>
-                      </ScrollArea>
-                    </div>
-                    <Separator />
-                    <div>
-                      <h4 className="font-semibold text-lg font-body text-foreground">คำแนะนำด้านความปลอดภัย:</h4>
-                      <ScrollArea className="h-40">
-                          <p className="text-md font-body text-foreground/80 whitespace-pre-wrap pr-2">{imageAnalysisResult.safetyAdvice}</p>
-                      </ScrollArea>
-                    </div>
-                  </>
-                ) : (
-                   <p className="text-md font-body text-foreground/80">
-                     ขออภัยค่ะ Momu ไม่สามารถระบุรายการอาหารในภาพได้ชัดเจน บางครั้งภาพก็อาจจะซับซ้อน ลองเปลี่ยนมุมถ่ายภาพ ให้มีแสงสว่างเพียงพอ หรืออัปโหลดภาพอื่นได้ไหมคะ? หรือจะถามคำถามเกี่ยวกับอาหารนั้นในส่วน Q&A ด้านล่างก็ได้ค่ะ Momu ยินดีช่วยเหลือค่ะ
-                   </p>
-                )}
-              </CardContent>
-            </Card>
-          </PageSection>
-        )}
 
         {/* Q&A Section */}
         {showQaSection && (
@@ -634,3 +622,6 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+
+    
