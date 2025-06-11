@@ -347,7 +347,7 @@ export default function FSFAPage() {
   }, [chatMessages]);
 
   const PageSection: React.FC<{title: string; icon: React.ReactNode; children: React.ReactNode; id: string; className?: string; titleBgColor?: string; titleTextColor?: string;}> = ({ title, icon, children, id, className, titleBgColor = "bg-primary", titleTextColor = "text-primary-foreground" }) => (
-    <section id={id} className={`py-12 animate-fadeIn ${className || ''}`}>
+    <section id={id} className={`py-12 ${className || ''}`}>
       <div className="container mx-auto px-4">
         <h2 className={`text-4xl font-headline font-semibold text-center mb-10 ${titleTextColor} ${titleBgColor} py-3 rounded-md shadow-md`}>
           {React.cloneElement(icon as React.ReactElement, { className: "inline-block w-10 h-10 mr-3" })}
@@ -360,8 +360,8 @@ export default function FSFAPage() {
 
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-body p-4 md:p-8 animate-fadeIn">
-      <header className="py-8 text-center bg-gradient-to-r from-primary/10 via-secondary/20 to-primary/10 rounded-lg shadow-md mb-12 animate-fadeIn">
+    <div className="min-h-screen bg-background text-foreground font-body p-4 md:p-8">
+      <header className="py-8 text-center bg-gradient-to-r from-primary/10 via-secondary/20 to-primary/10 rounded-lg shadow-md mb-12">
         <div className="container mx-auto px-4 flex justify-between items-center">
           <div className="flex-1 text-left md:text-center">
              <Link href="/" className="inline-block">
@@ -558,7 +558,7 @@ export default function FSFAPage() {
                     </div>
                   )}
                   {!isChatHistoryLoading && chatMessages.map((msg) => (
-                    <div key={msg.id} className={`flex mb-4 animate-fadeIn ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div key={msg.id} className={`flex mb-4 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <div className={`p-3 rounded-xl max-w-[80%] shadow-md ${msg.sender === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
                         <p className="text-md font-body whitespace-pre-wrap">{msg.text}</p>
                         <p className={`text-xs mt-1 ${msg.sender === 'user' ? 'text-primary-foreground/80 text-right' : 'text-muted-foreground/80 text-left'}`}>
@@ -602,3 +602,4 @@ export default function FSFAPage() {
     </div>
   );
 }
+
