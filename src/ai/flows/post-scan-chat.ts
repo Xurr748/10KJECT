@@ -27,11 +27,12 @@ export async function answerUserQuestion(input: AnswerUserQuestionInput): Promis
   return answerUserQuestionFlow(input);
 }
 
-const prompt = ai.definePrompt({
+// Renamed from 'prompt' to 'promptObj' to avoid potential naming conflicts in broader scopes
+const promptObj = ai.definePrompt({
   name: 'answerUserQuestionPrompt',
   input: { schema: AnswerUserQuestionInputSchema },
   output: { schema: AnswerUserQuestionOutputSchema },
-  model: 'googleai/gemini-1.5-flash-latest', // Reverted to flash model
+  model: 'googleai/gemini-1.5-flash-latest',
   prompt: `
 คุณคือ "Momu Ai" ผู้ช่วย AI ที่ให้คำแนะนำด้านอาหารและสุขภาพสำหรับผู้สูงอายุ ตอบคำถามของผู้ใช้เป็นภาษาไทยแบบเป็นกันเอง
 คำตอบทั้งหมดต้องอยู่ในรูปแบบ JSON object ดังนี้: {"answer": "ข้อความตอบกลับเป็นภาษาไทย"}
@@ -66,20 +67,31 @@ const answerUserQuestionFlow = ai.defineFlow(
   async (input) => {
     const MAX_HISTORY_LENGTH = 6;
     const trimmedChatHistory = input.chatHistory?.slice(-MAX_HISTORY_LENGTH) ?? [];
+    
+    const FLOW_EXECUTION_TIMEOUT_MS = 7500; // 7.5 seconds for user-facing timeout
+    const SERVER_DIAGNOSTIC_TIMEOUT_MS = 8000; // 8 seconds for a server-side log
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => {
-        console.log('Momu Ai chat timeout triggered after 8 seconds for input:', input.question);
-        controller.abort();
-    }, 8000); // 8 วินาที timeout
+    let serverLogTimeoutId: NodeJS.Timeout | undefined = setTimeout(() => {
+      console.warn(`Momu Ai chat flow for input "${input.question}" has been running for over ${SERVER_DIAGNOSTIC_TIMEOUT_MS / 1000} seconds. This is a server-side diagnostic log.`);
+    }, SERVER_DIAGNOSTIC_TIMEOUT_MS);
 
     try {
-      const { output } = await prompt({
+      const aiCall = promptObj({ // Use the renamed prompt object
         ...input,
         chatHistory: trimmedChatHistory,
       });
-    
-      clearTimeout(timeoutId); 
+
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('FlowTimeout')), FLOW_EXECUTION_TIMEOUT_MS)
+      );
+
+      // Race the AI call against our defined timeout
+      const result = await Promise.race([aiCall, timeoutPromise]);
+      
+      // If aiCall completed within FLOW_EXECUTION_TIMEOUT_MS:
+      if (serverLogTimeoutId) clearTimeout(serverLogTimeoutId);
+
+      const { output } = result; // `result` is the resolution of `promptObj` call: { response: ..., output: ... }
 
       if (!output || typeof output.answer !== 'string' || output.answer.trim() === '') {
         console.warn('Momu Ai: Invalid or empty response from model for input:', input.question, 'Received output:', output);
@@ -87,16 +99,18 @@ const answerUserQuestionFlow = ai.defineFlow(
           answer: "ขออภัยค่ะ Momu Ai ไม่สามารถประมวลผลคำตอบได้ในขณะนี้ โปรดลองอีกครั้งนะคะ",
         };
       }
-    
       return output;
+
     } catch (error: any) {
-      clearTimeout(timeoutId); 
-      if (error.name === 'AbortError') {
-        console.log('Momu Ai chat aborted due to 8-second timeout for input:', input.question);
+      if (serverLogTimeoutId) clearTimeout(serverLogTimeoutId);
+      
+      if (error.message === 'FlowTimeout') {
+        console.log(`Momu Ai chat flow (Promise.race) timed out after ${FLOW_EXECUTION_TIMEOUT_MS / 1000}s for input: "${input.question}"`);
         return { answer: "Momu Ai ใช้เวลาประมวลผลนานกว่าปกติ โปรดลองอีกครั้งนะคะ" };
       }
+      
+      // Handle other errors
       console.error('Error in answerUserQuestionFlow for input:', input.question, error);
-      // Log the full error object for more details if it's not an AbortError
       if (error instanceof Error) {
         console.error('Full error details:', error.message, error.stack);
       } else {
@@ -108,4 +122,3 @@ const answerUserQuestionFlow = ai.defineFlow(
     }
   }
 );
-
