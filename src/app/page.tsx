@@ -7,8 +7,20 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { analyzeFoodImage, type AnalyzeFoodImageInput, type AnalyzeFoodImageOutput } from '@/ai/flows/food-image-analyzer';
 import { askQuestion, type AskQuestionInput, type AskQuestionOutput } from '@/ai/flows/interactive-q-and-a';
-import { auth } from '@/lib/firebase'; // Import Firebase auth
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth'; // Import Firebase auth functions
+import { auth, db } from '@/lib/firebase'; // Import db from Firebase
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { 
+  collection, 
+  addDoc, 
+  query, 
+  orderBy, 
+  onSnapshot, 
+  Timestamp,
+  serverTimestamp,
+  where,
+  getDocs,
+  writeBatch
+} from 'firebase/firestore'; // Import Firestore functions
 
 // ShadCN UI Components
 import { Button } from '@/components/ui/button';
@@ -26,10 +38,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 
 // Lucide Icons
-import { UploadCloud, Bot, Brain, Utensils, AlertCircle, CheckCircle, Info, Lightbulb, MessagesSquare, Newspaper, UserCircle, LogIn, UserPlus, LogOut } from 'lucide-react';
+import { UploadCloud, Bot, Brain, Utensils, AlertCircle, CheckCircle, Info, Lightbulb, MessagesSquare, UserCircle, LogIn, UserPlus, LogOut, Trash2 } from 'lucide-react';
 
 // Chat Message Type
 interface ChatMessage {
@@ -55,13 +78,59 @@ export default function FSFAPage() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [isLoadingQa, setIsLoadingQa] = useState(false);
+  const [isChatHistoryLoading, setIsChatHistoryLoading] = useState(false);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
+      if (!user) {
+        // Clear chat messages if user logs out
+        setChatMessages([]);
+        // Optionally reset Q&A section visibility if tied to login
+        // setShowQaSection(false); 
+      }
     });
-    return () => unsubscribe();
+    return () => unsubscribeAuth();
   }, []);
+
+  // Effect for loading chat history
+  useEffect(() => {
+    if (currentUser) {
+      setIsChatHistoryLoading(true);
+      const messagesRef = collection(db, 'userChats', currentUser.uid, 'messages');
+      const q = query(messagesRef, orderBy('timestamp', 'asc'));
+
+      const unsubscribeFirestore = onSnapshot(q, (querySnapshot) => {
+        const history: ChatMessage[] = [];
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          history.push({
+            id: doc.id,
+            sender: data.sender,
+            text: data.text,
+            timestamp: (data.timestamp as Timestamp)?.toDate() || new Date() // Handle null or undefined timestamp
+          });
+        });
+        setChatMessages(history);
+        setIsChatHistoryLoading(false);
+      }, (error) => {
+        console.error("Error loading chat history:", error);
+        toast({
+          title: "ข้อผิดพลาด",
+          description: "ไม่สามารถโหลดประวัติการแชทได้",
+          variant: "destructive",
+        });
+        setIsChatHistoryLoading(false);
+      });
+
+      return () => unsubscribeFirestore();
+    } else {
+      // User is not logged in, clear chat messages if any were loaded for a previous user
+      // or if it's the initial state and no user is present.
+      setChatMessages([]); 
+    }
+  }, [currentUser, toast]);
+
 
   const handleLogout = async () => {
     try {
@@ -69,8 +138,6 @@ export default function FSFAPage() {
       toast({
         title: "ออกจากระบบสำเร็จ",
       });
-      // Optionally, redirect to login page or home
-      // router.push('/login'); 
     } catch (error) {
       console.error("Logout error:", error);
       toast({
@@ -79,7 +146,6 @@ export default function FSFAPage() {
       });
     }
   };
-
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -91,7 +157,8 @@ export default function FSFAPage() {
       };
       reader.readAsDataURL(file);
       setImageAnalysisResult(null);
-      setShowQaSection(false);
+      setShowQaSection(false); // Reset Q&A on new image
+      setChatMessages([]); // Clear previous chat on new image analysis, history will reload if user is logged in
       setImageError(null);
     }
   };
@@ -112,18 +179,18 @@ export default function FSFAPage() {
       try {
         const result = await analyzeFoodImage({ foodPhotoDataUri } as AnalyzeFoodImageInput);
         setImageAnalysisResult(result);
+        setShowQaSection(true); // Show Q&A section after analysis
         if (result.isIdentified) {
           toast({
             title: "การวิเคราะห์เสร็จสมบูรณ์",
             description: `ระบุได้ว่าเป็น: ${result.identification.foodName}`,
           });
-          setShowQaSection(true);
         } else {
           toast({
             title: "หมายเหตุการวิเคราะห์",
             description: "ไม่สามารถระบุรายการอาหารได้ คุณสามารถสอบถามด้านล่าง",
+            variant: "default"
           });
-           setShowQaSection(true);
         }
       } catch (error) {
         console.error('Error analyzing image:', error);
@@ -151,35 +218,86 @@ export default function FSFAPage() {
   const handleSendMessage = async () => {
     if (!chatInput.trim()) return;
 
-    const newUserMessage: ChatMessage = {
-      id: `${Date.now()}-user`,
-      sender: 'user',
-      text: chatInput,
-      timestamp: new Date(),
-    };
-    setChatMessages((prevMessages) => [...prevMessages, newUserMessage]);
-    const currentChatInput = chatInput;
-    setChatInput('');
+    const userMessageText = chatInput;
+    setChatInput(''); // Clear input immediately
+
+    // Add user message to Firestore if logged in
+    if (currentUser) {
+      try {
+        const messagesRef = collection(db, 'userChats', currentUser.uid, 'messages');
+        await addDoc(messagesRef, {
+          sender: 'user',
+          text: userMessageText,
+          timestamp: serverTimestamp(),
+        });
+      } catch (error) {
+        console.error("Error saving user message:", error);
+        toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อความของคุณได้", variant: "destructive" });
+        // Optionally, add the message locally anyway or revert
+      }
+    } else {
+      // Add to local state if not logged in (ephemeral chat)
+      const newUserMessage: ChatMessage = {
+        id: `${Date.now()}-user`,
+        sender: 'user',
+        text: userMessageText,
+        timestamp: new Date(),
+      };
+      setChatMessages((prevMessages) => [...prevMessages, newUserMessage]);
+    }
+
     setIsLoadingQa(true);
 
     try {
-      const aiResponse = await askQuestion({ question: currentChatInput } as AskQuestionInput);
-      const newAiMessage: ChatMessage = {
-        id: `${Date.now()}-ai`,
-        sender: 'ai',
-        text: aiResponse.answer,
-        timestamp: new Date(),
-      };
-      setChatMessages((prevMessages) => [...prevMessages, newAiMessage]);
+      const aiResponse = await askQuestion({ question: userMessageText } as AskQuestionInput);
+      
+      // Add AI message to Firestore if logged in
+      if (currentUser) {
+        try {
+          const messagesRef = collection(db, 'userChats', currentUser.uid, 'messages');
+          await addDoc(messagesRef, {
+            sender: 'ai',
+            text: aiResponse.answer,
+            timestamp: serverTimestamp(),
+          });
+        } catch (error) {
+          console.error("Error saving AI message:", error);
+          toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถบันทึกคำตอบของ AI ได้", variant: "destructive" });
+        }
+      } else {
+         // Add to local state if not logged in (ephemeral chat)
+        const newAiMessage: ChatMessage = {
+          id: `${Date.now()}-ai`,
+          sender: 'ai',
+          text: aiResponse.answer,
+          timestamp: new Date(),
+        };
+        setChatMessages((prevMessages) => [...prevMessages, newAiMessage]);
+      }
+
     } catch (error) {
       console.error('Error asking question:', error);
-      const errorAiMessage: ChatMessage = {
-        id: `${Date.now()}-ai-error`,
-        sender: 'ai',
-        text: "ขออภัย ฉันพบข้อผิดพลาดในการตอบคำถามของคุณ โปรดลองอีกครั้ง",
-        timestamp: new Date(),
-      };
-      setChatMessages((prevMessages) => [...prevMessages, errorAiMessage]);
+      const errorText = "ขออภัย ฉันพบข้อผิดพลาดในการตอบคำถามของคุณ โปรดลองอีกครั้ง";
+      if (currentUser) {
+        try {
+          const messagesRef = collection(db, 'userChats', currentUser.uid, 'messages');
+          await addDoc(messagesRef, {
+            sender: 'ai',
+            text: errorText,
+            timestamp: serverTimestamp(),
+          });
+        } catch (saveError) {
+          console.error("Error saving AI error message:", saveError);
+        }
+      } else {
+        const errorAiMessage: ChatMessage = {
+          id: `${Date.now()}-ai-error`,
+          sender: 'ai',
+          text: errorText,
+          timestamp: new Date(),
+        };
+        setChatMessages((prevMessages) => [...prevMessages, errorAiMessage]);
+      }
        toast({
           title: "ข้อผิดพลาด Q&A",
           description: "เกิดข้อผิดพลาดขณะเรียกดูคำตอบ",
@@ -189,6 +307,36 @@ export default function FSFAPage() {
       setIsLoadingQa(false);
     }
   };
+
+  const handleClearChatHistory = async () => {
+    if (!currentUser) {
+      toast({ title: "ข้อผิดพลาด", description: "คุณต้องเข้าสู่ระบบเพื่อล้างประวัติการแชท", variant: "destructive" });
+      return;
+    }
+
+    setIsLoadingQa(true); // Use QA loading state for this action as well
+    try {
+      const messagesRef = collection(db, 'userChats', currentUser.uid, 'messages');
+      const q = query(messagesRef);
+      const querySnapshot = await getDocs(q);
+      
+      const batch = writeBatch(db);
+      querySnapshot.forEach((doc) => {
+        batch.delete(doc.ref);
+      });
+      await batch.commit();
+
+      // Chat messages will clear via onSnapshot, or set manually if not using onSnapshot for clearing
+      // setChatMessages([]); // Already handled by onSnapshot if it correctly receives empty data
+      toast({ title: "สำเร็จ", description: "ล้างประวัติการแชทเรียบร้อยแล้ว" });
+    } catch (error) {
+      console.error("Error clearing chat history:", error);
+      toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถล้างประวัติการแชทได้", variant: "destructive" });
+    } finally {
+      setIsLoadingQa(false);
+    }
+  };
+
 
   const chatScrollAreaRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -215,16 +363,18 @@ export default function FSFAPage() {
     <div className="min-h-screen bg-background text-foreground font-body p-4 md:p-8 animate-fadeIn">
       <header className="py-8 text-center bg-gradient-to-r from-primary/10 via-secondary/20 to-primary/10 rounded-lg shadow-md mb-12 animate-fadeIn">
         <div className="container mx-auto px-4 flex justify-between items-center">
-          <div className="flex-1 text-center">
-            <h1 className="text-5xl font-headline font-bold text-primary flex items-center justify-center">
-              <Utensils className="w-12 h-12 mr-4" />
-              FSFA <span className="text-3xl font-normal ml-2 text-foreground/90">(Food Security For All 🍉🥗)</span>
-            </h1>
-            <p className="mt-2 text-xl text-foreground/80 font-body">
+          <div className="flex-1 text-left md:text-center">
+             <Link href="/" className="inline-block">
+              <h1 className="text-4xl md:text-5xl font-headline font-bold text-primary flex items-center justify-start md:justify-center">
+                <Utensils className="w-10 h-10 md:w-12 md:h-12 mr-2 md:mr-4" />
+                FSFA <span className="text-2xl md:text-3xl font-normal ml-2 text-foreground/90">(Food Security For All 🍉🥗)</span>
+              </h1>
+            </Link>
+            <p className="mt-1 md:mt-2 text-lg md:text-xl text-foreground/80 font-body text-left md:text-center">
               สร้างความมั่นคงทางอาหารและสุขภาวะทางโภชนาการที่ดีสำหรับทุกคน
             </p>
           </div>
-          <div className="flex-none">
+          <div className="flex-none ml-4">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="rounded-full w-12 h-12">
@@ -355,13 +505,50 @@ export default function FSFAPage() {
               </Card>
             )}
             <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
-              <CardHeader>
-                <CardTitle className="text-2xl font-headline text-primary">ถาม-ตอบ 💡</CardTitle>
-                <CardDescription className="text-md font-body">มีคำถามเกี่ยวกับความปลอดภัยของอาหารหรือโภชนาการหรือไม่? ถามผู้ช่วย AI ของเรา</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle className="text-2xl font-headline text-primary">ถาม-ตอบ 💡</CardTitle>
+                  <CardDescription className="text-md font-body">
+                    {currentUser ? `ถาม Momu Ai (ประวัติการแชทจะถูกบันทึก)` : `ถาม Momu Ai (เข้าสู่ระบบเพื่อบันทึกประวัติ)`}
+                  </CardDescription>
+                </div>
+                {currentUser && chatMessages.length > 0 && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="icon" disabled={isLoadingQa}>
+                        <Trash2 className="w-4 h-4" />
+                        <span className="sr-only">ล้างประวัติการแชท</span>
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>ยืนยันการล้างประวัติ</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          คุณแน่ใจหรือไม่ว่าต้องการล้างประวัติการสนทนาทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleClearChatHistory} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                          ยืนยันการล้าง
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-96 w-full pr-4 border border-border rounded-md p-4 mb-4 bg-secondary/20" viewportRef={chatScrollAreaRef}>
-                  {chatMessages.length === 0 && (
+                  {isChatHistoryLoading && (
+                     <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                        <svg className="animate-spin h-8 w-8 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p className="text-lg font-body">กำลังโหลดประวัติการแชท...</p>
+                     </div>
+                  )}
+                  {!isChatHistoryLoading && chatMessages.length === 0 && (
                     <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                       <MessagesSquare className="w-16 h-16 mb-4" />
                       <p className="text-lg font-body">ถามคำถามเพื่อเริ่มการสนทนา</p>
@@ -370,10 +557,10 @@ export default function FSFAPage() {
                        )}
                     </div>
                   )}
-                  {chatMessages.map((msg) => (
+                  {!isChatHistoryLoading && chatMessages.map((msg) => (
                     <div key={msg.id} className={`flex mb-4 animate-fadeIn ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
                       <div className={`p-3 rounded-xl max-w-[80%] shadow-md ${msg.sender === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                        <p className="text-md font-body">{msg.text}</p>
+                        <p className="text-md font-body whitespace-pre-wrap">{msg.text}</p>
                         <p className={`text-xs mt-1 ${msg.sender === 'user' ? 'text-primary-foreground/80 text-right' : 'text-muted-foreground/80 text-left'}`}>
                           {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </p>
@@ -389,9 +576,9 @@ export default function FSFAPage() {
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && !isLoadingQa && handleSendMessage()}
                     className="flex-grow text-lg p-3 h-12"
-                    disabled={isLoadingQa}
+                    disabled={isLoadingQa || isChatHistoryLoading}
                   />
-                  <Button onClick={handleSendMessage} disabled={isLoadingQa || !chatInput.trim()} size="lg" className="text-lg px-6 h-12 bg-accent hover:bg-accent/90">
+                  <Button onClick={handleSendMessage} disabled={isLoadingQa || isChatHistoryLoading || !chatInput.trim()} size="lg" className="text-lg px-6 h-12 bg-accent hover:bg-accent/90">
                     {isLoadingQa ? (
                        <>
                         <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
