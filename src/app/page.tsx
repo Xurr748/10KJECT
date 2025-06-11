@@ -89,10 +89,13 @@ export default function FSFAPage() {
   }, []);
 
   useEffect(() => {
-    if (chatScrollAreaRef.current) {
+    // Check if the chat input is currently focused
+    const isChatInputFocused = document.activeElement === chatInputRef.current;
+
+    if (chatScrollAreaRef.current && !isChatInputFocused) {
       chatScrollAreaRef.current.scrollTop = chatScrollAreaRef.current.scrollHeight;
     }
-  }, [postScanChatMessages, isLoadingPostScanChat]);
+  }, [postScanChatMessages]); // Only scroll when messages actually change
 
   useEffect(() => {
     if (isFoodIdentified && imageAnalysisResult) {
@@ -196,7 +199,8 @@ export default function FSFAPage() {
     }
     setIsLoadingImageAnalysis(true);
     setImageError(null);
-    setImageAnalysisResult(null); 
+    // Keep previous imageAnalysisResult to keep chat open if user re-analyzes while chat is open
+    // setImageAnalysisResult(null); 
 
     const reader = new FileReader();
     reader.readAsDataURL(selectedFile);
@@ -261,7 +265,7 @@ export default function FSFAPage() {
 
     if (currentUser) {
       // Pass Omit<ChatMessage, 'id'> as saveChatMessageToFirestore expects it
-      const { id, ...messageToSave } = newUserMessage;
+      const { id, ...messageToSave } = newUserMessage; //eslint-disable-line @typescript-eslint/no-unused-vars
       await saveChatMessageToFirestore(currentUser.uid, messageToSave);
     }
     
@@ -281,7 +285,7 @@ export default function FSFAPage() {
       const aiResponse: ChatMessage = { sender: 'ai', text: result.answer, timestamp: new Date() };
       setPostScanChatMessages(prev => [...prev, aiResponse]);
       if (currentUser) {
-        const { id, ...messageToSave } = aiResponse;
+        const { id, ...messageToSave } = aiResponse; //eslint-disable-line @typescript-eslint/no-unused-vars
         await saveChatMessageToFirestore(currentUser.uid, messageToSave);
       }
     } catch (error: unknown) {
@@ -292,7 +296,7 @@ export default function FSFAPage() {
       const aiErrorResponse: ChatMessage = { sender: 'ai', text: errorMsg, timestamp: new Date() };
       setPostScanChatMessages(prev => [...prev, aiErrorResponse]);
        if (currentUser) {
-        const { id, ...messageToSave } = aiErrorResponse;
+        const { id, ...messageToSave } = aiErrorResponse; //eslint-disable-line @typescript-eslint/no-unused-vars
         await saveChatMessageToFirestore(currentUser.uid, messageToSave);
       }
     } finally {
@@ -554,3 +558,6 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+
+    
