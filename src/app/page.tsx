@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -155,9 +154,6 @@ export default function FSFAPage() {
       reader.readAsDataURL(file);
       setImageAnalysisResult(null); 
       setShowQaSection(false); 
-      // if (!currentUser) { // Keep chat messages for guests until page reloads or new scan
-          // setChatMessages([]);
-      // }
       setImageError(null);
     }
   };
@@ -188,7 +184,7 @@ export default function FSFAPage() {
           toast({
             title: "หมายเหตุการวิเคราะห์",
             description: "ไม่สามารถระบุรายการอาหารได้ คุณสามารถสอบถามรายละเอียดเพิ่มเติมได้ในส่วนถาม-ตอบด้านล่างค่ะ",
-            variant: "default" // Or "info" if you add such a variant
+            variant: "default"
           });
         }
       } catch (error) {
@@ -223,7 +219,6 @@ export default function FSFAPage() {
     const timestamp = serverTimestamp(); 
     const localTimestamp = new Date(); 
 
-    // Add user message to local state immediately for guests, or prepare for Firestore for logged-in users
     if (currentUser) {
       // Message will be added via Firestore snapshot listener
     } else {
@@ -248,7 +243,6 @@ export default function FSFAPage() {
       } catch (error) {
         console.error("Error saving user message:", error);
         toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อความของคุณได้", variant: "destructive" });
-        // Optionally add user message to local state if save fails to provide some UX
       }
     }
     
@@ -269,7 +263,6 @@ export default function FSFAPage() {
         } catch (error) {
           console.error("Error saving AI message:", error);
           toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถบันทึกคำตอบของ AI ได้", variant: "destructive" });
-           // Optionally add AI message to local state if save fails
         }
       } else {
         const newAiMessage: ChatMessage = {
@@ -320,7 +313,7 @@ export default function FSFAPage() {
       return;
     }
 
-    setIsLoadingQa(true); // Use isLoadingQa to disable button during operation
+    setIsLoadingQa(true); 
     try {
       const messagesRef = collection(db, 'userChats', currentUser.uid, 'messages');
       const q = query(messagesRef);
@@ -336,7 +329,6 @@ export default function FSFAPage() {
         batch.delete(doc.ref);
       });
       await batch.commit();
-      // Chat messages will be cleared by the onSnapshot listener
       toast({ title: "สำเร็จ", description: "ล้างประวัติการแชทเรียบร้อยแล้ว" });
     } catch (error) {
       console.error("Error clearing chat history:", error);
@@ -353,9 +345,9 @@ export default function FSFAPage() {
         setTimeout(() => {
           if (chatScrollAreaRef.current) {
             const { scrollHeight } = chatScrollAreaRef.current;
-            chatScrollAreaRef.current.scrollTo({ top: scrollHeight }); // Removed behavior: 'smooth'
+            chatScrollAreaRef.current.scrollTo({ top: scrollHeight }); 
           }
-        }, 100); // Keep timeout to ensure DOM update
+        }, 100); 
     }
   }, [chatMessages, isLoadingQa]);
 
@@ -465,160 +457,179 @@ export default function FSFAPage() {
                   <> <UploadCloud className="mr-2 h-6 w-6" /> วิเคราะห์รูปภาพ </>
                 )}
               </Button>
-
-              {imageAnalysisResult && (
-                <Card className="mt-6 bg-background/50 p-4 md:p-6 rounded-lg shadow-inner border border-border">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-xl font-headline text-primary flex items-center">
-                      {imageAnalysisResult.isIdentified ? <CheckCircle className="w-6 h-6 mr-2 text-green-500" /> : <Info className="w-6 h-6 mr-2 text-yellow-500" />}
-                      ผลการวิเคราะห์
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4 pt-2">
-                    {imageAnalysisResult.isIdentified ? (
-                      <>
-                        <div>
-                          <h4 className="font-semibold text-lg font-body text-foreground">อาหารที่ระบุได้:</h4>
-                          <p className="text-md font-body text-foreground/80">{imageAnalysisResult.identification.foodName} (ความมั่นใจ: {(imageAnalysisResult.identification.confidence * 100).toFixed(0)}%)</p>
-                        </div>
-                        <Separator />
-                        <div>
-                          <h4 className="font-semibold text-lg font-body text-foreground">ข้อมูลทางโภชนาการ:</h4>
-                          <p className="text-md font-body text-foreground/80 whitespace-pre-wrap">{imageAnalysisResult.nutritionInformation}</p>
-                        </div>
-                        <Separator />
-                        <div>
-                          <h4 className="font-semibold text-lg font-body text-foreground">คำแนะนำด้านความปลอดภัย:</h4>
-                          <p className="text-md font-body text-foreground/80 whitespace-pre-wrap">{imageAnalysisResult.safetyAdvice}</p>
-                        </div>
-                      </>
-                    ) : (
-                       <p className="text-md font-body text-foreground/80">
-                         ขออภัยค่ะ Momu ไม่สามารถระบุรายการอาหารในภาพได้ชัดเจน บางครั้งภาพก็อาจจะซับซ้อน ลองเปลี่ยนมุมถ่ายภาพ ให้มีแสงสว่างเพียงพอ หรืออัปโหลดภาพอื่นได้ไหมคะ? หรือจะถามคำถามเกี่ยวกับอาหารนั้นในส่วน Q&A ด้านล่างก็ได้ค่ะ Momu ยินดีช่วยเหลือค่ะ
-                       </p>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
             </CardContent>
           </Card>
         </PageSection>
 
-        {showQaSection && <Separator className="my-8 md:my-12" />}
-
-        {showQaSection && (
-          <PageSection title="Momu Ai 🧑‍⚕️💬" icon={<Bot />} id="q-and-a" className="shadow-md rounded-lg" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
-             {imageAnalysisResult && !imageAnalysisResult.isIdentified && (
-              <Card className="max-w-2xl mx-auto mb-6 bg-yellow-50 border-yellow-300 rounded-lg">
-                <CardContent className="p-4">
-                  <p className="text-center text-yellow-800 font-body text-md">
-                    แม้ว่า Momu จะไม่สามารถระบุอาหารจากภาพได้ แต่คุณสามารถถามคำถามเฉพาะเจาะจงเกี่ยวกับอาหารนั้นหรือหัวข้อโภชนาการทั่วไปได้เลยค่ะ Momu ยินดีตอบค่ะ!
-                  </p>
-                </CardContent>
-              </Card>
-            )}
-            <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
-              <CardHeader className="flex flex-row items-center justify-between">
-                <div>
-                  <CardTitle className="text-2xl font-headline text-primary">ถาม-ตอบ 💡</CardTitle>
-                  <CardDescription className="text-md font-body">
-                    {currentUser ? `คุยกับ Momu Ai (ประวัติการแชทจะถูกบันทึก)` : `คุยกับ Momu Ai (เข้าสู่ระบบเพื่อบันทึกประวัติ)`}
-                  </CardDescription>
+        {/* Combined Analysis Result and Q&A Section */}
+        {showQaSection && imageAnalysisResult && (
+          <section id="analysis-and-qa" className="mt-8 md:mt-12">
+            <div className="container mx-auto px-0 md:px-4"> {/* Adjusted padding for container consistency */}
+              <div className="flex flex-col md:flex-row gap-8">
+                {/* Column 1: Image Analysis Result */}
+                <div className="flex-1 w-full md:w-5/12"> {/* Adjusted width for potential imbalance if needed */}
+                  <h2 className={`text-3xl font-headline font-semibold text-center mb-6 text-primary-foreground bg-primary py-3 rounded-lg shadow-md flex items-center justify-center`}>
+                    {imageAnalysisResult.isIdentified ? <CheckCircle className="inline-block w-8 h-8 mr-3" /> : <Info className="inline-block w-8 h-8 mr-3" />}
+                    ผลการวิเคราะห์
+                  </h2>
+                  <Card className="bg-card shadow-lg rounded-lg overflow-hidden h-full"> {/* Added h-full */}
+                    <CardHeader className="pb-2">
+                        <CardTitle className="text-xl font-headline text-primary flex items-center">
+                        {imageAnalysisResult.isIdentified ? <CheckCircle className="w-6 h-6 mr-2 text-green-500" /> : <Info className="w-6 h-6 mr-2 text-yellow-500" />}
+                        สรุปผล
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-4 md:p-6 space-y-4">
+                      {imageAnalysisResult.isIdentified ? (
+                        <>
+                          <div>
+                            <h4 className="font-semibold text-lg font-body text-foreground">อาหารที่ระบุได้:</h4>
+                            <p className="text-md font-body text-foreground/80">{imageAnalysisResult.identification.foodName} (ความมั่นใจ: {(imageAnalysisResult.identification.confidence * 100).toFixed(0)}%)</p>
+                          </div>
+                          <Separator />
+                          <div>
+                            <h4 className="font-semibold text-lg font-body text-foreground">ข้อมูลทางโภชนาการ:</h4>
+                            <ScrollArea className="h-40"> {/* Added ScrollArea for long text */}
+                                <p className="text-md font-body text-foreground/80 whitespace-pre-wrap pr-2">{imageAnalysisResult.nutritionInformation}</p>
+                            </ScrollArea>
+                          </div>
+                          <Separator />
+                          <div>
+                            <h4 className="font-semibold text-lg font-body text-foreground">คำแนะนำด้านความปลอดภัย:</h4>
+                            <ScrollArea className="h-40">  {/* Added ScrollArea for long text */}
+                                <p className="text-md font-body text-foreground/80 whitespace-pre-wrap pr-2">{imageAnalysisResult.safetyAdvice}</p>
+                            </ScrollArea>
+                          </div>
+                        </>
+                      ) : (
+                         <p className="text-md font-body text-foreground/80">
+                           ขออภัยค่ะ Momu ไม่สามารถระบุรายการอาหารในภาพได้ชัดเจน บางครั้งภาพก็อาจจะซับซ้อน ลองเปลี่ยนมุมถ่ายภาพ ให้มีแสงสว่างเพียงพอ หรืออัปโหลดภาพอื่นได้ไหมคะ? หรือจะถามคำถามเกี่ยวกับอาหารนั้นในส่วน Q&A ด้านล่างก็ได้ค่ะ Momu ยินดีช่วยเหลือค่ะ
+                         </p>
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
-                {currentUser && chatMessages.length > 0 && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button variant="outline" size="icon" disabled={isLoadingQa || isChatHistoryLoading}>
-                        <Trash2 className="w-4 h-4" />
-                        <span className="sr-only">ล้างประวัติการแชท</span>
-                      </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>ยืนยันการล้างประวัติ</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          คุณแน่ใจหรือไม่ว่าต้องการล้างประวัติการสนทนาทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
-                        <AlertDialogAction onClick={handleClearChatHistory} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-                          ยืนยันการล้าง
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
-              </CardHeader>
-              <CardContent>
-                <ScrollArea className="h-96 w-full pr-4 border border-border rounded-md p-4 mb-4 bg-secondary/20" viewportRef={chatScrollAreaRef}>
-                  {isChatHistoryLoading && (
-                     <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                        <svg className="animate-spin h-8 w-8 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        <p className="text-lg font-body">กำลังโหลดประวัติการแชท...</p>
-                     </div>
-                  )}
-                  {!isChatHistoryLoading && chatMessages.length === 0 && !isLoadingQa && (
-                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                      <MessagesSquare className="w-16 h-16 mb-4" />
-                      <p className="text-lg font-body">
-                        {imageAnalysisResult?.isIdentified && imageAnalysisResult?.identification.foodName 
-                          ? `ถาม Momu Ai เกี่ยวกับ "${imageAnalysisResult.identification.foodName}" หรือเรื่องอื่นๆ ได้เลยค่ะ`
-                          : "ถามคำถามเพื่อเริ่มการสนทนากับ Momu Ai ค่ะ"}
-                      </p>
-                       {imageAnalysisResult?.isIdentified && imageAnalysisResult?.identification.foodName && (
-                          <p className="text-sm mt-2">เช่น "ให้ข้อมูลเพิ่มเติมเกี่ยวกับ {imageAnalysisResult.identification.foodName} หน่อยสิ"</p>
-                       )}
-                    </div>
-                  )}
-                  {!isChatHistoryLoading && chatMessages.map((msg) => (
-                    <div key={msg.id} className={`flex mb-4 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`p-3 rounded-xl max-w-[80%] shadow-md ${msg.sender === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                        <p className="text-md font-body whitespace-pre-wrap">{msg.text}</p>
-                        <p className={`text-xs mt-1 ${msg.sender === 'user' ? 'text-primary-foreground/80 text-right' : 'text-muted-foreground/80 text-left'}`}>
-                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+
+                {/* Column 2: Momu Ai Q&A */}
+                <div className="flex-1 w-full md:w-7/12 mt-8 md:mt-0"> {/* Adjusted width */}
+                  <h2 className={`text-3xl font-headline font-semibold text-center mb-6 text-accent-foreground bg-accent py-3 rounded-lg shadow-md flex items-center justify-center`}>
+                    <Bot className="inline-block w-8 h-8 mr-3" />
+                    Momu Ai 🧑‍⚕️💬
+                  </h2>
+                  {imageAnalysisResult && !imageAnalysisResult.isIdentified && (
+                    <Card className="mb-6 bg-yellow-50 border-yellow-300 rounded-lg">
+                      <CardContent className="p-4">
+                        <p className="text-center text-yellow-800 font-body text-md">
+                          แม้ว่า Momu จะไม่สามารถระบุอาหารจากภาพได้ แต่คุณสามารถถามคำถามเฉพาะเจาะจงเกี่ยวกับอาหารนั้นหรือหัวข้อโภชนาการทั่วไปได้เลยค่ะ Momu ยินดีตอบค่ะ!
                         </p>
-                      </div>
-                    </div>
-                  ))}
-                  {isLoadingQa && (
-                    <div className="flex mb-4 justify-start">
-                      <div className="p-3 rounded-xl max-w-[80%] shadow-md bg-muted text-muted-foreground">
-                        <div className="flex items-center">
-                          <Bot className="w-5 h-5 mr-2 animate-pulse" />
-                          <p className="text-md font-body">Momu Ai กำลังพิมพ์...</p>
-                        </div>
-                      </div>
-                    </div>
+                      </CardContent>
+                    </Card>
                   )}
-                </ScrollArea>
-                <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="flex items-center space-x-2">
-                  <Input
-                    type="text"
-                    placeholder="พิมพ์คำถามของคุณถึง Momu Ai..."
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    className="flex-grow text-lg p-3 h-12"
-                    disabled={isLoadingQa || isChatHistoryLoading}
-                  />
-                  <Button type="submit" disabled={isLoadingQa || isChatHistoryLoading || !chatInput.trim()} size="lg" className="text-lg px-6 h-12 bg-accent hover:bg-accent/90">
-                    {isLoadingQa ? (
-                       <>
-                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        กำลังส่ง...
-                      </>
-                    ) : "ถาม"}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </PageSection>
+                  <Card className="shadow-lg rounded-lg overflow-hidden bg-card h-full flex flex-col"> {/* Added h-full and flex flex-col */}
+                    <CardHeader className="flex flex-row items-center justify-between shrink-0">
+                      <div>
+                        <CardTitle className="text-2xl font-headline text-primary">ถาม-ตอบ 💡</CardTitle>
+                        <CardDescription className="text-md font-body">
+                          {currentUser ? `คุยกับ Momu Ai (ประวัติการแชทจะถูกบันทึก)` : `คุยกับ Momu Ai (เข้าสู่ระบบเพื่อบันทึกประวัติ)`}
+                        </CardDescription>
+                      </div>
+                      {currentUser && chatMessages.length > 0 && (
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline" size="icon" disabled={isLoadingQa || isChatHistoryLoading}>
+                              <Trash2 className="w-4 h-4" />
+                              <span className="sr-only">ล้างประวัติการแชท</span>
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>ยืนยันการล้างประวัติ</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                คุณแน่ใจหรือไม่ว่าต้องการล้างประวัติการสนทนาทั้งหมด? การกระทำนี้ไม่สามารถย้อนกลับได้
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>ยกเลิก</AlertDialogCancel>
+                              <AlertDialogAction onClick={handleClearChatHistory} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                                ยืนยันการล้าง
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      )}
+                    </CardHeader>
+                    <CardContent className="flex-grow flex flex-col"> {/* Added flex-grow and flex flex-col */}
+                      <ScrollArea className="h-96 flex-grow w-full pr-4 border border-border rounded-md p-4 mb-4 bg-secondary/20" viewportRef={chatScrollAreaRef}> {/* Added flex-grow to ScrollArea */}
+                        {isChatHistoryLoading && (
+                           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                              <svg className="animate-spin h-8 w-8 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              <p className="text-lg font-body">กำลังโหลดประวัติการแชท...</p>
+                           </div>
+                        )}
+                        {!isChatHistoryLoading && chatMessages.length === 0 && !isLoadingQa && (
+                          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                            <MessagesSquare className="w-16 h-16 mb-4" />
+                            <p className="text-lg font-body">
+                              {imageAnalysisResult?.isIdentified && imageAnalysisResult?.identification.foodName 
+                                ? `ถาม Momu Ai เกี่ยวกับ "${imageAnalysisResult.identification.foodName}" หรือเรื่องอื่นๆ ได้เลยค่ะ`
+                                : "ถามคำถามเพื่อเริ่มการสนทนากับ Momu Ai ค่ะ"}
+                            </p>
+                             {imageAnalysisResult?.isIdentified && imageAnalysisResult?.identification.foodName && (
+                                <p className="text-sm mt-2">เช่น "ให้ข้อมูลเพิ่มเติมเกี่ยวกับ {imageAnalysisResult.identification.foodName} หน่อยสิ"</p>
+                             )}
+                          </div>
+                        )}
+                        {!isChatHistoryLoading && chatMessages.map((msg) => (
+                          <div key={msg.id} className={`flex mb-4 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+                            <div className={`p-3 rounded-xl max-w-[80%] shadow-md ${msg.sender === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                              <p className="text-md font-body whitespace-pre-wrap">{msg.text}</p>
+                              <p className={`text-xs mt-1 ${msg.sender === 'user' ? 'text-primary-foreground/80 text-right' : 'text-muted-foreground/80 text-left'}`}>
+                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                        {isLoadingQa && (
+                          <div className="flex mb-4 justify-start">
+                            <div className="p-3 rounded-xl max-w-[80%] shadow-md bg-muted text-muted-foreground">
+                              <div className="flex items-center">
+                                <Bot className="w-5 h-5 mr-2 animate-pulse" />
+                                <p className="text-md font-body">Momu Ai กำลังพิมพ์...</p>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </ScrollArea>
+                      <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="flex items-center space-x-2 shrink-0">
+                        <Input
+                          type="text"
+                          placeholder="พิมพ์คำถามของคุณถึง Momu Ai..."
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          className="flex-grow text-lg p-3 h-12"
+                          disabled={isLoadingQa || isChatHistoryLoading}
+                        />
+                        <Button type="submit" disabled={isLoadingQa || isChatHistoryLoading || !chatInput.trim()} size="lg" className="text-lg px-6 h-12 bg-accent hover:bg-accent/90">
+                          {isLoadingQa ? (
+                             <>
+                              <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              กำลังส่ง...
+                            </>
+                          ) : "ถาม"}
+                        </Button>
+                      </form>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            </div>
+          </section>
         )}
       </main>
 
@@ -628,4 +639,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-
