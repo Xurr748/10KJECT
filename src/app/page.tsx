@@ -141,7 +141,7 @@ export default function FSFAPage() {
       const messages = snapshot.docs.map(doc => {
  return {
  id: doc.id,
- sender: doc.data().sender === 'user' ? 'user' : 'model', // Explicitly map sender to 'user' or 'model'
+ sender: doc.data().sender === 'user' ? 'user' : 'model', 
         text: doc.data().text,
  timestamp: doc.data().timestamp,
       } as ChatMessage;
@@ -300,23 +300,16 @@ export default function FSFAPage() {
   setIsLoadingPostScanChat(true);
   setPostScanChatError(null);
 
-  // Save user message to Firestore
   if (currentUser) {
     const { id, ...userMessageToSave } = userMessage;
     await saveChatMessageToFirestore(currentUser.uid, userMessageToSave);
   }
 
-  // Map recent messages to AI format
-  const aiChatHistory = postScanChatMessages.slice(-5).map(msg => ({
-    role: msg.sender === 'user' ? 'user' : 'model',
-    content: msg.text,
-  }));
-
   try {
     const input: AnswerUserQuestionInput = {
       question,
       foodName: currentFoodContext.current || undefined,
-      chatHistory: aiChatHistory,
+      // chatHistory removed
     };
 
     const result = await answerUserQuestion(input);
@@ -342,7 +335,7 @@ export default function FSFAPage() {
         : 'ขออภัยค่ะ มีบางอย่างผิดพลาด Momu Ai ตอบไม่ได้ตอนนี้';
 
     const aiErrorMessage: ChatMessage = {
-      sender: 'model', // keep consistent
+      sender: 'model', 
       text: fallbackText,
       timestamp: new Date(),
     };
@@ -602,4 +595,5 @@ export default function FSFAPage() {
     
 
     
+
 
