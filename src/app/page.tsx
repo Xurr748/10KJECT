@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { analyzeFoodImage, type AnalyzeFoodImageInput, type AnalyzeFoodImageOutput } from '@/ai/flows/food-image-analyzer';
 import { askQuestion, type AskQuestionInput, type AskQuestionOutput } from '@/ai/flows/interactive-q-and-a';
 
@@ -14,9 +15,18 @@ import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
 
 // Lucide Icons
-import { UploadCloud, Bot, Brain, Utensils, AlertCircle, CheckCircle, Info, Lightbulb, MessagesSquare, Newspaper } from 'lucide-react';
+import { UploadCloud, Bot, Brain, Utensils, AlertCircle, CheckCircle, Info, Lightbulb, MessagesSquare, Newspaper, UserCircle, LogIn, UserPlus } from 'lucide-react';
 
 // Chat Message Type
 interface ChatMessage {
@@ -49,8 +59,8 @@ export default function FSFAPage() {
         setPreviewUrl(reader.result as string);
       };
       reader.readAsDataURL(file);
-      setImageAnalysisResult(null); 
-      setShowQaSection(false); 
+      setImageAnalysisResult(null);
+      setShowQaSection(false);
       setImageError(null);
     }
   };
@@ -148,7 +158,7 @@ export default function FSFAPage() {
       setIsLoadingQa(false);
     }
   };
-  
+
   const chatScrollAreaRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (chatScrollAreaRef.current) {
@@ -173,19 +183,46 @@ export default function FSFAPage() {
   return (
     <div className="min-h-screen bg-background text-foreground font-body p-4 md:p-8 animate-fadeIn">
       <header className="py-8 text-center bg-gradient-to-r from-primary/10 via-secondary/20 to-primary/10 rounded-lg shadow-md mb-12 animate-fadeIn">
-        <div className="container mx-auto px-4">
-          <h1 className="text-5xl font-headline font-bold text-primary flex items-center justify-center">
-            <Utensils className="w-12 h-12 mr-4" />
-            FSFA <span className="text-3xl font-normal ml-2 text-foreground/90">(Food Security For All 🍉🥗)</span>
-          </h1>
-          <p className="mt-2 text-xl text-foreground/80 font-body">
-            สร้างความมั่นคงทางอาหารและสุขภาวะทางโภชนาการที่ดีสำหรับทุกคน
-          </p>
+        <div className="container mx-auto px-4 flex justify-between items-center">
+          <div className="flex-1 text-center">
+            <h1 className="text-5xl font-headline font-bold text-primary flex items-center justify-center">
+              <Utensils className="w-12 h-12 mr-4" />
+              FSFA <span className="text-3xl font-normal ml-2 text-foreground/90">(Food Security For All 🍉🥗)</span>
+            </h1>
+            <p className="mt-2 text-xl text-foreground/80 font-body">
+              สร้างความมั่นคงทางอาหารและสุขภาวะทางโภชนาการที่ดีสำหรับทุกคน
+            </p>
+          </div>
+          <div className="flex-none">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full w-12 h-12">
+                  <UserCircle className="w-8 h-8 text-primary" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuLabel>บัญชีของฉัน</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/login" className="flex items-center w-full">
+                    <LogIn className="mr-2 h-4 w-4" />
+                    <span>เข้าสู่ระบบ</span>
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href="/register" className="flex items-center w-full">
+                    <UserPlus className="mr-2 h-4 w-4" />
+                    <span>ลงทะเบียน</span>
+                  </Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </header>
-      
+
       <main className="container mx-auto px-4 space-y-10 md:space-y-16">
-        
+
         <PageSection title="มีอะไรอยู่บนจานของคุณ? 🤔🍽️" icon={<Brain />} id="image-scanner" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-primary" titleTextColor="text-primary-foreground">
           <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
             <CardHeader>
@@ -204,7 +241,7 @@ export default function FSFAPage() {
                   <Image src={previewUrl} alt="Food preview" width={300} height={300} className="rounded-md shadow-md mx-auto object-contain max-h-64" />
                 </div>
               )}
-              
+
               {imageError && <p className="text-destructive text-sm font-body flex items-center"><AlertCircle className="w-4 h-4 mr-1" />{imageError}</p>}
 
               <Button onClick={handleImageAnalysis} disabled={isLoadingImageAnalysis || !selectedFile} className="w-full text-lg py-6" size="lg">
@@ -258,7 +295,7 @@ export default function FSFAPage() {
             </CardContent>
           </Card>
         </PageSection>
-        
+
         {showQaSection && <Separator className="my-8 md:my-12" />}
 
         {showQaSection && (
@@ -333,4 +370,4 @@ export default function FSFAPage() {
     </div>
   );
 }
-
+    
