@@ -83,11 +83,16 @@ export default function FSFAPage() {
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
-      if (!user) {
-        // Clear chat messages if user logs out
+      if (user) {
+        // User logged in, clear local messages, history will load via useEffect [currentUser, toast]
+        // This prevents merging local chat with new user's history if a user logs in after chatting as guest
         setChatMessages([]);
-        // Optionally reset Q&A section visibility if tied to login
+      } else {
+        // User logs out, clear chat messages. Optionally reset Q&A section.
+        setChatMessages([]);
+        // If you want Q&A to hide on logout:
         // setShowQaSection(false); 
+        // setImageAnalysisResult(null); // Also clear analysis if hiding Q&A
       }
     });
     return () => unsubscribeAuth();
@@ -108,7 +113,7 @@ export default function FSFAPage() {
             id: doc.id,
             sender: data.sender,
             text: data.text,
-            timestamp: (data.timestamp as Timestamp)?.toDate() || new Date() // Handle null or undefined timestamp
+            timestamp: (data.timestamp as Timestamp)?.toDate() || new Date() 
           });
         });
         setChatMessages(history);
@@ -125,8 +130,8 @@ export default function FSFAPage() {
 
       return () => unsubscribeFirestore();
     } else {
-      // User is not logged in, clear chat messages if any were loaded for a previous user
-      // or if it's the initial state and no user is present.
+      // No user logged in, ensure chat messages are cleared if they weren't already
+      // (e.g., if this effect runs before auth state changes)
       setChatMessages([]); 
     }
   }, [currentUser, toast]);
@@ -138,6 +143,7 @@ export default function FSFAPage() {
       toast({
         title: "ออกจากระบบสำเร็จ",
       });
+      // State changes handled by onAuthStateChanged
     } catch (error) {
       console.error("Logout error:", error);
       toast({
@@ -156,9 +162,13 @@ export default function FSFAPage() {
         setPreviewUrl(reader.result as string);
       };
       reader.readAsDataURL(file);
-      setImageAnalysisResult(null);
-      setShowQaSection(false); // Reset Q&A on new image
-      setChatMessages([]); // Clear previous chat on new image analysis, history will reload if user is logged in
+      setImageAnalysisResult(null); // Clear previous analysis
+      setShowQaSection(false); // Reset Q&A visibility
+      // Chat messages for logged-in users will be reloaded by the useEffect.
+      // For guest users, this effectively clears the chat related to the previous image.
+      if (!currentUser) {
+          setChatMessages([]);
+      }
       setImageError(null);
     }
   };
@@ -170,7 +180,7 @@ export default function FSFAPage() {
     }
     setIsLoadingImageAnalysis(true);
     setImageError(null);
-    setImageAnalysisResult(null);
+    setImageAnalysisResult(null); // Clear previous analysis before new one
 
     const reader = new FileReader();
     reader.readAsDataURL(selectedFile);
@@ -188,7 +198,7 @@ export default function FSFAPage() {
         } else {
           toast({
             title: "หมายเหตุการวิเคราะห์",
-            description: "ไม่สามารถระบุรายการอาหารได้ คุณสามารถสอบถามด้านล่าง",
+            description: "ไม่สามารถระบุรายการอาหารได้ คุณสามารถสอบถามรายละเอียดเพิ่มเติมได้ในส่วนถาม-ตอบด้านล่างค่ะ",
             variant: "default"
           });
         }
@@ -219,7 +229,10 @@ export default function FSFAPage() {
     if (!chatInput.trim()) return;
 
     const userMessageText = chatInput;
-    setChatInput(''); // Clear input immediately
+    setChatInput(''); 
+
+    const timestamp = serverTimestamp(); // For Firestore
+    const localTimestamp = new Date(); // For local state if not logged in
 
     // Add user message to Firestore if logged in
     if (currentUser) {
@@ -228,12 +241,12 @@ export default function FSFAPage() {
         await addDoc(messagesRef, {
           sender: 'user',
           text: userMessageText,
-          timestamp: serverTimestamp(),
+          timestamp: timestamp,
         });
+        // Message will appear via onSnapshot
       } catch (error) {
         console.error("Error saving user message:", error);
         toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อความของคุณได้", variant: "destructive" });
-        // Optionally, add the message locally anyway or revert
       }
     } else {
       // Add to local state if not logged in (ephemeral chat)
@@ -241,7 +254,7 @@ export default function FSFAPage() {
         id: `${Date.now()}-user`,
         sender: 'user',
         text: userMessageText,
-        timestamp: new Date(),
+        timestamp: localTimestamp,
       };
       setChatMessages((prevMessages) => [...prevMessages, newUserMessage]);
     }
@@ -249,42 +262,42 @@ export default function FSFAPage() {
     setIsLoadingQa(true);
 
     try {
-      const aiResponse = await askQuestion({ question: userMessageText } as AskQuestionInput);
+      const foodContextName = imageAnalysisResult?.isIdentified ? imageAnalysisResult.identification.foodName : undefined;
+      const aiResponse = await askQuestion({ question: userMessageText, foodName: foodContextName } as AskQuestionInput);
       
-      // Add AI message to Firestore if logged in
       if (currentUser) {
         try {
           const messagesRef = collection(db, 'userChats', currentUser.uid, 'messages');
           await addDoc(messagesRef, {
             sender: 'ai',
             text: aiResponse.answer,
-            timestamp: serverTimestamp(),
+            timestamp: timestamp, // Use the same server timestamp for ordering
           });
+          // Message will appear via onSnapshot
         } catch (error) {
           console.error("Error saving AI message:", error);
           toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถบันทึกคำตอบของ AI ได้", variant: "destructive" });
         }
       } else {
-         // Add to local state if not logged in (ephemeral chat)
         const newAiMessage: ChatMessage = {
           id: `${Date.now()}-ai`,
           sender: 'ai',
           text: aiResponse.answer,
-          timestamp: new Date(),
+          timestamp: localTimestamp, // Use local timestamp, slightly later
         };
         setChatMessages((prevMessages) => [...prevMessages, newAiMessage]);
       }
 
     } catch (error) {
       console.error('Error asking question:', error);
-      const errorText = "ขออภัย ฉันพบข้อผิดพลาดในการตอบคำถามของคุณ โปรดลองอีกครั้ง";
+      const errorText = "ขออภัยค่ะ Momu พบข้อผิดพลาดในการตอบคำถามของคุณ โปรดลองอีกครั้งนะคะ";
       if (currentUser) {
         try {
           const messagesRef = collection(db, 'userChats', currentUser.uid, 'messages');
           await addDoc(messagesRef, {
             sender: 'ai',
             text: errorText,
-            timestamp: serverTimestamp(),
+            timestamp: timestamp,
           });
         } catch (saveError) {
           console.error("Error saving AI error message:", saveError);
@@ -294,7 +307,7 @@ export default function FSFAPage() {
           id: `${Date.now()}-ai-error`,
           sender: 'ai',
           text: errorText,
-          timestamp: new Date(),
+          timestamp: localTimestamp,
         };
         setChatMessages((prevMessages) => [...prevMessages, errorAiMessage]);
       }
@@ -314,7 +327,7 @@ export default function FSFAPage() {
       return;
     }
 
-    setIsLoadingQa(true); // Use QA loading state for this action as well
+    setIsLoadingQa(true); 
     try {
       const messagesRef = collection(db, 'userChats', currentUser.uid, 'messages');
       const q = query(messagesRef);
@@ -325,9 +338,7 @@ export default function FSFAPage() {
         batch.delete(doc.ref);
       });
       await batch.commit();
-
-      // Chat messages will clear via onSnapshot, or set manually if not using onSnapshot for clearing
-      // setChatMessages([]); // Already handled by onSnapshot if it correctly receives empty data
+      // Chat messages will clear via onSnapshot.
       toast({ title: "สำเร็จ", description: "ล้างประวัติการแชทเรียบร้อยแล้ว" });
     } catch (error) {
       console.error("Error clearing chat history:", error);
@@ -341,8 +352,13 @@ export default function FSFAPage() {
   const chatScrollAreaRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (chatScrollAreaRef.current) {
-        const { scrollHeight, clientHeight } = chatScrollAreaRef.current;
-        chatScrollAreaRef.current.scrollTo({ top: scrollHeight - clientHeight, behavior: 'smooth' });
+        // A brief timeout can help ensure the DOM has fully updated, especially with new messages
+        setTimeout(() => {
+          if (chatScrollAreaRef.current) {
+            const { scrollHeight } = chatScrollAreaRef.current;
+            chatScrollAreaRef.current.scrollTo({ top: scrollHeight, behavior: 'smooth' });
+          }
+        }, 100);
     }
   }, [chatMessages]);
 
@@ -481,7 +497,7 @@ export default function FSFAPage() {
                       </>
                     ) : (
                        <p className="text-md font-body text-foreground/80">
-                         ขออภัย ฉันไม่สามารถระบุรายการอาหารในภาพได้ชัดเจน บางครั้งภาพก็อาจจะซับซ้อน ลองเปลี่ยนมุมถ่ายภาพ ให้มีแสงสว่างเพียงพอ หรืออัปโหลดภาพอื่นได้ไหมคะ? หรือจะถามคำถามเกี่ยวกับอาหารนั้นในส่วน Q&A ด้านล่างก็ได้ค่ะ
+                         ขออภัยค่ะ Momu ไม่สามารถระบุรายการอาหารในภาพได้ชัดเจน บางครั้งภาพก็อาจจะซับซ้อน ลองเปลี่ยนมุมถ่ายภาพ ให้มีแสงสว่างเพียงพอ หรืออัปโหลดภาพอื่นได้ไหมคะ? หรือจะถามคำถามเกี่ยวกับอาหารนั้นในส่วน Q&A ด้านล่างก็ได้ค่ะ Momu ยินดีช่วยเหลือค่ะ
                        </p>
                     )}
                   </CardContent>
@@ -499,7 +515,7 @@ export default function FSFAPage() {
               <Card className="max-w-2xl mx-auto mb-6 bg-yellow-50 border-yellow-300 rounded-lg">
                 <CardContent className="p-4">
                   <p className="text-center text-yellow-800 font-body text-md">
-                    แม้ว่าฉันจะไม่สามารถระบุอาหารจากภาพได้ แต่คุณสามารถถามคำถามเฉพาะเจาะจงเกี่ยวกับอาหารนั้นหรือหัวข้อโภชนาการทั่วไปได้เลยค่ะ
+                    แม้ว่า Momu จะไม่สามารถระบุอาหารจากภาพได้ แต่คุณสามารถถามคำถามเฉพาะเจาะจงเกี่ยวกับอาหารนั้นหรือหัวข้อโภชนาการทั่วไปได้เลยค่ะ Momu ยินดีตอบค่ะ!
                   </p>
                 </CardContent>
               </Card>
@@ -509,13 +525,13 @@ export default function FSFAPage() {
                 <div>
                   <CardTitle className="text-2xl font-headline text-primary">ถาม-ตอบ 💡</CardTitle>
                   <CardDescription className="text-md font-body">
-                    {currentUser ? `ถาม Momu Ai (ประวัติการแชทจะถูกบันทึก)` : `ถาม Momu Ai (เข้าสู่ระบบเพื่อบันทึกประวัติ)`}
+                    {currentUser ? `คุยกับ Momu Ai (ประวัติการแชทจะถูกบันทึก)` : `คุยกับ Momu Ai (เข้าสู่ระบบเพื่อบันทึกประวัติ)`}
                   </CardDescription>
                 </div>
                 {currentUser && chatMessages.length > 0 && (
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
-                      <Button variant="outline" size="icon" disabled={isLoadingQa}>
+                      <Button variant="outline" size="icon" disabled={isLoadingQa || isChatHistoryLoading}>
                         <Trash2 className="w-4 h-4" />
                         <span className="sr-only">ล้างประวัติการแชท</span>
                       </Button>
@@ -551,9 +567,13 @@ export default function FSFAPage() {
                   {!isChatHistoryLoading && chatMessages.length === 0 && (
                     <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                       <MessagesSquare className="w-16 h-16 mb-4" />
-                      <p className="text-lg font-body">ถามคำถามเพื่อเริ่มการสนทนา</p>
-                       {imageAnalysisResult?.identification.foodName && imageAnalysisResult?.isIdentified && (
-                          <p className="text-sm mt-2">เช่น "บอกข้อมูลเพิ่มเติมเกี่ยวกับ {imageAnalysisResult.identification.foodName}"</p>
+                      <p className="text-lg font-body">
+                        {imageAnalysisResult?.isIdentified && imageAnalysisResult?.identification.foodName 
+                          ? `ถาม Momu Ai เกี่ยวกับ "${imageAnalysisResult.identification.foodName}" หรือเรื่องอื่นๆ ได้เลยค่ะ`
+                          : "ถามคำถามเพื่อเริ่มการสนทนากับ Momu Ai ค่ะ"}
+                      </p>
+                       {imageAnalysisResult?.isIdentified && imageAnalysisResult?.identification.foodName && (
+                          <p className="text-sm mt-2">เช่น "ให้ข้อมูลเพิ่มเติมเกี่ยวกับ {imageAnalysisResult.identification.foodName} หน่อยสิ"</p>
                        )}
                     </div>
                   )}
@@ -562,23 +582,22 @@ export default function FSFAPage() {
                       <div className={`p-3 rounded-xl max-w-[80%] shadow-md ${msg.sender === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
                         <p className="text-md font-body whitespace-pre-wrap">{msg.text}</p>
                         <p className={`text-xs mt-1 ${msg.sender === 'user' ? 'text-primary-foreground/80 text-right' : 'text-muted-foreground/80 text-left'}`}>
-                          {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </p>
                       </div>
                     </div>
                   ))}
                 </ScrollArea>
-                <div className="flex items-center space-x-2">
+                <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="flex items-center space-x-2">
                   <Input
                     type="text"
-                    placeholder="พิมพ์คำถามของคุณ..."
+                    placeholder="พิมพ์คำถามของคุณถึง Momu Ai..."
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && !isLoadingQa && handleSendMessage()}
                     className="flex-grow text-lg p-3 h-12"
                     disabled={isLoadingQa || isChatHistoryLoading}
                   />
-                  <Button onClick={handleSendMessage} disabled={isLoadingQa || isChatHistoryLoading || !chatInput.trim()} size="lg" className="text-lg px-6 h-12 bg-accent hover:bg-accent/90">
+                  <Button type="submit" disabled={isLoadingQa || isChatHistoryLoading || !chatInput.trim()} size="lg" className="text-lg px-6 h-12 bg-accent hover:bg-accent/90">
                     {isLoadingQa ? (
                        <>
                         <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -589,7 +608,7 @@ export default function FSFAPage() {
                       </>
                     ) : "ถาม"}
                   </Button>
-                </div>
+                </form>
               </CardContent>
             </Card>
           </PageSection>
@@ -602,4 +621,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-

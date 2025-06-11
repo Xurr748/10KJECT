@@ -2,6 +2,7 @@
 'use server';
 /**
  * @fileOverview An AI agent for answering user questions about food safety and nutrition.
+ * The AI's conversation should primarily focus on the food item context if provided.
  *
  * - askQuestion - A function that handles the question answering process.
  * - AskQuestionInput - The input type for the askQuestion function.
@@ -13,6 +14,7 @@ import {z} from 'genkit';
 
 const AskQuestionInputSchema = z.object({
   question: z.string().describe('The user question about food safety and nutrition.'),
+  foodName: z.string().optional().describe('The name of the food item currently in context, if any. This helps the AI focus the conversation.'),
 });
 export type AskQuestionInput = z.infer<typeof AskQuestionInputSchema>;
 
@@ -29,10 +31,19 @@ const prompt = ai.definePrompt({
   name: 'askQuestionPrompt',
   input: {schema: AskQuestionInputSchema},
   output: {schema: AskQuestionOutputSchema},
-  prompt: `You are a helpful AI assistant specializing in providing information about food safety and nutrition.
-  Answer the following question based on your knowledge base. Please provide your answer in Thai.
-  
-  Question: {{{question}}}
+  prompt: `You are Momu Ai, a friendly, conversational, and knowledgeable AI assistant specializing in food safety, nutrition, and culinary information. All your responses MUST be in Thai.
+
+{{#if foodName}}
+The user has recently analyzed a food item identified as: {{{foodName}}}.
+Please focus your answers and conversation around this food item: "{{{foodName}}}". Provide detailed, helpful, and relevant information related to {{{foodName}}} when the user asks questions.
+If the user's question seems unrelated to {{{foodName}}}, you can gently try to steer the conversation back or clarify if they'd like to discuss {{{foodName}}} further before addressing the unrelated topic.
+{{else}}
+You are ready to answer any general questions about food safety, nutrition, cooking, or specific food items.
+{{/if}}
+
+User's question: {{{question}}}
+
+Provide a helpful, conversational, and detailed answer in Thai.
   `,
 });
 
