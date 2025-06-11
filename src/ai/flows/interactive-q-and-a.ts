@@ -1,72 +1,76 @@
 
-// src/ai/flows/interactive-q-and-a.ts
 'use server';
+
 /**
- * @fileOverview An AI agent, Momu Ai, for answering user questions about food safety, nutrition, and culinary arts.
- * Momu Ai provides friendly, conversational, detailed, and insightful responses in Thai.
- * If a food item is in context (from an image scan), Momu Ai focuses on providing comprehensive information
- * about that specific food, including nutritional highlights, practical tips (storage, preparation, cooking ideas),
- * interesting facts, and may suggest follow-up questions to encourage further exploration.
+ * @fileOverview Provides an AI agent that answers questions about nutrition and food safety,
+ * potentially focusing on a specific food item if provided.
  *
- * - askQuestion - A function that handles the question answering process.
- * - AskQuestionInput - The input type for the askQuestion function.
- * - AskQuestionOutput - The return type for the askQuestion function.
+ * - answerNutritionQuestion - A function that answers user questions about nutrition and food safety.
+ * - AnswerNutritionQuestionInput - The input type for the answerNutritionQuestion function.
+ * - AnswerNutritionQuestionOutput - The return type for the answerNutritionQuestion function.
  */
 
 import {ai} from '@/ai/genkit';
 import {z} from 'genkit';
 
-const AskQuestionInputSchema = z.object({
-  question: z.string().describe('The user question about food safety and nutrition.'),
-  foodName: z.string().optional().describe('The name of the food item currently in context, if any. This helps the AI focus the conversation.'),
+const AnswerNutritionQuestionInputSchema = z.object({
+  question: z.string().describe('The question about nutrition or food safety.'),
+  foodName: z.string().optional().describe('The name of the food item being discussed, if any. This helps to contextualize the answer.'),
 });
-export type AskQuestionInput = z.infer<typeof AskQuestionInputSchema>;
+export type AnswerNutritionQuestionInput = z.infer<
+  typeof AnswerNutritionQuestionInputSchema
+>;
 
-const AskQuestionOutputSchema = z.object({
-  answer: z.string().describe('The AI-generated answer to the user question.'),
+const AnswerNutritionQuestionOutputSchema = z.object({
+  answer: z.string().describe('The answer to the question (in Thai).'),
 });
-export type AskQuestionOutput = z.infer<typeof AskQuestionOutputSchema>;
+export type AnswerNutritionQuestionOutput = z.infer<
+  typeof AnswerNutritionQuestionOutputSchema
+>;
 
-export async function askQuestion(input: AskQuestionInput): Promise<AskQuestionOutput> {
-  return askQuestionFlow(input);
+export async function answerNutritionQuestion(
+  input: AnswerNutritionQuestionInput
+): Promise<AnswerNutritionQuestionOutput> {
+  return answerNutritionQuestionFlow(input);
 }
 
 const prompt = ai.definePrompt({
-  name: 'askQuestionPrompt',
-  model: 'googleai/gemini-2.0-flash', // Explicitly set Gemini model
-  input: {schema: AskQuestionInputSchema},
-  output: {schema: AskQuestionOutputSchema},
-  prompt: `You are Momu Ai, a friendly, conversational, and highly knowledgeable AI assistant specializing in food safety, nutrition, and culinary arts. Your expertise is to help users understand their food better. All your responses MUST be in Thai.
+  name: 'answerNutritionQuestionPrompt',
+  model: 'googleai/gemini-1.5-flash-latest', // Explicitly using Gemini
+  input: {schema: AnswerNutritionQuestionInputSchema},
+  output: {schema: AnswerNutritionQuestionOutputSchema},
+  prompt: `You are Momu Ai, a friendly and knowledgeable AI assistant specializing in nutrition and food safety, especially for seniors. Your responses MUST be in Thai.
 
 {{#if foodName}}
-The user is currently focused on: {{{foodName}}}.
-When answering questions about "{{{foodName}}}", provide comprehensive, actionable, and interesting information. Consider including:
-- Specific nutritional highlights (e.g., key vitamins, minerals, benefits).
-- Practical tips (e.g., storage, preparation, cooking ideas, potential pairings).
-- Interesting facts or common misconceptions.
-- If appropriate, gently suggest 1-2 related follow-up questions the user might be interested in, to encourage further exploration.
-
-If the user's question seems unrelated to "{{{foodName}}}", you can gently remind them about the current food context and ask if they'd like to switch topics, or answer their question briefly and then try to link it back to {{{foodName}}} if a natural connection exists.
-Your primary goal is to be an expert guide for "{{{foodName}}}".
+The user is asking a question related to "{{foodName}}". Please try to keep your answer relevant to this food item.
+You can offer:
+- Key nutritional highlights of "{{foodName}}".
+- Practical tips for "{{foodName}}" (e.g., storage, preparation, healthy cooking methods).
+- Interesting facts or common uses of "{{foodName}}".
+- If appropriate, suggest 1-2 relevant follow-up questions the user might have about "{{foodName}}".
 {{else}}
-You are ready to answer any general questions about food safety, nutrition, cooking, or specific food items. Feel free to offer practical tips and interesting facts. If a user asks a general question, try to provide a comprehensive yet easy-to-understand answer.
+The user is asking a general question about nutrition or food safety.
 {{/if}}
 
 User's question: {{{question}}}
 
-Provide a helpful, conversational, detailed, and insightful answer in Thai. Be empathetic and encouraging.
-  `,
+Please provide a comprehensive, helpful, and easy-to-understand answer in Thai. Maintain a supportive and conversational tone.
+`,
 });
 
-const askQuestionFlow = ai.defineFlow(
+const answerNutritionQuestionFlow = ai.defineFlow(
   {
-    name: 'askQuestionFlow',
-    inputSchema: AskQuestionInputSchema,
-    outputSchema: AskQuestionOutputSchema,
+    name: 'answerNutritionQuestionFlow',
+    inputSchema: AnswerNutritionQuestionInputSchema,
+    outputSchema: AnswerNutritionQuestionOutputSchema,
   },
   async input => {
-    const {output} = await prompt(input);
-    return output!;
+    const { output } = await prompt(input);
+    if (!output) {
+      console.error('AnswerNutritionQuestionFlow: AI model did not return a structured output for the question.');
+      // Fallback response if AI fails to provide structured output
+      return { answer: "ขออภัยค่ะ Momu ไม่สามารถประมวลผลคำตอบได้ในขณะนี้ โปรดลองอีกครั้งนะคะ" };
+    }
+    return output;
   }
 );
-

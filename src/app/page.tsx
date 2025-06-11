@@ -5,9 +5,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { analyzeFoodImage, type AnalyzeFoodImageInput, type AnalyzeFoodImageOutput } from '@/ai/flows/food-image-analyzer';
-import { askQuestion, type AskQuestionInput, type AskQuestionOutput } from '@/ai/flows/interactive-q-and-a';
-import { auth, db } from '@/lib/firebase'; // Import db from Firebase
+import { 
+  scanFoodImage, 
+  type ScanFoodImageInput, 
+  type ScanFoodImageOutput 
+} from '@/ai/flows/food-image-analyzer';
+import { 
+  answerNutritionQuestion, 
+  type AnswerNutritionQuestionInput, // Corrected to match flow's input name
+  type AnswerNutritionQuestionOutput 
+} from '@/ai/flows/interactive-q-and-a';
+import { auth, db } from '@/lib/firebase';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { 
   collection, 
@@ -17,16 +25,16 @@ import {
   onSnapshot, 
   Timestamp,
   serverTimestamp,
-  where,
   getDocs,
   writeBatch
-} from 'firebase/firestore'; // Import Firestore functions
+} from 'firebase/firestore';
 
 // ShadCN UI Components
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
@@ -50,9 +58,8 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 
-
 // Lucide Icons
-import { UploadCloud, Bot, Brain, Utensils, AlertCircle, CheckCircle, Info, Lightbulb, MessagesSquare, UserCircle, LogIn, UserPlus, LogOut, Trash2 } from 'lucide-react';
+import { UploadCloud, Bot, Brain, Utensils, AlertCircle, CheckCircle, Info, MessagesSquare, UserCircle, LogIn, UserPlus, LogOut, Trash2, ListChecks } from 'lucide-react';
 
 // Chat Message Type
 interface ChatMessage {
@@ -62,6 +69,10 @@ interface ChatMessage {
   timestamp: Date;
 }
 
+const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
+const GENERIC_NUTRITION_UNAVAILABLE = "ไม่สามารถระบุข้อมูลทางโภชนาการได้";
+const GENERIC_SAFETY_UNAVAILABLE = "ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้";
+
 export default function FSFAPage() {
   const { toast } = useToast();
   const router = useRouter();
@@ -70,7 +81,7 @@ export default function FSFAPage() {
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [imageAnalysisResult, setImageAnalysisResult] = useState<AnalyzeFoodImageOutput | null>(null);
+  const [imageAnalysisResult, setImageAnalysisResult] = useState<ScanFoodImageOutput | null>(null);
   const [isLoadingImageAnalysis, setIsLoadingImageAnalysis] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
 
@@ -80,13 +91,18 @@ export default function FSFAPage() {
   const [isLoadingQa, setIsLoadingQa] = useState(false);
   const [isChatHistoryLoading, setIsChatHistoryLoading] = useState(false);
 
+  const isFoodIdentified = imageAnalysisResult && imageAnalysisResult.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
+
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
-      if (user) {
-        // setChatMessages([]); // Let the chat history loading handle this
-      } else {
+      if (!user) {
         setChatMessages([]);
+        // Optionally reset image analysis state if user logs out
+        // setSelectedFile(null);
+        // setPreviewUrl(null);
+        // setImageAnalysisResult(null);
+        // setShowQaSection(false);
       }
     });
     return () => unsubscribeAuth();
@@ -111,7 +127,7 @@ export default function FSFAPage() {
         });
         setChatMessages(history);
         setIsChatHistoryLoading(false);
-      }, (error) => {
+      }, (error: unknown) => {
         console.error("Error loading chat history:", error);
         toast({
           title: "ข้อผิดพลาด",
@@ -128,20 +144,31 @@ export default function FSFAPage() {
   }, [currentUser, toast]);
 
 
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const handleLogout = async () => {
     try {
       await signOut(auth);
       toast({
         title: "ออกจากระบบสำเร็จ",
       });
-      // router.push('/login'); // Optional: redirect to login after logout
-    } catch (error) {
+      resetState();
+    } catch (error: unknown) {
       console.error("Logout error:", error);
       toast({
         title: "เกิดข้อผิดพลาดในการออกจากระบบ",
         variant: "destructive",
       });
     }
+  };
+
+  const resetState = () => {
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setImageAnalysisResult(null);
+    setShowQaSection(false);
+    setChatMessages([]); // Clears chat for guest or if user logs out
+    setImageError(null);
+    setChatInput('');
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -154,7 +181,7 @@ export default function FSFAPage() {
       };
       reader.readAsDataURL(file);
       setImageAnalysisResult(null); 
-      setShowQaSection(false); 
+      setShowQaSection(false);
       setImageError(null);
     }
   };
@@ -171,15 +198,17 @@ export default function FSFAPage() {
     const reader = new FileReader();
     reader.readAsDataURL(selectedFile);
     reader.onload = async () => {
-      const foodPhotoDataUri = reader.result as string;
+      const foodImage = reader.result as string; // Renamed from foodPhotoDataUri for clarity
       try {
-        const result = await analyzeFoodImage({ foodPhotoDataUri } as AnalyzeFoodImageInput);
+        const result = await scanFoodImage({ foodImage } as ScanFoodImageInput);
         setImageAnalysisResult(result);
         setShowQaSection(true); 
-        if (result.isIdentified) {
+        
+        const identified = result.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
+        if (identified) {
           toast({
             title: "การวิเคราะห์เสร็จสมบูรณ์",
-            description: `ระบุได้ว่าเป็น: ${result.identification.foodName}`,
+            description: `ระบุได้ว่าเป็น: ${result.foodItem}`,
           });
         } else {
           toast({
@@ -188,7 +217,7 @@ export default function FSFAPage() {
             variant: "default"
           });
         }
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Error analyzing image:', error);
         setImageError('วิเคราะห์รูปภาพไม่สำเร็จ โปรดลองอีกครั้ง');
         toast({
@@ -216,13 +245,15 @@ export default function FSFAPage() {
 
     const userMessageText = chatInput;
     setChatInput(''); 
+    if (chatInputRef.current) {
+      chatInputRef.current.focus();
+      chatInputRef.current.style.height = 'auto';
+    }
 
-    const timestamp = serverTimestamp(); 
-    const localTimestamp = new Date(); 
+    const timestamp = serverTimestamp();
+    const localTimestamp = new Date();
 
-    if (currentUser) {
-      // Message will be added via Firestore snapshot listener
-    } else {
+    if (!currentUser) {
       const newUserMessage: ChatMessage = {
         id: `${Date.now()}-user`,
         sender: 'user',
@@ -241,8 +272,8 @@ export default function FSFAPage() {
           text: userMessageText,
           timestamp: timestamp,
         });
-      } catch (error) {
-        console.error("Error saving user message:", error);
+      } catch (error: unknown) {
+        console.error("Error saving user message to Firestore:", error);
         toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อความของคุณได้", variant: "destructive" });
       }
     }
@@ -250,8 +281,16 @@ export default function FSFAPage() {
     setIsLoadingQa(true);
 
     try {
-      const foodContextName = imageAnalysisResult?.isIdentified ? imageAnalysisResult.identification.foodName : undefined;
-      const aiResponse = await askQuestion({ question: userMessageText, foodName: foodContextName } as AskQuestionInput);
+      const foodContextName = (imageAnalysisResult && imageAnalysisResult.foodItem !== UNIDENTIFIED_FOOD_MESSAGE) 
+                              ? imageAnalysisResult.foodItem 
+                              : undefined;
+      
+      const inputForAI: AnswerNutritionQuestionInput = { question: userMessageText };
+      if (foodContextName) {
+        inputForAI.foodName = foodContextName;
+      }
+      
+      const aiResponse = await answerNutritionQuestion(inputForAI);
       
       if (currentUser) {
         try {
@@ -259,9 +298,9 @@ export default function FSFAPage() {
           await addDoc(messagesRef, {
             sender: 'ai',
             text: aiResponse.answer,
-            timestamp: timestamp, 
+            timestamp: timestamp,
           });
-        } catch (error) {
+        } catch (error: unknown) {
           console.error("Error saving AI message:", error);
           toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถบันทึกคำตอบของ AI ได้", variant: "destructive" });
         }
@@ -270,13 +309,13 @@ export default function FSFAPage() {
           id: `${Date.now()}-ai`,
           sender: 'ai',
           text: aiResponse.answer,
-          timestamp: localTimestamp, 
+          timestamp: localTimestamp,
         };
         setChatMessages((prevMessages) => [...prevMessages, newAiMessage]);
       }
 
-    } catch (error) {
-      console.error('Error asking question:', error);
+    } catch (error: unknown) {
+      console.error('Error asking question from AI:', error);
       const errorText = "ขออภัยค่ะ Momu พบข้อผิดพลาดในการตอบคำถามของคุณ โปรดลองอีกครั้งนะคะ";
       if (currentUser) {
         try {
@@ -286,7 +325,7 @@ export default function FSFAPage() {
             text: errorText,
             timestamp: timestamp,
           });
-        } catch (saveError) {
+        } catch (saveError: unknown) {
           console.error("Error saving AI error message:", saveError);
         }
       } else {
@@ -309,8 +348,8 @@ export default function FSFAPage() {
   };
 
   const handleClearChatHistory = async () => {
-    if (!currentUser) {
-      toast({ title: "ข้อผิดพลาด", description: "คุณต้องเข้าสู่ระบบเพื่อล้างประวัติการแชท", variant: "destructive" });
+     if (!currentUser || isLoadingQa || isChatHistoryLoading) {
+      toast({ title: "คุณยังไม่ได้เข้าสู่ระบบ", description: "คุณต้องเข้าสู่ระบบเพื่อล้างประวัติการแชท", variant: "destructive" });
       return;
     }
 
@@ -330,8 +369,9 @@ export default function FSFAPage() {
         batch.delete(doc.ref);
       });
       await batch.commit();
+      // Firestore onSnapshot will update chatMessages to empty automatically
       toast({ title: "สำเร็จ", description: "ล้างประวัติการแชทเรียบร้อยแล้ว" });
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Error clearing chat history:", error);
       toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถล้างประวัติการแชทได้", variant: "destructive" });
     } finally {
@@ -343,11 +383,12 @@ export default function FSFAPage() {
   const chatScrollAreaRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (chatScrollAreaRef.current) {
-      chatScrollAreaRef.current.scrollTo({ 
-        top: chatScrollAreaRef.current.scrollHeight
+      chatScrollAreaRef.current.scrollTo({
+        top: chatScrollAreaRef.current.scrollHeight,
+        behavior: 'auto' 
       });
     }
-  }, [chatMessages, isLoadingQa]);
+  }, [chatMessages, isLoadingQa, isChatHistoryLoading]); 
 
   const PageSection: React.FC<{title: string; icon: React.ReactNode; children: React.ReactNode; id: string; className?: string; titleBgColor?: string; titleTextColor?: string;}> = ({ title, icon, children, id, className, titleBgColor = "bg-primary", titleTextColor = "text-primary-foreground" }) => (
     <section id={id} className={`py-12 ${className || ''}`}>
@@ -460,35 +501,51 @@ export default function FSFAPage() {
                 <Card className="mt-8 shadow-md rounded-lg overflow-hidden bg-card border border-primary/30">
                   <CardHeader className="pb-2 bg-primary/10">
                       <CardTitle className="text-xl font-headline text-primary flex items-center">
-                      {imageAnalysisResult.isIdentified ? <CheckCircle className="w-6 h-6 mr-2 text-green-500" /> : <Info className="w-6 h-6 mr-2 text-yellow-500" />}
+                      {isFoodIdentified ? <CheckCircle className="w-6 h-6 mr-2 text-green-500" /> : <Info className="w-6 h-6 mr-2 text-yellow-500" />}
                       ผลการวิเคราะห์
                       </CardTitle>
                   </CardHeader>
                   <CardContent className="p-4 md:p-6 space-y-4">
-                    {imageAnalysisResult.isIdentified ? (
+                    {isFoodIdentified ? (
                       <>
                         <div>
                           <h4 className="font-semibold text-lg font-body text-foreground">อาหารที่ระบุได้:</h4>
-                          <p className="text-md font-body text-foreground/80">{imageAnalysisResult.identification.foodName} (ความมั่นใจ: {(imageAnalysisResult.identification.confidence * 100).toFixed(0)}%)</p>
+                          <p className="text-md font-body text-foreground/80">{imageAnalysisResult.foodItem}</p>
                         </div>
-                        <Separator />
-                        <div>
-                          <h4 className="font-semibold text-lg font-body text-foreground">ข้อมูลทางโภชนาการ:</h4>
-                          <ScrollArea className="h-40">
-                              <p className="text-md font-body text-foreground/80 whitespace-pre-wrap pr-2">{imageAnalysisResult.nutritionInformation}</p>
-                          </ScrollArea>
-                        </div>
-                        <Separator />
-                        <div>
-                          <h4 className="font-semibold text-lg font-body text-foreground">คำแนะนำด้านความปลอดภัย:</h4>
-                          <ScrollArea className="h-40">
-                              <p className="text-md font-body text-foreground/80 whitespace-pre-wrap pr-2">{imageAnalysisResult.safetyAdvice}</p>
-                          </ScrollArea>
-                        </div>
+                        {imageAnalysisResult.nutritionalInformation !== GENERIC_NUTRITION_UNAVAILABLE && (
+                          <>
+                            <Separator />
+                            <div>
+                              <h4 className="font-semibold text-lg font-body text-foreground">ข้อมูลทางโภชนาการ:</h4>
+                              <ScrollArea className="h-40">
+                                  <p className="text-md font-body text-foreground/80 whitespace-pre-wrap pr-2">{imageAnalysisResult.nutritionalInformation}</p>
+                              </ScrollArea>
+                            </div>
+                          </>
+                        )}
+                        {(imageAnalysisResult.safetyPrecautions && imageAnalysisResult.safetyPrecautions.some(p => p !== GENERIC_SAFETY_UNAVAILABLE)) && (
+                          <>
+                            <Separator />
+                            <div>
+                              <h4 className="font-semibold text-lg font-body text-foreground flex items-center">
+                                <ListChecks className="w-5 h-5 mr-2"/>คำแนะนำด้านความปลอดภัย:
+                              </h4>
+                              <ScrollArea className="h-40 mt-2">
+                                  <ul className="list-disc pl-5 space-y-1 text-md font-body text-foreground/80 pr-2">
+                                    {imageAnalysisResult.safetyPrecautions.map((precaution, index) => (
+                                      precaution !== GENERIC_SAFETY_UNAVAILABLE ? <li key={index}>{precaution}</li> : null
+                                    )).filter(Boolean)}
+                                  </ul>
+                              </ScrollArea>
+                            </div>
+                          </>
+                        )}
                       </>
                     ) : (
                        <p className="text-md font-body text-foreground/80">
-                         ขออภัยค่ะ Momu ไม่สามารถระบุรายการอาหารในภาพได้ชัดเจน บางครั้งภาพก็อาจจะซับซ้อน ลองเปลี่ยนมุมถ่ายภาพ ให้มีแสงสว่างเพียงพอ หรืออัปโหลดภาพอื่นได้ไหมคะ? หรือจะถามคำถามเกี่ยวกับอาหารนั้นในส่วน Q&A ด้านล่างก็ได้ค่ะ Momu ยินดีช่วยเหลือค่ะ
+                         {imageAnalysisResult.foodItem === UNIDENTIFIED_FOOD_MESSAGE 
+                           ? "ขออภัยค่ะ Momu ไม่สามารถระบุรายการอาหารในภาพได้ชัดเจน บางครั้งภาพก็อาจจะซับซ้อน ลองเปลี่ยนมุมถ่ายภาพ ให้มีแสงสว่างเพียงพอ หรืออัปโหลดภาพอื่นได้ไหมคะ? หรือจะถามคำถามเกี่ยวกับอาหารนั้นในส่วน Q&A ด้านล่างก็ได้ค่ะ Momu ยินดีช่วยเหลือค่ะ"
+                           : `ข้อมูลสำหรับ "${imageAnalysisResult.foodItem}" อาจมีจำกัด`}
                        </p>
                     )}
                   </CardContent>
@@ -498,10 +555,9 @@ export default function FSFAPage() {
           </Card>
         </PageSection>
 
-        {/* Q&A Section */}
         {showQaSection && (
           <PageSection title="Momu Ai 🧑‍⚕️💬" icon={<Bot />} id="qa-section" className="bg-accent/10 rounded-lg shadow-md" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
-            {imageAnalysisResult && !imageAnalysisResult.isIdentified && (
+            {imageAnalysisResult && !isFoodIdentified && (
               <Card className="mb-6 bg-yellow-50 border-yellow-300 rounded-lg max-w-2xl mx-auto">
                 <CardContent className="p-4">
                   <p className="text-center text-yellow-800 font-body text-md">
@@ -547,7 +603,7 @@ export default function FSFAPage() {
                 <ScrollArea className="h-96 w-full pr-4 border border-border rounded-md p-4 mb-4 bg-secondary/20" viewportRef={chatScrollAreaRef}>
                   {isChatHistoryLoading && (
                      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                        <svg className="animate-spin h-8 w-8 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <svg className="animate-spin h-8 w-8 mb-2 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
@@ -558,12 +614,12 @@ export default function FSFAPage() {
                     <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                       <MessagesSquare className="w-16 h-16 mb-4" />
                       <p className="text-lg font-body">
-                        {imageAnalysisResult?.isIdentified && imageAnalysisResult?.identification.foodName 
-                          ? `ถาม Momu Ai เกี่ยวกับ "${imageAnalysisResult.identification.foodName}" หรือเรื่องอื่นๆ ได้เลยค่ะ`
+                        {isFoodIdentified && imageAnalysisResult?.foodItem 
+                          ? `ถาม Momu Ai เกี่ยวกับ "${imageAnalysisResult.foodItem}" หรือเรื่องอื่นๆ ได้เลยค่ะ`
                           : "ถามคำถามเพื่อเริ่มการสนทนากับ Momu Ai ค่ะ"}
-                      </p>
-                       {imageAnalysisResult?.isIdentified && imageAnalysisResult?.identification.foodName && (
-                          <p className="text-sm mt-2">เช่น "ให้ข้อมูลเพิ่มเติมเกี่ยวกับ {imageAnalysisResult.identification.foodName} หน่อยสิ"</p>
+                      </p> 
+                       {isFoodIdentified && imageAnalysisResult?.foodItem && (
+                          <p className="text-sm mt-2">เช่น "ให้ข้อมูลเพิ่มเติมเกี่ยวกับ {imageAnalysisResult.foodItem} หน่อยสิ"</p>
                        )}
                     </div>
                   )}
@@ -589,20 +645,22 @@ export default function FSFAPage() {
                   )}
                 </ScrollArea>
                 <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="flex items-center space-x-2">
-                  <Input
+                  <Textarea
                     id="chat-input-momu-ai"
-                    type="text"
+                    ref={chatInputRef}
                     placeholder="พิมพ์คำถามของคุณถึง Momu Ai..."
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
-                    className="flex-grow text-lg p-3 h-12"
+                    className="flex-grow text-lg p-3 min-h-[48px] resize-none focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent"
+                    rows={1}
+                    onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
                     disabled={isLoadingQa || isChatHistoryLoading}
                   />
                   <Button type="submit" disabled={isLoadingQa || isChatHistoryLoading || !chatInput.trim()} size="lg" className="text-lg px-6 h-12 bg-accent hover:bg-accent/90">
                     {isLoadingQa ? (
                        <>
                         <svg className="animate-spin -ml-1 mr-3 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" strokeDasharray="50,50"></circle>
                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                         กำลังส่ง...
@@ -622,6 +680,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-
-
-    
