@@ -77,25 +77,35 @@ export default function FSFAPage() {
   const isFoodIdentified = imageAnalysisResult && imageAnalysisResult.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
 
   useEffect(() => {
+    let unsubscribeChatListener: (() => void) | undefined;
+
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
+      if (unsubscribeChatListener) {
+        unsubscribeChatListener(); 
+        unsubscribeChatListener = undefined;
+      }
       if (user) {
-        loadChatHistoryFromFirestore(user.uid);
+        unsubscribeChatListener = loadChatHistoryFromFirestore(user.uid); 
       } else {
         setPostScanChatMessages([]); 
       }
     });
-    return () => unsubscribeAuth();
+
+    return () => {
+      unsubscribeAuth(); 
+      if (unsubscribeChatListener) {
+        unsubscribeChatListener(); 
+      }
+    };
   }, []);
 
   useEffect(() => {
-    // Check if the chat input is currently focused
     const isChatInputFocused = document.activeElement === chatInputRef.current;
-
     if (chatScrollAreaRef.current && !isChatInputFocused) {
       chatScrollAreaRef.current.scrollTop = chatScrollAreaRef.current.scrollHeight;
     }
-  }, [postScanChatMessages]); // Only scroll when messages actually change
+  }, [postScanChatMessages]); 
 
   useEffect(() => {
     if (isFoodIdentified && imageAnalysisResult) {
@@ -106,7 +116,7 @@ export default function FSFAPage() {
   }, [imageAnalysisResult, isFoodIdentified]);
 
 
-  const loadChatHistoryFromFirestore = (userId: string) => {
+  const loadChatHistoryFromFirestore = (userId: string): (() => void) => {
     const messagesCol = collection(db, `userPostScanChats/${userId}/messages`);
     const q = query(messagesCol, orderBy("timestamp", "asc"));
 
@@ -160,7 +170,7 @@ export default function FSFAPage() {
         title: "ออกจากระบบสำเร็จ",
       });
       resetState();
-      setPostScanChatMessages([]); 
+      // setPostScanChatMessages([]); // This will be handled by onAuthStateChanged
       currentFoodContext.current = null;
     } catch (error: unknown) {
       console.error("Logout error:", error);
@@ -199,9 +209,7 @@ export default function FSFAPage() {
     }
     setIsLoadingImageAnalysis(true);
     setImageError(null);
-    // Keep previous imageAnalysisResult to keep chat open if user re-analyzes while chat is open
-    // setImageAnalysisResult(null); 
-
+    
     const reader = new FileReader();
     reader.readAsDataURL(selectedFile);
     reader.onload = async () => {
@@ -264,8 +272,7 @@ export default function FSFAPage() {
     setPostScanChatError(null);
 
     if (currentUser) {
-      // Pass Omit<ChatMessage, 'id'> as saveChatMessageToFirestore expects it
-      const { id, ...messageToSave } = newUserMessage; //eslint-disable-line @typescript-eslint/no-unused-vars
+      const { id, ...messageToSave } = newUserMessage; 
       await saveChatMessageToFirestore(currentUser.uid, messageToSave);
     }
     
@@ -285,7 +292,7 @@ export default function FSFAPage() {
       const aiResponse: ChatMessage = { sender: 'ai', text: result.answer, timestamp: new Date() };
       setPostScanChatMessages(prev => [...prev, aiResponse]);
       if (currentUser) {
-        const { id, ...messageToSave } = aiResponse; //eslint-disable-line @typescript-eslint/no-unused-vars
+        const { id, ...messageToSave } = aiResponse; 
         await saveChatMessageToFirestore(currentUser.uid, messageToSave);
       }
     } catch (error: unknown) {
@@ -296,7 +303,7 @@ export default function FSFAPage() {
       const aiErrorResponse: ChatMessage = { sender: 'ai', text: errorMsg, timestamp: new Date() };
       setPostScanChatMessages(prev => [...prev, aiErrorResponse]);
        if (currentUser) {
-        const { id, ...messageToSave } = aiErrorResponse; //eslint-disable-line @typescript-eslint/no-unused-vars
+        const { id, ...messageToSave } = aiErrorResponse; 
         await saveChatMessageToFirestore(currentUser.uid, messageToSave);
       }
     } finally {
@@ -489,7 +496,7 @@ export default function FSFAPage() {
               <CardContent className="space-y-4">
                 <ScrollArea className="h-80 w-full border rounded-md p-4" viewportRef={chatScrollAreaRef}>
                   {postScanChatMessages.map((msg, index) => (
-                    <div key={msg.id || `${msg.sender}-${msg.timestamp?.toString()}-${index}`} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} mb-3`}>
+                    <div key={msg.id || `${msg.sender}-${msg.timestamp instanceof Date ? msg.timestamp.getTime() : msg.timestamp?.toString()}-${index}`} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} mb-3`}>
                       <div className={`max-w-[70%] p-3 rounded-lg shadow ${msg.sender === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
                         <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
                          {msg.timestamp && typeof msg.timestamp.toDate === 'function' && (
@@ -558,6 +565,6 @@ export default function FSFAPage() {
     </div>
   );
 }
-
+    
 
     
