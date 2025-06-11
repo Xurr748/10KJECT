@@ -31,18 +31,6 @@ interface Article {
 // Sample Articles
 const articles: Article[] = [
   {
-    id: 'hydration',
-    title: 'The Importance of Hydration for Seniors',
-    summary: 'Staying hydrated is crucial for overall health, especially for seniors. Learn why and how to ensure adequate fluid intake.',
-    imageUrl: 'https://placehold.co/600x400.png',
-    imageHint: 'water glass',
-    content: [
-      "Water is essential for virtually every bodily function, including regulating body temperature, transporting nutrients, and flushing out waste products. As we age, our sense of thirst may diminish, and our bodies' ability to conserve water can decrease, making seniors more susceptible to dehydration.",
-      "Dehydration in seniors can lead to serious health problems, such as urinary tract infections, kidney stones, constipation, and even confusion or cognitive impairment. It's vital to be proactive about fluid intake.",
-      "Tips for staying hydrated include: drinking water regularly throughout the day, even if you don't feel thirsty; consuming water-rich foods like fruits and vegetables; keeping a water bottle handy; and limiting dehydrating beverages like excessive caffeine or alcohol."
-    ],
-  },
-  {
     id: 'food-labels',
     title: "Decoding Food Labels: A Senior's Guide",
     summary: "Understand nutritional labels to make informed food choices for a healthier lifestyle.",
@@ -236,38 +224,41 @@ export default function SeniorSafePage() {
       </header>
       
       <main className="container mx-auto px-4 space-y-10 md:space-y-16">
-        <PageSection title="Nourish Your Knowledge" icon={<Newspaper />} id="articles" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
-          <div className="grid md:grid-cols-1 lg:grid-cols-3 gap-8">
-            {articles.map((article) => (
-              <Card key={article.id} className="flex flex-col shadow-lg hover:shadow-xl transition-shadow duration-300 rounded-lg overflow-hidden bg-card">
-                <CardHeader className="p-0">
-                  <div className="aspect-[16/9] relative w-full">
-                     <Image 
-                      src={article.imageUrl} 
-                      alt={article.title} 
-                      fill
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                      className="object-cover rounded-t-lg"
-                      data-ai-hint={article.imageHint}
-                      />
-                  </div>
-                  <div className="p-6">
-                    <CardTitle className="text-2xl font-headline text-primary">{article.title}</CardTitle>
-                    <CardDescription className="text-md font-body mt-1">{article.summary}</CardDescription>
-                  </div>
-                </CardHeader>
-                <CardContent className="flex-grow p-6 pt-0">
-                  {article.content.map((paragraph, index) => (
-                    <p key={index} className="mb-3 text-foreground/90 font-body text-lg leading-relaxed">{paragraph}</p>
-                  ))}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </PageSection>
+        {articles.length > 0 && (
+          <>
+            <PageSection title="Nourish Your Knowledge" icon={<Newspaper />} id="articles" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
+              <div className="grid md:grid-cols-1 lg:grid-cols-3 gap-8">
+                {articles.map((article) => (
+                  <Card key={article.id} className="flex flex-col shadow-lg hover:shadow-xl transition-shadow duration-300 rounded-lg overflow-hidden bg-card">
+                    <CardHeader className="p-0">
+                      <div className="aspect-[16/9] relative w-full">
+                         <Image 
+                          src={article.imageUrl} 
+                          alt={article.title} 
+                          fill
+                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                          className="object-cover rounded-t-lg"
+                          data-ai-hint={article.imageHint}
+                          />
+                      </div>
+                      <div className="p-6">
+                        <CardTitle className="text-2xl font-headline text-primary">{article.title}</CardTitle>
+                        <CardDescription className="text-md font-body mt-1">{article.summary}</CardDescription>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="flex-grow p-6 pt-0">
+                      {article.content.map((paragraph, index) => (
+                        <p key={index} className="mb-3 text-foreground/90 font-body text-lg leading-relaxed">{paragraph}</p>
+                      ))}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </PageSection>
+            <Separator className="my-8 md:my-12" />
+          </>
+        )}
         
-        <Separator className="my-8 md:my-12" />
-
         <PageSection title="What's On Your Plate?" icon={<Brain />} id="image-scanner" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-primary" titleTextColor="text-primary-foreground">
           <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
             <CardHeader>
