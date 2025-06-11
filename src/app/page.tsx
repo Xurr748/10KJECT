@@ -10,14 +10,8 @@ import {
   type ScanFoodImageInput, 
   type ScanFoodImageOutput 
 } from '@/ai/flows/food-image-analyzer';
-import {
-  answerUserQuestion,
-  type AnswerUserQuestionInput,
-  type AnswerUserQuestionOutput,
-} from '@/ai/flows/post-scan-chat';
-import { auth, db } from '@/lib/firebase'; 
+import { auth } from '@/lib/firebase'; 
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { collection, addDoc, query, orderBy, onSnapshot, serverTimestamp, deleteDoc, getDocs } from 'firebase/firestore'; 
 
 // ShadCN UI Components
 import { Button } from '@/components/ui/button';
@@ -35,21 +29,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Textarea } from '@/components/ui/textarea'; 
 
 // Lucide Icons
-import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Bot, Send, Trash2, Loader2 } from 'lucide-react';
+import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2 } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 const GENERIC_NUTRITION_UNAVAILABLE = "ไม่สามารถระบุข้อมูลทางโภชนาการได้";
 const GENERIC_SAFETY_UNAVAILABLE = "ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้";
-
-interface ChatMessage {
-  id?: string; // Firestore document ID
-  sender: 'user' | 'model';
-  text: string;
-  timestamp?: Date | any; 
-}
 
 // Define PageSection outside of FSFAPage component
 const PageSection: React.FC<{title: string; icon: React.ReactNode; children: React.ReactNode; id: string; className?: string; titleBgColor?: string; titleTextColor?: string;}> = ({ title, icon, children, id, className, titleBgColor = "bg-primary", titleTextColor = "text-primary-foreground" }) => (
@@ -78,114 +64,15 @@ export default function FSFAPage() {
   const [isLoadingImageAnalysis, setIsLoadingImageAnalysis] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
 
-  // State for Post-Scan Chat
-  const [postScanChatMessages, setPostScanChatMessages] = useState<ChatMessage[]>([]);
-  const [userPostScanQuestion, setUserPostScanQuestion] = useState('');
-  const [isLoadingPostScanChat, setIsLoadingPostScanChat] = useState(false);
-  const [postScanChatError, setPostScanChatError] = useState<string | null>(null);
-  const currentFoodContext = useRef<string | null>(null);
-
-  const chatScrollAreaRef = useRef<HTMLDivElement>(null);
-  const chatInputRef = useRef<HTMLTextAreaElement>(null);
-
-
   const isFoodIdentified = imageAnalysisResult && imageAnalysisResult.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
 
   useEffect(() => {
-    let unsubscribeChatListener: (() => void) | undefined;
-
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      if (unsubscribeChatListener) {
-        unsubscribeChatListener(); 
-        unsubscribeChatListener = undefined;
-      }
       setCurrentUser(user);
-      if (user) {
-        unsubscribeChatListener = loadChatHistoryFromFirestore(user.uid); 
-      } else {
-        setPostScanChatMessages([]); 
-      }
     });
-
-    return () => {
-      unsubscribeAuth(); 
-      if (unsubscribeChatListener) {
-        unsubscribeChatListener(); 
-      }
-    };
+    return () => unsubscribeAuth(); 
   }, []);
 
-  useEffect(() => {
-    if (chatScrollAreaRef.current) {
-      // Only scroll if the input is NOT focused
-      if (document.activeElement !== chatInputRef.current) {
-        chatScrollAreaRef.current.scrollTop = chatScrollAreaRef.current.scrollHeight;
-      }
-    }
-  }, [postScanChatMessages]); 
-
-  useEffect(() => {
-    if (isFoodIdentified && imageAnalysisResult) {
-      currentFoodContext.current = imageAnalysisResult.foodItem;
-    } else {
-      currentFoodContext.current = null;
-    }
-  }, [imageAnalysisResult, isFoodIdentified]);
-
-
-  const loadChatHistoryFromFirestore = (userId: string): (() => void) => {
-    const messagesCol = collection(db, `userPostScanChats/${userId}/messages`);
-    const q = query(messagesCol, orderBy("timestamp", "asc"));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const messages = snapshot.docs.map(doc => {
- return {
- id: doc.id,
- sender: doc.data().sender === 'user' ? 'user' : 'model', 
-        text: doc.data().text,
- timestamp: doc.data().timestamp,
-      } as ChatMessage;
-    });
-      setPostScanChatMessages(messages);
-    }, (error) => {
-      console.error("Error loading chat history: ", error);
-      toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถโหลดประวัติการสนทนาได้", variant: "destructive" });
-    });
-    return unsubscribe; 
-  };
-
-  const saveChatMessageToFirestore = async (userId: string, message: Omit<ChatMessage, 'id'>) => {
-    try {
-      await addDoc(collection(db, `userPostScanChats/${userId}/messages`), {
-        ...message,
-        timestamp: serverTimestamp() 
-      });
-    } catch (error) {
-      console.error("Error saving chat message: ", error);
-      toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อความสนทนาได้", variant: "destructive" });
-    }
-  };
-
-  const handleClearChatHistory = async () => {
-    if (!currentUser) return;
-    setIsLoadingPostScanChat(true);
-    try {
-      const messagesColRef = collection(db, `userPostScanChats/${currentUser.uid}/messages`);
-      const querySnapshot = await getDocs(messagesColRef);
-      const deletePromises: Promise<void>[] = [];
-      querySnapshot.forEach((doc) => {
-        deletePromises.push(deleteDoc(doc.ref));
-      });
-      await Promise.all(deletePromises);
-      setPostScanChatMessages([]); 
-      toast({ title: "สำเร็จ", description: "ลบประวัติการสนทนาแล้ว" });
-    } catch (error) {
-      console.error("Error clearing chat history:", error);
-      toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถลบประวัติการสนทนาได้", variant: "destructive" });
-    } finally {
-      setIsLoadingPostScanChat(false);
-    }
-  };
 
   const handleLogout = async () => {
     try {
@@ -194,7 +81,6 @@ export default function FSFAPage() {
         title: "ออกจากระบบสำเร็จ",
       });
       resetState();
-      currentFoodContext.current = null;
     } catch (error: unknown) {
       console.error("Logout error:", error);
       toast({
@@ -243,13 +129,11 @@ export default function FSFAPage() {
         
         const identified = result.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
         if (identified) {
-          currentFoodContext.current = result.foodItem;
           toast({
             title: "การวิเคราะห์เสร็จสมบูรณ์",
             description: `ระบุได้ว่าเป็น: ${result.foodItem}`,
           });
         } else {
-          currentFoodContext.current = null;
           toast({
             title: "หมายเหตุการวิเคราะห์",
             description: "ไม่สามารถระบุรายการอาหารจากภาพที่ให้มาได้ โปรดลองภาพอื่น",
@@ -283,76 +167,6 @@ export default function FSFAPage() {
     };
   };
 
-  const handlePostScanChatSubmit = async (e?: React.FormEvent<HTMLFormElement>) => {
-  e?.preventDefault();
-  const question = userPostScanQuestion.trim();
-
-  if (!question || isLoadingPostScanChat) return;
-
-  const userMessage: ChatMessage = {
-    sender: 'user',
-    text: question,
-    timestamp: new Date(),
-  };
-
-  setPostScanChatMessages(prev => [...prev, userMessage]);
-  setUserPostScanQuestion('');
-  setIsLoadingPostScanChat(true);
-  setPostScanChatError(null);
-
-  if (currentUser) {
-    const { id, ...userMessageToSave } = userMessage;
-    await saveChatMessageToFirestore(currentUser.uid, userMessageToSave);
-  }
-
-  try {
-    const input: AnswerUserQuestionInput = {
-      question,
-      foodName: currentFoodContext.current || undefined,
-      // chatHistory removed
-    };
-
-    const result = await answerUserQuestion(input);
-    const aiMessage: ChatMessage = {
-      sender: 'model',
-      text: result.answer,
-      timestamp: new Date(),
-    };
-
-    setPostScanChatMessages(prev => [...prev, aiMessage]);
-
-    if (currentUser) {
-      const { id, ...aiMessageToSave } = aiMessage;
-      await saveChatMessageToFirestore(currentUser.uid, aiMessageToSave);
-    }
-
-  } catch (error: unknown) {
-    console.error('Error getting AI answer:', error);
-
-    const fallbackText =
-      error instanceof Error && error.message
-        ? error.message
-        : 'ขออภัยค่ะ มีบางอย่างผิดพลาด Momu Ai ตอบไม่ได้ตอนนี้';
-
-    const aiErrorMessage: ChatMessage = {
-      sender: 'model', 
-      text: fallbackText,
-      timestamp: new Date(),
-    };
-
-    setPostScanChatMessages(prev => [...prev, aiErrorMessage]);
-    setPostScanChatError(fallbackText);
-
-    if (currentUser) {
-      const { id, ...aiErrorToSave } = aiErrorMessage;
-      await saveChatMessageToFirestore(currentUser.uid, aiErrorToSave);
-    }
-  } finally {
-    setIsLoadingPostScanChat(false);
-  }
-};
-
-
   return (
     <div className="min-h-screen bg-background text-foreground font-body p-4 md:p-8">
       <header className="py-8 text-center bg-gradient-to-r from-primary/10 via-secondary/20 to-primary/10 rounded-lg shadow-md mb-12">
@@ -382,10 +196,6 @@ export default function FSFAPage() {
                   <>
                     <DropdownMenuItem disabled>
                       <span className="truncate">{currentUser.email}</span>
-                    </DropdownMenuItem>
-                     <DropdownMenuItem onClick={handleClearChatHistory} disabled={isLoadingPostScanChat} className="cursor-pointer">
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      <span>ล้างประวัติแชท</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
                       <LogOut className="mr-2 h-4 w-4" />
@@ -506,84 +316,6 @@ export default function FSFAPage() {
           </Card>
         </PageSection>
 
-        {imageAnalysisResult && ( 
-          <PageSection title="คุยกับ Momu Ai 🧑‍⚕️💬" icon={<Bot />} id="post-scan-chat" className="bg-secondary/20 rounded-lg shadow-md" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
-            <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
-              <CardHeader>
-                <CardTitle className="text-2xl font-headline text-accent">
-                  {currentFoodContext.current ? `สอบถามเกี่ยวกับ "${currentFoodContext.current}"` : "สอบถามข้อมูลทั่วไป"}
-                </CardTitle>
-                <CardDescription className="text-md font-body">
-                  {currentFoodContext.current 
-                    ? `Momu Ai พร้อมตอบคำถามเกี่ยวกับ "${currentFoodContext.current}" หรือเรื่องโภชนาการอื่นๆ ที่คุณสงสัย`
-                    : "Momu Ai พร้อมตอบคำถามเกี่ยวกับอาหารและโภชนาการที่คุณสงสัย"
-                  }
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <ScrollArea className="h-80 w-full border rounded-md p-4" viewportRef={chatScrollAreaRef}>
-                  {postScanChatMessages.map((msg, index) => (
-                    <div key={msg.id || `${msg.sender}-${msg.timestamp instanceof Date ? msg.timestamp.getTime() : msg.timestamp?.toString()}-${index}`} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'} mb-3`}>
-                      <div className={`max-w-[70%] p-3 rounded-lg shadow ${msg.sender === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-                        <p className="text-sm whitespace-pre-wrap">{msg.text}</p>
-                         {msg.timestamp && typeof msg.timestamp.toDate === 'function' && (
-                          <p className={`text-xs mt-1 ${msg.sender === 'user' ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground/70 text-left'}`}>
-                            {new Date(msg.timestamp.toDate()).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
-                          </p>
-                        )}
-                         {msg.timestamp && !(typeof msg.timestamp.toDate === 'function') && msg.timestamp instanceof Date && (
-                            <p className={`text-xs mt-1 ${msg.sender === 'user' ? 'text-primary-foreground/70 text-right' : 'text-muted-foreground/70 text-left'}`}>
-                                {msg.timestamp.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                         )}
-                      </div>
-                    </div>
-                  ))}
-                  {isLoadingPostScanChat && (
-                    <div className="flex justify-start mb-3">
-                      <div className="max-w-[70%] p-3 rounded-lg shadow bg-muted text-muted-foreground animate-pulse">
-                        <p className="text-sm flex items-center">
-                          <Bot className="w-4 h-4 mr-2 animate-bounce" />
-                          Momu Ai กำลังพิมพ์...
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                  {postScanChatError && (
-                     <div className="flex justify-start mb-3">
-                        <div className="max-w-[70%] p-3 rounded-lg shadow bg-destructive text-destructive-foreground">
-                           <p className="text-sm">{postScanChatError}</p>
-                        </div>
-                    </div>
-                  )}
-                </ScrollArea>
-                <form onSubmit={handlePostScanChatSubmit} className="flex items-center gap-2">
-                  <Textarea
-                    id="chat-input-post-scan"
-                    ref={chatInputRef}
-                    value={userPostScanQuestion}
-                    onChange={(e) => setUserPostScanQuestion(e.target.value)}
-                    placeholder={currentFoodContext.current ? `ถามเกี่ยวกับ ${currentFoodContext.current}...` : "พิมพ์คำถามของคุณที่นี่..."}
-                    className="flex-grow resize-none p-3 text-lg"
-                    rows={1}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handlePostScanChatSubmit();
-                      }
-                    }}
-                    disabled={isLoadingPostScanChat}
-                  />
-                  <Button type="submit" size="lg" className="px-6 py-6 text-lg" disabled={isLoadingPostScanChat || !userPostScanQuestion.trim()}>
-                    {isLoadingPostScanChat ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-                    <span className="sr-only">ส่ง</span>
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </PageSection>
-        )}
-
       </main>
 
       <footer className="text-center py-8 mt-12 md:mt-16 border-t border-border/50">
@@ -595,5 +327,6 @@ export default function FSFAPage() {
     
 
     
+
 
 
