@@ -3,7 +3,7 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster"; // Import Toaster
 
 export const metadata: Metadata = {
-  title: 'FSFA (ความมั่นคงทางอาหารสำหรับทุกคน)',
+  title: 'FSFA (Food Security For All)',
   description: 'สร้างความมั่นคงทางอาหารและสุขภาวะทางโภชนาการที่ดีสำหรับทุกคน',
 };
 

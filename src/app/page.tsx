@@ -176,7 +176,7 @@ export default function FSFAPage() {
         <div className="container mx-auto px-4">
           <h1 className="text-5xl font-headline font-bold text-primary flex items-center justify-center">
             <Utensils className="w-12 h-12 mr-4" />
-            FSFA <span className="text-3xl font-normal ml-2 text-foreground/90">(ความมั่นคงทางอาหารสำหรับทุกคน)</span>
+            FSFA <span className="text-3xl font-normal ml-2 text-foreground/90">(Food Security For All)</span>
           </h1>
           <p className="mt-2 text-xl text-foreground/80 font-body">
             สร้างความมั่นคงทางอาหารและสุขภาวะทางโภชนาการที่ดีสำหรับทุกคน
@@ -328,7 +328,7 @@ export default function FSFAPage() {
       </main>
 
       <footer className="text-center py-8 mt-12 md:mt-16 border-t border-border/50">
-        <p className="text-muted-foreground font-body">&copy; {new Date().getFullYear()} FSFA (ความมั่นคงทางอาหารสำหรับทุกคน) สงวนลิขสิทธิ์</p>
+        <p className="text-muted-foreground font-body">&copy; {new Date().getFullYear()} FSFA (Food Security For All) สงวนลิขสิทธิ์</p>
       </footer>
     </div>
   );
