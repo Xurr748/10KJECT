@@ -10,7 +10,7 @@ import {
   type ScanFoodImageInput, 
   type ScanFoodImageOutput 
 } from '@/ai/flows/food-image-analyzer';
-import { auth } from '@/lib/firebase'; // db might not be needed anymore if only chat used it.
+import { auth } from '@/lib/firebase';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 
 // ShadCN UI Components
@@ -55,12 +55,6 @@ export default function FSFAPage() {
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
-      if (!user) {
-        // Reset states if user logs out, if desired for image analysis too
-        // setSelectedFile(null);
-        // setPreviewUrl(null);
-        // setImageAnalysisResult(null);
-      }
     });
     return () => unsubscribeAuth();
   }, []);
@@ -135,10 +129,14 @@ export default function FSFAPage() {
         }
       } catch (error: unknown) {
         console.error('Error analyzing image:', error);
-        setImageError('วิเคราะห์รูปภาพไม่สำเร็จ โปรดลองอีกครั้ง');
+        let errorMessage = 'วิเคราะห์รูปภาพไม่สำเร็จ โปรดลองอีกครั้ง';
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        }
+        setImageError(errorMessage);
         toast({
           title: "เกิดข้อผิดพลาดในการวิเคราะห์",
-          description: (error instanceof Error && error.message) ? error.message : "เกิดข้อผิดพลาดระหว่างการวิเคราะห์รูปภาพ",
+          description: errorMessage,
           variant: "destructive",
         });
       } finally {
@@ -283,7 +281,7 @@ export default function FSFAPage() {
                             <Separator />
                             <div>
                               <h4 className="font-semibold text-lg font-body text-foreground">ข้อมูลทางโภชนาการ:</h4>
-                              <ScrollArea className="h-40">
+                              <ScrollArea className="max-h-40">
                                   <p className="text-md font-body text-foreground/80 whitespace-pre-wrap pr-2">{imageAnalysisResult.nutritionalInformation}</p>
                               </ScrollArea>
                             </div>
@@ -296,7 +294,7 @@ export default function FSFAPage() {
                               <h4 className="font-semibold text-lg font-body text-foreground flex items-center">
                                 <ListChecks className="w-5 h-5 mr-2"/>คำแนะนำด้านความปลอดภัย:
                               </h4>
-                              <ScrollArea className="h-40 mt-2">
+                              <ScrollArea className="max-h-40 mt-2">
                                   <ul className="list-disc pl-5 space-y-1 text-md font-body text-foreground/80 pr-2">
                                     {imageAnalysisResult.safetyPrecautions.map((precaution, index) => (
                                       precaution !== GENERIC_SAFETY_UNAVAILABLE ? <li key={index}>{precaution}</li> : null
