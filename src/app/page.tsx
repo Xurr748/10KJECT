@@ -18,45 +18,6 @@ import { useToast } from '@/hooks/use-toast';
 // Lucide Icons
 import { UploadCloud, Bot, Brain, Utensils, AlertCircle, CheckCircle, Info, Lightbulb, MessagesSquare, Newspaper } from 'lucide-react';
 
-// Article Data Type
-interface Article {
-  id: string;
-  title: string;
-  summary: string;
-  imageUrl: string;
-  imageHint: string; 
-  content: string[]; 
-}
-
-// Sample Articles
-const articles: Article[] = [
-  {
-    id: 'food-labels',
-    title: "Decoding Food Labels: A Senior's Guide",
-    summary: "Understand nutritional labels to make informed food choices for a healthier lifestyle.",
-    imageUrl: 'https://placehold.co/600x400.png',
-    imageHint: 'nutrition label',
-    content: [
-      "Food labels provide a wealth of information that can help you manage your diet and health. Key things to look for include serving size, calories, total fat (especially saturated and trans fats), cholesterol, sodium, total carbohydrates (including fiber and sugars), and protein.",
-      "Pay attention to the % Daily Value (%DV). This tells you how much a nutrient in a serving of food contributes to a total daily diet. 5% DV or less of a nutrient per serving is considered low, while 20% DV or more is considered high.",
-      "Look for foods high in fiber, vitamins, and minerals, and low in saturated fat, trans fat, sodium, and added sugars. Understanding these components can empower you to choose foods that support your specific health needs."
-    ],
-  },
-  {
-    id: 'food-safety',
-    title: 'Safe Food Handling at Home',
-    summary: 'Follow these best practices to prevent foodborne illnesses and ensure your meals are safe to eat.',
-    imageUrl: 'https://placehold.co/600x400.png',
-    imageHint: 'kitchen safety',
-    content: [
-      "Seniors can be more vulnerable to foodborne illnesses due to changes in their immune system. Practicing safe food handling is crucial. Remember the four key steps: Clean, Separate, Cook, and Chill.",
-      "Clean: Wash hands, surfaces, and produce thoroughly. Separate: Keep raw meats, poultry, seafood, and eggs separate from ready-to-eat foods to prevent cross-contamination.",
-      "Cook: Cook foods to the correct internal temperatures to kill harmful bacteria. Use a food thermometer. Chill: Refrigerate perishable foods promptly, within two hours (or one hour if the temperature is above 90°F)."
-    ],
-  },
-];
-
-
 // Chat Message Type
 interface ChatMessage {
   id: string;
@@ -224,40 +185,6 @@ export default function SeniorSafePage() {
       </header>
       
       <main className="container mx-auto px-4 space-y-10 md:space-y-16">
-        {articles.length > 0 && (
-          <>
-            <PageSection title="Nourish Your Knowledge" icon={<Newspaper />} id="articles" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
-              <div className="grid md:grid-cols-1 lg:grid-cols-3 gap-8">
-                {articles.map((article) => (
-                  <Card key={article.id} className="flex flex-col shadow-lg hover:shadow-xl transition-shadow duration-300 rounded-lg overflow-hidden bg-card">
-                    <CardHeader className="p-0">
-                      <div className="aspect-[16/9] relative w-full">
-                         <Image 
-                          src={article.imageUrl} 
-                          alt={article.title} 
-                          fill
-                          sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                          className="object-cover rounded-t-lg"
-                          data-ai-hint={article.imageHint}
-                          />
-                      </div>
-                      <div className="p-6">
-                        <CardTitle className="text-2xl font-headline text-primary">{article.title}</CardTitle>
-                        <CardDescription className="text-md font-body mt-1">{article.summary}</CardDescription>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="flex-grow p-6 pt-0">
-                      {article.content.map((paragraph, index) => (
-                        <p key={index} className="mb-3 text-foreground/90 font-body text-lg leading-relaxed">{paragraph}</p>
-                      ))}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </PageSection>
-            <Separator className="my-8 md:my-12" />
-          </>
-        )}
         
         <PageSection title="What's On Your Plate?" icon={<Brain />} id="image-scanner" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-primary" titleTextColor="text-primary-foreground">
           <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
