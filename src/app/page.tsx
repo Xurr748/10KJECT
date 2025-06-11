@@ -84,7 +84,7 @@ export default function FSFAPage() {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       if (user) {
-        setChatMessages([]);
+        // setChatMessages([]); // Let the chat history loading handle this
       } else {
         setChatMessages([]);
       }
@@ -134,6 +134,7 @@ export default function FSFAPage() {
       toast({
         title: "ออกจากระบบสำเร็จ",
       });
+      // router.push('/login'); // Optional: redirect to login after logout
     } catch (error) {
       console.error("Logout error:", error);
       toast({
@@ -154,9 +155,9 @@ export default function FSFAPage() {
       reader.readAsDataURL(file);
       setImageAnalysisResult(null); 
       setShowQaSection(false); 
-      if (!currentUser) {
-          setChatMessages([]);
-      }
+      // if (!currentUser) { // Keep chat messages for guests until page reloads or new scan
+          // setChatMessages([]);
+      // }
       setImageError(null);
     }
   };
@@ -187,7 +188,7 @@ export default function FSFAPage() {
           toast({
             title: "หมายเหตุการวิเคราะห์",
             description: "ไม่สามารถระบุรายการอาหารได้ คุณสามารถสอบถามรายละเอียดเพิ่มเติมได้ในส่วนถาม-ตอบด้านล่างค่ะ",
-            variant: "default"
+            variant: "default" // Or "info" if you add such a variant
           });
         }
       } catch (error) {
@@ -222,6 +223,20 @@ export default function FSFAPage() {
     const timestamp = serverTimestamp(); 
     const localTimestamp = new Date(); 
 
+    // Add user message to local state immediately for guests, or prepare for Firestore for logged-in users
+    if (currentUser) {
+      // Message will be added via Firestore snapshot listener
+    } else {
+      const newUserMessage: ChatMessage = {
+        id: `${Date.now()}-user`,
+        sender: 'user',
+        text: userMessageText,
+        timestamp: localTimestamp,
+      };
+      setChatMessages((prevMessages) => [...prevMessages, newUserMessage]);
+    }
+
+
     if (currentUser) {
       try {
         const messagesRef = collection(db, 'userChats', currentUser.uid, 'messages');
@@ -233,17 +248,10 @@ export default function FSFAPage() {
       } catch (error) {
         console.error("Error saving user message:", error);
         toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อความของคุณได้", variant: "destructive" });
+        // Optionally add user message to local state if save fails to provide some UX
       }
-    } else {
-      const newUserMessage: ChatMessage = {
-        id: `${Date.now()}-user`,
-        sender: 'user',
-        text: userMessageText,
-        timestamp: localTimestamp,
-      };
-      setChatMessages((prevMessages) => [...prevMessages, newUserMessage]);
     }
-
+    
     setIsLoadingQa(true);
 
     try {
@@ -261,6 +269,7 @@ export default function FSFAPage() {
         } catch (error) {
           console.error("Error saving AI message:", error);
           toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถบันทึกคำตอบของ AI ได้", variant: "destructive" });
+           // Optionally add AI message to local state if save fails
         }
       } else {
         const newAiMessage: ChatMessage = {
@@ -311,17 +320,23 @@ export default function FSFAPage() {
       return;
     }
 
-    setIsLoadingQa(true); 
+    setIsLoadingQa(true); // Use isLoadingQa to disable button during operation
     try {
       const messagesRef = collection(db, 'userChats', currentUser.uid, 'messages');
       const q = query(messagesRef);
       const querySnapshot = await getDocs(q);
       
+      if (querySnapshot.empty) {
+        toast({ title: "ข้อมูล", description: "ไม่มีประวัติการแชทให้ล้าง" });
+        return;
+      }
+
       const batch = writeBatch(db);
       querySnapshot.forEach((doc) => {
         batch.delete(doc.ref);
       });
       await batch.commit();
+      // Chat messages will be cleared by the onSnapshot listener
       toast({ title: "สำเร็จ", description: "ล้างประวัติการแชทเรียบร้อยแล้ว" });
     } catch (error) {
       console.error("Error clearing chat history:", error);
@@ -338,16 +353,16 @@ export default function FSFAPage() {
         setTimeout(() => {
           if (chatScrollAreaRef.current) {
             const { scrollHeight } = chatScrollAreaRef.current;
-            chatScrollAreaRef.current.scrollTo({ top: scrollHeight, behavior: 'smooth' });
+            chatScrollAreaRef.current.scrollTo({ top: scrollHeight }); // Removed behavior: 'smooth'
           }
-        }, 100);
+        }, 100); // Keep timeout to ensure DOM update
     }
-  }, [chatMessages, isLoadingQa]); // Add isLoadingQa to dependencies to scroll when typing indicator appears/disappears
+  }, [chatMessages, isLoadingQa]);
 
   const PageSection: React.FC<{title: string; icon: React.ReactNode; children: React.ReactNode; id: string; className?: string; titleBgColor?: string; titleTextColor?: string;}> = ({ title, icon, children, id, className, titleBgColor = "bg-primary", titleTextColor = "text-primary-foreground" }) => (
     <section id={id} className={`py-12 ${className || ''}`}>
       <div className="container mx-auto px-4">
-        <h2 className={`text-4xl font-headline font-semibold text-center mb-10 ${titleTextColor} ${titleBgColor} py-3 rounded-md shadow-md`}>
+        <h2 className={`text-4xl font-headline font-semibold text-center mb-10 ${titleTextColor} ${titleBgColor} py-3 rounded-lg shadow-md`}>
           {React.cloneElement(icon as React.ReactElement, { className: "inline-block w-10 h-10 mr-3" })}
           {title}
         </h2>
