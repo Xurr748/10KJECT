@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { LogIn, Utensils } from 'lucide-react';
+import { LogIn, UserPlus, Utensils } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase'; // Import Firebase auth
 import { signInWithEmailAndPassword } from 'firebase/auth';
@@ -107,8 +107,8 @@ export default function LoginPage() {
         <CardFooter className="flex flex-col items-center space-y-2">
           <p className="text-sm text-muted-foreground">
             ยังไม่มีบัญชี?{' '}
-            <Link href="/register" className="font-medium text-primary hover:underline">
-              ลงทะเบียนที่นี่
+            <Link href="/register" className="font-medium text-primary hover:underline flex items-center">
+              <UserPlus className="mr-1 h-4 w-4" /> ลงทะเบียนที่นี่
             </Link>
           </p>
         </CardFooter>
@@ -116,3 +116,4 @@ export default function LoginPage() {
     </div>
   );
 }
+
