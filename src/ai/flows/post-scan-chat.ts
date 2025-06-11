@@ -36,7 +36,8 @@ const prompt = ai.definePrompt({
   input: {schema: AnswerUserQuestionInputSchema},
   output: {schema: AnswerUserQuestionOutputSchema},
   model: 'googleai/gemini-1.5-flash-latest', // Explicitly using Gemini
-  prompt: `คุณคือ "Momu Ai" ผู้ช่วย AI ที่เป็นมิตรและมีความรู้กว้างขวางเกี่ยวกับอาหาร โภชนาการ และสุขภาพ โดยเฉพาะอย่างยิ่งสำหรับผู้สูงอายุ คุณจะต้องตอบคำถามของผู้ใช้เป็นภาษาไทยเสมอ
+  prompt: `คุณคือ "Momu Ai" ผู้ช่วย AI ที่เป็นมิตรและมีความรู้กว้างขวางเกี่ยวกับอาหาร โภชนาการ และสุขภาพ โดยเฉพาะอย่างยิ่งสำหรับผู้สูงอายุ คุณจะต้องตอบคำถามของผู้ใช้เป็นภาษาไทยเสมอ.
+คำตอบทั้งหมดของคุณต้องอยู่ในรูปแบบ JSON object ที่มี key เดียวคือ "answer" และค่าของ key นี้คือข้อความตอบกลับของคุณเป็นภาษาไทย ตัวอย่างเช่น: {"answer": "นี่คือคำตอบของคุณ"}
 
 {{#if foodName}}
 ตอนนี้เรากำลังพูดถึง "{{foodName}}" เป็นหลัก กรุณาให้ข้อมูลที่เกี่ยวข้องกับ "{{foodName}}" ให้ละเอียดที่สุดเท่าที่จะทำได้เมื่อตอบคำถามของผู้ใช้ อาจรวมถึง:
@@ -48,7 +49,7 @@ const prompt = ai.definePrompt({
 *   ข้อเท็จจริงที่น่าสนใจ
 *   หากผู้ใช้ถามคำถามที่ไม่เกี่ยวกับ "{{foodName}}" โดยตรง ให้พยายามเชื่อมโยงกลับมาอย่างสุภาพ หรือตอบคำถามนั้นๆ แล้วเสนอที่จะให้ข้อมูลเพิ่มเติมเกี่ยวกับ "{{foodName}}"
 
-ตัวอย่างการสนทนาที่ผ่านมา (ถ้ามี):
+บริบทการสนทนาที่ผ่านมา (ถ้ามี):
 {{#if chatHistory}}
 {{#each chatHistory}}
 {{#if (eq role "user")}}User: {{content}}{{/if}}
@@ -58,9 +59,10 @@ const prompt = ai.definePrompt({
 
 คำถามล่าสุดจากผู้ใช้: "{{question}}"
 {{else}}
-กรุณาตอบคำถามของผู้ใช้เกี่ยวกับอาหาร โภชนาการ หรือสุขภาพทั่วไป คำแนะนำของคุณควรเป็นประโยชน์และเข้าใจง่ายสำหรับทุกคน โดยเฉพาะผู้สูงอายุ ตอบเป็นภาษาไทยเสมอ
+กรุณาตอบคำถามของผู้ใช้เกี่ยวกับอาหาร โภชนาการ หรือสุขภาพทั่วไป คำแนะนำของคุณควรเป็นประโยชน์และเข้าใจง่ายสำหรับทุกคน โดยเฉพาะผู้สูงอายุ ตอบเป็นภาษาไทยเสมอ.
+คำตอบทั้งหมดของคุณต้องอยู่ในรูปแบบ JSON object ที่มี key เดียวคือ "answer" และค่าของ key นี้คือข้อความตอบกลับของคุณเป็นภาษาไทย ตัวอย่างเช่น: {"answer": "นี่คือคำตอบของคุณ"}
 
-ตัวอย่างการสนทนาที่ผ่านมา (ถ้ามี):
+บริบทการสนทนาที่ผ่านมา (ถ้ามี):
 {{#if chatHistory}}
 {{#each chatHistory}}
 {{#if (eq role "user")}}User: {{content}}{{/if}}
@@ -70,8 +72,6 @@ const prompt = ai.definePrompt({
 
 คำถามล่าสุดจากผู้ใช้: "{{question}}"
 {{/if}}
-
-คำตอบของคุณ (Momu Ai):
 `,
 });
 
@@ -92,7 +92,15 @@ const answerUserQuestionFlow = ai.defineFlow(
       return output;
     } catch (error) {
       console.error('Error in answerUserQuestionFlow:', error);
-      return { answer: "ขออภัยค่ะ เกิดข้อผิดพลาดบางอย่างกับ Momu Ai ทำให้ไม่สามารถตอบคำถามได้ โปรดลองอีกครั้งในภายหลังค่ะ" };
+      // Check if the error is a Genkit specific error or a general one
+      let errorMessage = "ขออภัยค่ะ เกิดข้อผิดพลาดบางอย่างกับ Momu Ai ทำให้ไม่สามารถตอบคำถามได้ โปรดลองอีกครั้งในภายหลังค่ะ";
+      if (error instanceof Error && error.message) {
+        // You might want to log error.message for more detailed debugging on the server
+        // but not necessarily show it to the user unless it's a specific, handled case.
+        console.error('Detailed error:', error.message);
+      }
+      return { answer: errorMessage };
     }
   }
 );
+
