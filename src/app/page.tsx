@@ -51,6 +51,21 @@ interface ChatMessage {
   timestamp?: Date | any; 
 }
 
+// Define PageSection outside of FSFAPage component
+const PageSection: React.FC<{title: string; icon: React.ReactNode; children: React.ReactNode; id: string; className?: string; titleBgColor?: string; titleTextColor?: string;}> = ({ title, icon, children, id, className, titleBgColor = "bg-primary", titleTextColor = "text-primary-foreground" }) => (
+  <section id={id} className={`py-12 ${className || ''}`}>
+    <div className="container mx-auto px-4">
+      <h2 className={`text-4xl font-headline font-semibold text-center mb-10 ${titleTextColor} ${titleBgColor} py-3 rounded-lg shadow-md`}>
+        {React.cloneElement(icon as React.ReactElement, { className: "inline-block w-10 h-10 mr-3" })}
+        {title}
+      </h2>
+      {children}
+    </div>
+  </section>
+);
+PageSection.displayName = 'PageSection';
+
+
 export default function FSFAPage() {
   const { toast } = useToast();
   const router = useRouter();
@@ -80,11 +95,11 @@ export default function FSFAPage() {
     let unsubscribeChatListener: (() => void) | undefined;
 
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
       if (unsubscribeChatListener) {
         unsubscribeChatListener(); 
         unsubscribeChatListener = undefined;
       }
+      setCurrentUser(user);
       if (user) {
         unsubscribeChatListener = loadChatHistoryFromFirestore(user.uid); 
       } else {
@@ -101,9 +116,11 @@ export default function FSFAPage() {
   }, []);
 
   useEffect(() => {
-    const isChatInputFocused = document.activeElement === chatInputRef.current;
-    if (chatScrollAreaRef.current && !isChatInputFocused) {
-      chatScrollAreaRef.current.scrollTop = chatScrollAreaRef.current.scrollHeight;
+    if (chatScrollAreaRef.current) {
+      // Only scroll if the input is NOT focused
+      if (document.activeElement !== chatInputRef.current) {
+        chatScrollAreaRef.current.scrollTop = chatScrollAreaRef.current.scrollHeight;
+      }
     }
   }, [postScanChatMessages]); 
 
@@ -170,7 +187,6 @@ export default function FSFAPage() {
         title: "ออกจากระบบสำเร็จ",
       });
       resetState();
-      // setPostScanChatMessages([]); // This will be handled by onAuthStateChanged
       currentFoodContext.current = null;
     } catch (error: unknown) {
       console.error("Logout error:", error);
@@ -272,6 +288,7 @@ export default function FSFAPage() {
     setPostScanChatError(null);
 
     if (currentUser) {
+      // Exclude 'id' if it's undefined or null
       const { id, ...messageToSave } = newUserMessage; 
       await saveChatMessageToFirestore(currentUser.uid, messageToSave);
     }
@@ -308,23 +325,9 @@ export default function FSFAPage() {
       }
     } finally {
       setIsLoadingPostScanChat(false);
-      chatInputRef.current?.focus();
+      // chatInputRef.current?.focus(); // Re-focusing might be tricky if the component re-renders
     }
   };
-
-
-  const PageSection: React.FC<{title: string; icon: React.ReactNode; children: React.ReactNode; id: string; className?: string; titleBgColor?: string; titleTextColor?: string;}> = ({ title, icon, children, id, className, titleBgColor = "bg-primary", titleTextColor = "text-primary-foreground" }) => (
-    <section id={id} className={`py-12 ${className || ''}`}>
-      <div className="container mx-auto px-4">
-        <h2 className={`text-4xl font-headline font-semibold text-center mb-10 ${titleTextColor} ${titleBgColor} py-3 rounded-lg shadow-md`}>
-          {React.cloneElement(icon as React.ReactElement, { className: "inline-block w-10 h-10 mr-3" })}
-          {title}
-        </h2>
-        {children}
-      </div>
-    </section>
-  );
-
 
   return (
     <div className="min-h-screen bg-background text-foreground font-body p-4 md:p-8">
@@ -568,3 +571,4 @@ export default function FSFAPage() {
     
 
     
+
