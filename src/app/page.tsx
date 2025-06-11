@@ -456,7 +456,6 @@ export default function FSFAPage() {
                 )}
               </Button>
 
-              {/* Analysis Result Section - MOVED HERE */}
               {imageAnalysisResult && (
                 <Card className="mt-8 shadow-md rounded-lg overflow-hidden bg-card border border-primary/30">
                   <CardHeader className="pb-2 bg-primary/10">
@@ -591,6 +590,7 @@ export default function FSFAPage() {
                 </ScrollArea>
                 <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="flex items-center space-x-2">
                   <Input
+                    id="chat-input-momu-ai"
                     type="text"
                     placeholder="พิมพ์คำถามของคุณถึง Momu Ai..."
                     value={chatInput}
