@@ -82,11 +82,17 @@ const answerUserQuestionFlow = ai.defineFlow(
     outputSchema: AnswerUserQuestionOutputSchema,
   },
   async (input) => {
-    const { output } = await prompt(input);
-    if (!output) {
-      console.error('answerUserQuestionFlow: AI model did not return a structured output.');
-      return { answer: "ขออภัยค่ะ Momu Ai ไม่สามารถประมวลผลคำตอบได้ในขณะนี้ ลองใหม่อีกครั้งนะคะ" };
+    try {
+      const { output } = await prompt(input);
+
+      if (!output || typeof output.answer !== 'string' || output.answer.trim() === '') {
+        console.error('answerUserQuestionFlow: AI model did not return a valid answer. Output:', output);
+        return { answer: "ขออภัยค่ะ Momu Ai ไม่สามารถประมวลผลคำตอบได้ในขณะนี้ โปรดลองอีกครั้งนะคะ" };
+      }
+      return output;
+    } catch (error) {
+      console.error('Error in answerUserQuestionFlow:', error);
+      return { answer: "ขออภัยค่ะ เกิดข้อผิดพลาดบางอย่างกับ Momu Ai ทำให้ไม่สามารถตอบคำถามได้ โปรดลองอีกครั้งในภายหลังค่ะ" };
     }
-    return output;
   }
 );
