@@ -2,23 +2,19 @@
 'use server';
 /**
  * @fileOverview A Genkit flow for answering user questions after a food image scan,
- * focusing on the scanned food item if provided, and utilizing chat history for context.
- *
- * - answerUserQuestion - A function that handles the Q&A process.
- * - AnswerUserQuestionInput - The input type for the answerUserQuestion function.
- * - AnswerUserQuestionOutput - The return type for the answerUserQuestion function.
+ * optimized for speed and clarity, especially for elderly-focused food and health info.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { ai } from '@/ai/genkit';
+import { z } from 'genkit';
 
 const AnswerUserQuestionInputSchema = z.object({
   question: z.string().describe('The user\'s question in Thai.'),
-  foodName: z.string().optional().describe('The name of the food item that was scanned (in Thai), if available. This provides context to the AI.'),
+  foodName: z.string().optional().describe('The name of the scanned food item (Thai), if available.'),
   chatHistory: z.array(z.object({
     role: z.enum(['user', 'model']),
     content: z.string(),
-  })).optional().describe('Previous messages in the conversation for context. Use this to understand the flow and provide coherent answers.'),
+  })).optional().describe('Previous messages for context.'),
 });
 export type AnswerUserQuestionInput = z.infer<typeof AnswerUserQuestionInputSchema>;
 
@@ -33,42 +29,29 @@ export async function answerUserQuestion(input: AnswerUserQuestionInput): Promis
 
 const prompt = ai.definePrompt({
   name: 'answerUserQuestionPrompt',
-  input: {schema: AnswerUserQuestionInputSchema},
-  output: {schema: AnswerUserQuestionOutputSchema},
-  model: 'googleai/gemini-1.5-flash-latest',
-  prompt: `คุณคือ "Momu Ai" ผู้ช่วย AI ที่เป็นมิตรและมีความรู้กว้างขวางเกี่ยวกับอาหาร โภชนาการ และสุขภาพ โดยเฉพาะอย่างยิ่งสำหรับผู้สูงอายุ คุณจะต้องตอบคำถามของผู้ใช้เป็นภาษาไทยเสมอ.
-คำตอบทั้งหมดของคุณต้องอยู่ในรูปแบบ JSON object ที่มี key เดียวคือ "answer" และค่าของ key นี้คือข้อความตอบกลับของคุณเป็นภาษาไทย ตัวอย่างเช่น: {"answer": "นี่คือคำตอบของคุณ"}
+  input: { schema: AnswerUserQuestionInputSchema },
+  output: { schema: AnswerUserQuestionOutputSchema },
+  model: 'googleai/gemini-1.5-flash-latest', // Explicitly set fast model
+  prompt: `
+คุณคือ "Momu Ai" ผู้ช่วย AI ที่ให้คำแนะนำด้านอาหารและสุขภาพสำหรับผู้สูงอายุ ตอบคำถามของผู้ใช้เป็นภาษาไทยแบบเป็นกันเอง และส่งกลับในรูปแบบ JSON: {"answer": "ข้อความ"}
 
 {{#if chatHistory}}
-นี่คือประวัติการสนทนาที่ผ่านมา โปรดใช้ข้อมูลนี้เพื่อทำความเข้าใจบริบทของคำถามปัจจุบัน และเพื่อให้คำตอบของคุณสอดคล้อง:
+ประวัติการสนทนา:
 {{#each chatHistory}}
-{{#if (eq role "user")}}User: {{content}}{{/if}}
-{{#if (eq role "model")}}Momu Ai: {{content}}{{/if}}
+{{role}}: {{content}}
 {{/each}}
-{{else}}
-นี่เป็นการเริ่มต้นการสนทนาใหม่ หรือไม่มีประวัติการสนทนาก่อนหน้า.
 {{/if}}
 
 {{#if foodName}}
-หัวข้อหลักที่กำลังสนทนา (ถ้ายังเกี่ยวข้องจากประวัติการสนทนา) คือ: "{{foodName}}".
-เมื่อพิจารณาประวัติการสนทนา (ถ้ามี) และ "{{foodName}}", กรุณาตอบคำถามล่าสุดของผู้ใช้: "{{question}}".
-คำตอบของคุณควร:
-1.  เกี่ยวข้องกับ "{{foodName}}" หากคำถามของผู้ใช้ยังคงวนเวียนอยู่กับอาหารนี้ หรือสามารถเชื่อมโยงได้อย่างเป็นธรรมชาติจากประวัติการสนทนา.
-2.  สอดคล้องกับประวัติการสนทนาที่ผ่านมา หากผู้ใช้กำลังถามคำถามต่อเนื่อง หรืออ้างอิงถึงข้อมูลที่เคยคุยกันเกี่ยวกับ "{{foodName}}" หรือหัวข้ออื่น.
-3.  ให้ข้อมูลที่เป็นประโยชน์และครอบคลุมเกี่ยวกับ "{{foodName}}" (หากเหมาะสมและเกี่ยวข้องกับคำถามปัจจุบัน):
-    *   ข้อมูลทางโภชนาการที่สำคัญ (เช่น แคลอรี่ โปรตีน วิตามิน แร่ธาตุ)
-    *   ประโยชน์ต่อสุขภาพ
-    *   ข้อควรระวังในการบริโภค (โดยเฉพาะสำหรับผู้สูงอายุ)
-    *   เคล็ดลับในการเลือกซื้อ การเก็บรักษา หรือการเตรียม
-    *   ไอเดียเมนูง่ายๆ ที่มี "{{foodName}}" เป็นส่วนประกอบ
-    *   ข้อเท็จจริงที่น่าสนใจ
-4.  หากผู้ใช้ถามคำถามที่ไม่เกี่ยวกับ "{{foodName}}" โดยตรง และดูเหมือนจะเปลี่ยนหัวข้อไปจากประวัติการสนทนา, ให้ตอบคำถามนั้นๆ โดยไม่จำเป็นต้องพยายามเชื่อมโยงกลับมาที่ "{{foodName}}" ทุกครั้ง. ใช้วิจารณญาณตามความเหมาะสมของบทสนทนา.
-
+หัวข้อหลักคือ "{{foodName}}"
+คำถาม: "{{question}}"
+โปรดตอบโดยอ้างอิง "{{foodName}}" ถ้าเกี่ยวข้อง
 {{else}}
-เมื่อพิจารณาประวัติการสนทนา (ถ้ามี), กรุณาตอบคำถามล่าสุดของผู้ใช้: "{{question}}".
-คำแนะนำของคุณควรเป็นประโยชน์และเข้าใจง่ายสำหรับทุกคน โดยเฉพาะผู้สูงอายุ. หากมีประวัติการสนทนา, พยายามให้คำตอบของคุณสอดคล้องและต่อเนื่องจากสิ่งที่คุยกันไปแล้ว.
+คำถาม: "{{question}}"
 {{/if}}
-`,
+
+ให้คำตอบที่กระชับ ชัดเจน เหมาะสำหรับผู้สูงอายุ
+  `,
 });
 
 const answerUserQuestionFlow = ai.defineFlow(
@@ -78,24 +61,43 @@ const answerUserQuestionFlow = ai.defineFlow(
     outputSchema: AnswerUserQuestionOutputSchema,
   },
   async (input) => {
+    const MAX_HISTORY_LENGTH = 6;
+    const trimmedChatHistory = input.chatHistory?.slice(-MAX_HISTORY_LENGTH) ?? [];
+
+    const controller = new AbortController();
+    // Timeout for the flow operation, not directly for the model call cancellation
+    const timeoutId = setTimeout(() => {
+        console.log('Momu Ai chat timeout triggered after 8 seconds for input:', input.question);
+        controller.abort();
+    }, 8000); // 8 วินาที timeout
+
     try {
-      const { output } = await prompt(input);
-      console.log('AI Model Raw Output:', output); // For debugging server-side
+      const { output } = await prompt({
+        ...input,
+        chatHistory: trimmedChatHistory,
+      });
+    
+      clearTimeout(timeoutId); // Clear timeout if prompt resolves in time
 
       if (!output || typeof output.answer !== 'string' || output.answer.trim() === '') {
-        console.error('answerUserQuestionFlow: AI model did not return a valid answer. Output:', output);
-        return { answer: "ขออภัยค่ะ Momu Ai ไม่สามารถประมวลผลคำตอบได้ในขณะนี้ โปรดลองอีกครั้งนะคะ" };
+        console.warn('Momu Ai: Invalid or empty response from model for input:', input.question, 'Received output:', output);
+        return {
+          answer: "ขออภัยค่ะ Momu Ai ไม่สามารถประมวลผลคำตอบได้ในขณะนี้ โปรดลองอีกครั้งนะคะ",
+        };
       }
+    
       return output;
-    } catch (error) {
-      console.error('Error in answerUserQuestionFlow:', error);
-      let errorMessage = "ขออภัยค่ะ เกิดข้อผิดพลาดบางอย่างกับ Momu Ai ทำให้ไม่สามารถตอบคำถามได้ โปรดลองอีกครั้งในภายหลังค่ะ";
-      // Log more detailed error server-side
-      if (error instanceof Error && error.message) {
-        console.error('Detailed error message:', error.message);
-        if (error.stack) console.error('Error stack:', error.stack);
+    } catch (error: any) {
+      clearTimeout(timeoutId); // Ensure timeout is cleared on error
+      if (error.name === 'AbortError') {
+        console.log('Momu Ai chat aborted due to 8-second timeout for input:', input.question);
+        return { answer: "Momu Ai ใช้เวลาประมวลผลนานกว่าปกติ โปรดลองอีกครั้งนะคะ" };
       }
-      return { answer: errorMessage };
+      console.error('Error in answerUserQuestionFlow for input:', input.question, error);
+      return {
+        answer: "เกิดข้อผิดพลาดในการประมวลผลคำถาม โปรดลองอีกครั้งในภายหลังนะคะ",
+      };
     }
   }
 );
+

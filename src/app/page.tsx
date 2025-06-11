@@ -284,58 +284,81 @@ export default function FSFAPage() {
   };
 
   const handlePostScanChatSubmit = async (e?: React.FormEvent<HTMLFormElement>) => {
-    e?.preventDefault();
-    const question = userPostScanQuestion.trim();
-    if (!question || isLoadingPostScanChat) return;
+  e?.preventDefault();
+  const question = userPostScanQuestion.trim();
 
-    const newUserMessage: ChatMessage = { sender: 'user', text: question, timestamp: new Date() };
-    setPostScanChatMessages(prev => [...prev, newUserMessage]);
-    setUserPostScanQuestion('');
-    setIsLoadingPostScanChat(true);
-    setPostScanChatError(null);
+  if (!question || isLoadingPostScanChat) return;
+
+  const userMessage: ChatMessage = {
+    sender: 'user',
+    text: question,
+    timestamp: new Date(),
+  };
+
+  setPostScanChatMessages(prev => [...prev, userMessage]);
+  setUserPostScanQuestion('');
+  setIsLoadingPostScanChat(true);
+  setPostScanChatError(null);
+
+  // Save user message to Firestore
+  if (currentUser) {
+    const { id, ...userMessageToSave } = userMessage;
+    await saveChatMessageToFirestore(currentUser.uid, userMessageToSave);
+  }
+
+  // Map recent messages to AI format
+  const aiChatHistory = postScanChatMessages.slice(-5).map(msg => ({
+    role: msg.sender === 'user' ? 'user' : 'model',
+    content: msg.text,
+  }));
+
+  try {
+    const input: AnswerUserQuestionInput = {
+      question,
+      foodName: currentFoodContext.current || undefined,
+      chatHistory: aiChatHistory,
+    };
+
+    const result = await answerUserQuestion(input);
+    const aiMessage: ChatMessage = {
+      sender: 'model',
+      text: result.answer,
+      timestamp: new Date(),
+    };
+
+    setPostScanChatMessages(prev => [...prev, aiMessage]);
 
     if (currentUser) {
-      // Exclude 'id' if it's undefined or null
-      const { id, ...messageToSave } = newUserMessage; 
-      await saveChatMessageToFirestore(currentUser.uid, messageToSave);
+      const { id, ...aiMessageToSave } = aiMessage;
+      await saveChatMessageToFirestore(currentUser.uid, aiMessageToSave);
     }
-    
-    const aiChatHistory = postScanChatMessages
-      .slice(-5)
-      .map(msg => ({
-      role: msg.sender === 'user' ? 'user' : 'model',
-      content: msg.text // Keep content as is
-    }));
 
-    try {
-      const input: AnswerUserQuestionInput = {
-        question,
-        foodName: currentFoodContext.current || undefined,
-        chatHistory: aiChatHistory,
-      };
-      const result = await answerUserQuestion(input);
-      const aiResponse: ChatMessage = { sender: 'model', text: result.answer, timestamp: new Date() };
-      setPostScanChatMessages(prev => [...prev, aiResponse]);
-      if (currentUser) {
-        const { id, ...messageToSave } = aiResponse; 
-        await saveChatMessageToFirestore(currentUser.uid, messageToSave);
-      }
-    } catch (error: unknown) {
-      console.error('Error getting AI answer:', error);
-      let errorMsg = "ขออภัยค่ะ มีบางอย่างผิดพลาด Momu Ai ตอบไม่ได้ตอนนี้";
-      if (error instanceof Error) errorMsg = error.message;
-      setPostScanChatError(errorMsg);
-      const aiErrorResponse: ChatMessage = { sender: 'ai', text: errorMsg, timestamp: new Date() };
-      setPostScanChatMessages(prev => [...prev, { ...aiErrorResponse, sender: 'model' }]); // Ensure sender is 'model' for type consistency
-      if (currentUser) {
-        const { id, ...messageToSave } = aiErrorResponse; 
-        await saveChatMessageToFirestore(currentUser.uid, messageToSave);
-      }
-    } finally {
-      setIsLoadingPostScanChat(false);
-      // chatInputRef.current?.focus(); // Re-focusing might be tricky if the component re-renders
+  } catch (error: unknown) {
+    console.error('Error getting AI answer:', error);
+
+    const fallbackText =
+      error instanceof Error && error.message
+        ? error.message
+        : 'ขออภัยค่ะ มีบางอย่างผิดพลาด Momu Ai ตอบไม่ได้ตอนนี้';
+
+    const aiErrorMessage: ChatMessage = {
+      sender: 'model', // keep consistent
+      text: fallbackText,
+      timestamp: new Date(),
+    };
+
+    setPostScanChatMessages(prev => [...prev, aiErrorMessage]);
+    setPostScanChatError(fallbackText);
+
+    if (currentUser) {
+      const { id, ...aiErrorToSave } = aiErrorMessage;
+      await saveChatMessageToFirestore(currentUser.uid, aiErrorToSave);
     }
-  };
+  } finally {
+    setIsLoadingPostScanChat(false);
+  }
+};
+
 
   return (
     <div className="min-h-screen bg-background text-foreground font-body p-4 md:p-8">
