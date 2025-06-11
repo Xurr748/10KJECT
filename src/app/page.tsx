@@ -26,7 +26,7 @@ interface ChatMessage {
   timestamp: Date;
 }
 
-export default function SeniorSafePage() {
+export default function FSFAPage() {
   const { toast } = useToast();
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -176,10 +176,10 @@ export default function SeniorSafePage() {
         <div className="container mx-auto px-4">
           <h1 className="text-5xl font-headline font-bold text-primary flex items-center justify-center">
             <Utensils className="w-12 h-12 mr-4" />
-            SeniorSafe
+            FSFA <span className="text-3xl font-normal ml-2 text-foreground/90">(Food Security For All)</span>
           </h1>
           <p className="mt-2 text-xl text-foreground/80 font-body">
-            Your trusted partner for nutrition and food safety.
+            Ensuring food security and nutritional well-being for all.
           </p>
         </div>
       </header>
@@ -330,7 +330,7 @@ export default function SeniorSafePage() {
       </main>
 
       <footer className="text-center py-8 mt-12 md:mt-16 border-t border-border/50">
-        <p className="text-muted-foreground font-body">&copy; {new Date().getFullYear()} SeniorSafe. All rights reserved.</p>
+        <p className="text-muted-foreground font-body">&copy; {new Date().getFullYear()} FSFA (Food Security For All). All rights reserved.</p>
       </footer>
     </div>
   );

@@ -3,8 +3,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster"; // Import Toaster
 
 export const metadata: Metadata = {
-  title: 'SeniorSafe',
-  description: 'Your trusted partner for nutrition and food safety.',
+  title: 'FSFA (Food Security For All)',
+  description: 'Ensuring food security and nutritional well-being for all.',
 };
 
 export default function RootLayout({
