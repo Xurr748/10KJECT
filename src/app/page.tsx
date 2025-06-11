@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -342,12 +343,12 @@ export default function FSFAPage() {
   const chatScrollAreaRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (chatScrollAreaRef.current) {
-        setTimeout(() => {
-          if (chatScrollAreaRef.current) {
-            const { scrollHeight } = chatScrollAreaRef.current;
-            chatScrollAreaRef.current.scrollTo({ top: scrollHeight }); 
-          }
-        }, 100); 
+      // Scroll to the bottom when chatMessages or isLoadingQa changes
+      // No timeout, scroll immediately after DOM update
+      chatScrollAreaRef.current.scrollTo({ 
+        top: chatScrollAreaRef.current.scrollHeight
+        // behavior: 'auto' is the default, making it instantaneous
+      });
     }
   }, [chatMessages, isLoadingQa]);
 
@@ -632,3 +633,4 @@ export default function FSFAPage() {
       </footer>
     </div>
   );
+}
