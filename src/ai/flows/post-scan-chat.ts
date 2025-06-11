@@ -11,7 +11,6 @@ import { z } from 'genkit';
 const AnswerUserQuestionInputSchema = z.object({
   question: z.string().describe('The user\'s question in Thai.'),
   foodName: z.string().optional().describe('The name of the scanned food item (Thai), if available.'),
-  // chatHistory removed
 });
 export type AnswerUserQuestionInput = z.infer<typeof AnswerUserQuestionInputSchema>;
 
@@ -21,6 +20,7 @@ const AnswerUserQuestionOutputSchema = z.object({
 export type AnswerUserQuestionOutput = z.infer<typeof AnswerUserQuestionOutputSchema>;
 
 export async function answerUserQuestion(input: AnswerUserQuestionInput): Promise<AnswerUserQuestionOutput> {
+  console.log('[Momu AI Flow Entry] answerUserQuestion called with input:', JSON.stringify(input));
   return answerUserQuestionFlow(input);
 }
 
@@ -54,51 +54,34 @@ const answerUserQuestionFlow = ai.defineFlow(
     outputSchema: AnswerUserQuestionOutputSchema,
   },
   async (input) => {
-    const FLOW_EXECUTION_TIMEOUT_MS = 7500; // 7.5 seconds for user-facing timeout
-    const SERVER_DIAGNOSTIC_TIMEOUT_MS = 8000; // 8 seconds for a server-side log
-
-    let serverLogTimeoutId: NodeJS.Timeout | undefined = setTimeout(() => {
-      console.warn(`Momu Ai chat flow for input "${input.question}" has been running for over ${SERVER_DIAGNOSTIC_TIMEOUT_MS / 1000} seconds. This is a server-side diagnostic log.`);
-    }, SERVER_DIAGNOSTIC_TIMEOUT_MS);
-
+    console.log('[Momu AI Flow Internal] Flow execution started. Input:', JSON.stringify(input));
+    
     try {
-      const aiCall = promptObj({
+      console.log('[Momu AI Flow Internal] Attempting to call promptObj...');
+      // Relying on Genkit's/model's own timeout mechanisms
+      const result = await promptObj({
         question: input.question,
         foodName: input.foodName,
-        // chatHistory removed
       });
-
-      const timeoutPromise = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('FlowTimeout')), FLOW_EXECUTION_TIMEOUT_MS)
-      );
-
-      const result = await Promise.race([aiCall, timeoutPromise]);
-      
-      if (serverLogTimeoutId) clearTimeout(serverLogTimeoutId);
+      console.log('[Momu AI Flow Internal] promptObj call successful. Result:', JSON.stringify(result));
 
       const { output } = result; 
 
       if (!output || typeof output.answer !== 'string' || output.answer.trim() === '') {
-        console.warn('Momu Ai: Invalid or empty response from model for input:', input.question, 'Received output:', output);
+        console.warn('[Momu AI Flow Internal] Invalid or empty response from model. Output:', JSON.stringify(output), 'Input:', JSON.stringify(input));
         return {
           answer: "ขออภัยค่ะ Momu Ai ไม่สามารถประมวลผลคำตอบได้ในขณะนี้ โปรดลองอีกครั้งนะคะ",
         };
       }
+      console.log('[Momu AI Flow Internal] Successfully processed valid output. Output:', JSON.stringify(output));
       return output;
 
     } catch (error: any) {
-      if (serverLogTimeoutId) clearTimeout(serverLogTimeoutId);
-      
-      if (error.message === 'FlowTimeout') {
-        console.log(`Momu Ai chat flow (Promise.race) timed out after ${FLOW_EXECUTION_TIMEOUT_MS / 1000}s for input: "${input.question}"`);
-        return { answer: "Momu Ai ใช้เวลาประมวลผลนานกว่าปกติ โปรดลองอีกครั้งนะคะ" };
-      }
-      
-      console.error('Error in answerUserQuestionFlow for input:', input.question, error);
+      console.error('[Momu AI Flow Internal] Error during flow execution. Input:', JSON.stringify(input), 'Error:', error);
       if (error instanceof Error) {
-        console.error('Full error details:', error.message, error.stack);
+        console.error('[Momu AI Flow Internal] Full error details: Message: ', error.message, 'Stack: ', error.stack);
       } else {
-        console.error('Full error object:', error);
+        console.error('[Momu AI Flow Internal] Full error object:', error);
       }
       return {
         answer: "เกิดข้อผิดพลาดในการประมวลผลคำถาม โปรดลองอีกครั้งในภายหลังนะคะ",
