@@ -53,7 +53,7 @@ export default function RegisterPage() {
       });
       router.push('/'); // Redirect after successful registration
     } catch (error: any) {
-      console.error('Registration error:', error);
+      console.error('Registration error:', error); // This log is expected in the console during development
       let errorMessage = "เกิดข้อผิดพลาดในการลงทะเบียน";
       if (error.code === 'auth/email-already-in-use') {
         errorMessage = "อีเมลนี้ถูกใช้งานแล้ว";
