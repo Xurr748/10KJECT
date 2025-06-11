@@ -176,7 +176,7 @@ export default function FSFAPage() {
         <div className="container mx-auto px-4">
           <h1 className="text-5xl font-headline font-bold text-primary flex items-center justify-center">
             <Utensils className="w-12 h-12 mr-4" />
-            FSFA <span className="text-3xl font-normal ml-2 text-foreground/90">(Food Security For All)</span>
+            FSFA <span className="text-3xl font-normal ml-2 text-foreground/90">(Food Security For All 🍉🥗)</span>
           </h1>
           <p className="mt-2 text-xl text-foreground/80 font-body">
             สร้างความมั่นคงทางอาหารและสุขภาวะทางโภชนาการที่ดีสำหรับทุกคน
@@ -186,10 +186,10 @@ export default function FSFAPage() {
       
       <main className="container mx-auto px-4 space-y-10 md:space-y-16">
         
-        <PageSection title="มีอะไรอยู่บนจานของคุณ?" icon={<Brain />} id="image-scanner" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-primary" titleTextColor="text-primary-foreground">
+        <PageSection title="มีอะไรอยู่บนจานของคุณ? 🤔🍽️" icon={<Brain />} id="image-scanner" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-primary" titleTextColor="text-primary-foreground">
           <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
             <CardHeader>
-              <CardTitle className="text-2xl font-headline text-primary">AI วิเคราะห์อาหาร</CardTitle>
+              <CardTitle className="text-2xl font-headline text-primary">AI วิเคราะห์อาหาร 🤖🥕</CardTitle>
               <CardDescription className="text-md font-body">อัปโหลดรูปภาพอาหาร แล้ว AI ของเราจะให้ข้อมูลทางโภชนาการและคำแนะนำด้านความปลอดภัย</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -262,7 +262,7 @@ export default function FSFAPage() {
         {showQaSection && <Separator className="my-8 md:my-12" />}
 
         {showQaSection && (
-          <PageSection title="ถามผู้เชี่ยวชาญด้านโภชนาการ" icon={<Bot />} id="q-and-a" className="shadow-md rounded-lg" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
+          <PageSection title="ถามผู้เชี่ยวชาญด้านโภชนาการ 🧑‍⚕️💬" icon={<Bot />} id="q-and-a" className="shadow-md rounded-lg" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
              {imageAnalysisResult && !imageAnalysisResult.isIdentified && (
               <Card className="max-w-2xl mx-auto mb-6 bg-yellow-50 border-yellow-300 rounded-lg">
                 <CardContent className="p-4">
@@ -274,7 +274,7 @@ export default function FSFAPage() {
             )}
             <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
               <CardHeader>
-                <CardTitle className="text-2xl font-headline text-primary">ถาม-ตอบ แบบโต้ตอบ</CardTitle>
+                <CardTitle className="text-2xl font-headline text-primary">ถาม-ตอบ แบบโต้ตอบ 💡</CardTitle>
                 <CardDescription className="text-md font-body">มีคำถามเกี่ยวกับความปลอดภัยของอาหารหรือโภชนาการหรือไม่? ถามผู้ช่วย AI ของเรา</CardDescription>
               </CardHeader>
               <CardContent>
@@ -333,3 +333,4 @@ export default function FSFAPage() {
     </div>
   );
 }
+
