@@ -226,7 +226,7 @@ export default function FSFAPage() {
 
       <main className="container mx-auto px-4 space-y-10 md:space-y-16">
 
-        <PageSection title="มีอะไรอยู่บนจานของคุณ? 🤔🍽️" icon={<Brain />} id="image-scanner" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-primary" titleTextColor="text-primary-foreground">
+        <PageSection title="อาหารอะไรที่อยู่บนจานของคุณ? 🤔🍽️" icon={<Brain />} id="image-scanner" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-primary" titleTextColor="text-primary-foreground">
           <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
             <CardHeader>
               <CardTitle className="text-2xl font-headline text-primary">AI วิเคราะห์อาหาร 🤖🥕</CardTitle>
