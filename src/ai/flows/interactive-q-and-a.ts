@@ -1,3 +1,4 @@
+
 // src/ai/flows/interactive-q-and-a.ts
 'use server';
 /**
@@ -29,6 +30,7 @@ export async function askQuestion(input: AskQuestionInput): Promise<AskQuestionO
 
 const prompt = ai.definePrompt({
   name: 'askQuestionPrompt',
+  model: 'googleai/gemini-2.0-flash', // Explicitly set Gemini model
   input: {schema: AskQuestionInputSchema},
   output: {schema: AskQuestionOutputSchema},
   prompt: `You are Momu Ai, a friendly, conversational, and knowledgeable AI assistant specializing in food safety, nutrition, and culinary information. All your responses MUST be in Thai.
@@ -58,3 +60,4 @@ const askQuestionFlow = ai.defineFlow(
     return output!;
   }
 );
+
