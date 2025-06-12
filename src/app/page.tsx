@@ -144,7 +144,7 @@ export default function FSFAPage() {
       fetchLikedMealsData(currentUser.uid);
     } else {
       setLikedMeals([]); 
-      setIsLoadingMyMeals(false);
+      // isLoadingMyMeals will be handled by fetchLikedMealsData
     }
   }, [currentUser]);
 
@@ -154,8 +154,6 @@ export default function FSFAPage() {
       setIsAlreadyLiked(false); // Reset before checking for the current item
 
       if (currentUser && imageAnalysisResult && previewUrl && isFoodIdentified) {
-        // No setIsLiking(true) or setIsLiking(false) here.
-        // This effect is only for determining initial liked status.
         try {
           const likedMealsRef = collection(db, `users/${currentUser.uid}/likedMeals`);
           const q = query(likedMealsRef, 
@@ -166,10 +164,9 @@ export default function FSFAPage() {
           setIsAlreadyLiked(!querySnapshot.empty);
         } catch (error) {
           console.error("Error checking if meal is liked:", error);
-          setIsAlreadyLiked(false); // Ensure it's false on error
+          // Keep isAlreadyLiked as false on error to allow a like attempt
         }
       }
-      // If conditions are not met, isAlreadyLiked remains false due to the initial reset.
     };
     checkIfLiked();
   }, [currentUser, imageAnalysisResult, previewUrl, isFoodIdentified]);
@@ -198,7 +195,7 @@ export default function FSFAPage() {
     setImageError(null);
     setIsLiking(false);
     setIsAlreadyLiked(false);
-    // setLikedMeals([]); // Keep likedMeals if user is still logged in, onAuthStateChanged handles full reset
+    setLikedMeals([]); 
     // setIsMyMealsDialogOpen(false); // Dialog state should persist unless explicitly closed
   };
 
@@ -213,7 +210,7 @@ export default function FSFAPage() {
       reader.readAsDataURL(file);
       setImageAnalysisResult(null); 
       setImageError(null);
-      setIsAlreadyLiked(false); // Reset for new image
+      setIsAlreadyLiked(false); 
     }
   };
 
@@ -224,7 +221,7 @@ export default function FSFAPage() {
     }
     setIsLoadingImageAnalysis(true);
     setImageError(null);
-    setIsAlreadyLiked(false); // Reset for new analysis
+    setIsAlreadyLiked(false); 
     
     const reader = new FileReader();
     reader.readAsDataURL(selectedFile);
@@ -280,14 +277,9 @@ export default function FSFAPage() {
       imageAnalysisResult: !!imageAnalysisResult,
       previewUrl: !!previewUrl,
       isFoodIdentified,
-      // Actual values for easier debugging
-      currentUserEmail: currentUser?.email,
-      foodItem: imageAnalysisResult?.foodItem,
-      hasPreviewUrl: typeof previewUrl === 'string' && previewUrl.length > 0,
     };
-    console.log('Like Meal Preconditions Check:', preconditions);
 
-    if (!currentUser || !imageAnalysisResult || !previewUrl || !isFoodIdentified) {
+    if (!preconditions.currentUser || !preconditions.imageAnalysisResult || !preconditions.previewUrl || !preconditions.isFoodIdentified) {
       toast({
         title: "ไม่สามารถถูกใจได้",
         description: "ต้องเข้าสู่ระบบและมีผลการวิเคราะห์อาหารก่อน",
@@ -296,9 +288,20 @@ export default function FSFAPage() {
       return;
     }
 
+    if (isAlreadyLiked) { // Check based on current state, which useEffect should have updated
+      toast({
+        title: "ถูกใจแล้ว",
+        description: "คุณได้ถูกใจรายการอาหารนี้แล้ว",
+      });
+      return; 
+    }
+
     setIsLiking(true);
+    setIsAlreadyLiked(true); // Optimistic UI update
+
     try {
       const likedMealsRef = collection(db, `users/${currentUser.uid}/likedMeals`);
+      // Double check in Firestore just in case, though optimistic update relies on initial check
       const q = query(likedMealsRef, 
         where("imageUrl", "==", previewUrl), 
         where("foodName", "==", imageAnalysisResult.foodItem)
@@ -306,11 +309,14 @@ export default function FSFAPage() {
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
+        // This means it was already liked, despite the initial check or a race condition.
+        // The UI is already optimistically updated, so just show the toast.
         toast({
           title: "ถูกใจแล้ว",
-          description: "คุณได้ถูกใจรายการอาหารนี้แล้ว",
+          description: "คุณได้ถูกใจรายการอาหารนี้แล้ว (ตรวจสอบซ้ำ)",
         });
-        setIsAlreadyLiked(true); 
+        // Optionally, refresh likedMealsData if there's a possibility of desync
+        // fetchLikedMealsData(currentUser.uid); 
         return; 
       }
 
@@ -325,14 +331,14 @@ export default function FSFAPage() {
         title: "ถูกใจสำเร็จ!",
         description: `${imageAnalysisResult.foodItem} ถูกเพิ่มใน \"มื้ออาหารของฉัน\" แล้ว`,
       });
-      setIsAlreadyLiked(true); 
       
-      if (currentUser?.uid) {
+      if (currentUser?.uid) { // Fetch new list for dialog
         fetchLikedMealsData(currentUser.uid);
       }
 
     } catch (error) {
       console.error("Error liking meal:", error);
+      setIsAlreadyLiked(false); // Rollback optimistic UI update
       toast({
         title: "เกิดข้อผิดพลาด",
         description: "ไม่สามารถบันทึกการถูกใจได้ โปรดลองอีกครั้ง",
@@ -376,8 +382,8 @@ export default function FSFAPage() {
                     </DropdownMenuItem>
                      <DropdownMenuItem
                         onClick={() => {
-                          if (currentUser?.uid) { // Ensure UID exists before fetching/opening
-                            fetchLikedMealsData(currentUser.uid); // Refresh data when opening
+                          if (currentUser?.uid) { 
+                            fetchLikedMealsData(currentUser.uid); 
                             setIsMyMealsDialogOpen(true);
                           } else {
                             toast({ title: "กรุณาเข้าสู่ระบบ", description: "เพื่อดูมื้ออาหารของคุณ" });
@@ -444,10 +450,10 @@ export default function FSFAPage() {
                         disabled={isLiking} 
                         className={`
                           flex items-center justify-center text-base font-medium py-3 px-6 rounded-lg shadow-md transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2
-                          ${isLiking 
+                          ${isLiking && !isAlreadyLiked
                             ? 'bg-pink-400 text-white cursor-wait' 
                             : isAlreadyLiked 
-                              ? 'bg-pink-200 text-pink-600 cursor-not-allowed hover:bg-pink-200'
+                              ? 'bg-pink-200 text-pink-600 hover:bg-pink-200' // No cursor-not-allowed, as it might become unlikable later
                               : 'bg-pink-500 text-white hover:bg-pink-600 focus:ring-pink-500 active:bg-pink-700'
                           }
                         `}
@@ -639,3 +645,6 @@ export default function FSFAPage() {
 
     
 
+
+
+      
