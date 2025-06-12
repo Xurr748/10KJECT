@@ -12,13 +12,13 @@ import {
 } from '@/ai/flows/food-image-analyzer';
 import {
   chatWithBot,
-  type ChatInput as AIChatInput, // Renamed to avoid conflict
-  type ChatOutput as AIChatOutput, // Renamed to avoid conflict
+  type ChatInput as AIChatInput, 
+  type ChatOutput as AIChatOutput, 
   type ChatMessage
 } from '@/ai/flows/post-scan-chat';
 import { auth, db, serverTimestamp } from '@/lib/firebase'; 
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { collection, addDoc, query, where, getDocs, orderBy, Timestamp as FirestoreTimestamp, doc, deleteDoc } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, orderBy, Timestamp as FirestoreTimestamp, doc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 
@@ -38,7 +38,19 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogClose,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -52,14 +64,13 @@ import { Textarea } from '@/components/ui/textarea';
 
 
 // Lucide Icons
-import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2, Heart, ChefHat, Settings, MessageSquareWarning, Send, MessageCircle } from 'lucide-react';
+import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2, Heart, ChefHat, Settings, MessageSquareWarning, Send, MessageCircle, Trash2 } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 const GENERIC_NUTRITION_UNAVAILABLE = "ไม่สามารถระบุข้อมูลทางโภชนาการได้";
 const GENERIC_SAFETY_UNAVAILABLE = "ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้";
 const LOCAL_STORAGE_LIKED_MEALS_KEY = 'fsfa-likedMealNames';
 
-// Define PageSection outside of FSFAPage component
 const PageSection: React.FC<{title: string; icon: React.ReactNode; children: React.ReactNode; id: string; className?: string; titleBgColor?: string; titleTextColor?: string;}> = ({ title, icon, children, id, className, titleBgColor = "bg-primary", titleTextColor = "text-primary-foreground" }) => (
   <section id={id} className={`py-12 ${className || ''}`}>
     <div className="container mx-auto px-4">
@@ -97,10 +108,13 @@ export default function FSFAPage() {
   const [isMyMealsDialogOpen, setIsMyMealsDialogOpen] = useState(false);
   const [likedMealsList, setLikedMealsList] = useState<LikedMealItem[]>([]); 
   const [isLoadingMyMeals, setIsLoadingMyMeals] = useState(false);
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);
+  const [isClearingMeals, setIsClearingMeals] = useState(false);
+
 
   const isFoodIdentified = imageAnalysisResult && imageAnalysisResult.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
 
-  // Chatbot states
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const [chatInput, setChatInput] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
@@ -202,7 +216,6 @@ export default function FSFAPage() {
   }, [imageAnalysisResult, likedMealsList]);
 
   useEffect(() => {
-    // Scroll to bottom of chat messages
     if (chatScrollAreaRef.current) {
       const scrollableViewport = chatScrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
       if (scrollableViewport) {
@@ -375,7 +388,7 @@ export default function FSFAPage() {
                 console.log(`[Toggle Like - Firestore] Successfully added to Firestore. New Doc ID: ${newDocRef.id}`);
 
                 const newItem: LikedMealItem = { name: foodNameToToggle, id: newDocRef.id, likedAt: new Date() }; 
-                setLikedMealsList(prev => [newItem, ...prev].sort((a,b) => (b.likedAt as Date).getTime() - (a.likedAt as Date).getTime()));
+                setLikedMealsList(prev => [newItem, ...prev].sort((a,b) => (b.likedAt instanceof Date && a.likedAt instanceof Date) ? b.likedAt.getTime() - a.likedAt.getTime() : 0));
                 setIsCurrentFoodLiked(true); 
                 toast({ description: `ถูกใจ "${foodNameToToggle}" แล้ว!`});
                 console.log(`[Toggle Like - Firestore] LIKED and added to Firestore: "${foodNameToToggle}". likedMealsList updated.`);
@@ -427,18 +440,19 @@ export default function FSFAPage() {
     setIsMyMealsDialogOpen(true);
   };
 
-  const handleChatSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
+  const handleChatSubmit = async (event?: React.FormEvent) => {
+    if (event) event.preventDefault();
     const messageContent = chatInput.trim();
     if (!messageContent) return;
 
     const newUserMessage: ChatMessage = { role: 'user', content: messageContent };
     setChatMessages(prev => [...prev, newUserMessage]);
     setChatInput('');
+    if(chatInputRef.current) chatInputRef.current.value = ''; // Clear textarea
     setIsChatLoading(true);
 
     try {
-      const chatHistoryForAPI = chatMessages.slice(-5); // Send last 5 messages as history for context
+      const chatHistoryForAPI = chatMessages.slice(-5); 
       const result: AIChatOutput = await chatWithBot({ message: messageContent, history: chatHistoryForAPI });
       const newBotMessage: ChatMessage = { role: 'model', content: result.response };
       setChatMessages(prev => [...prev, newBotMessage]);
@@ -453,6 +467,49 @@ export default function FSFAPage() {
       });
     } finally {
       setIsChatLoading(false);
+       if(chatInputRef.current) chatInputRef.current.focus();
+    }
+  };
+
+  const handleConfirmClearAllLikedMeals = async () => {
+    setIsClearingMeals(true);
+    console.log("[Clear All Meals] Starting operation. User:", currentUser?.uid || "Anonymous");
+    try {
+      if (currentUser?.uid) {
+        const userId = currentUser.uid;
+        if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+          toast({ title: "ข้อผิดพลาด", description: "ID ผู้ใช้ไม่ถูกต้อง ไม่สามารถล้างข้อมูลได้", variant: "destructive" });
+          return;
+        }
+        console.log(`[Clear All Meals - Firestore] Clearing for user ID: ${userId}`);
+        const likedMealNamesRef = collection(db, 'users', userId, 'likedMealNames');
+        const querySnapshot = await getDocs(likedMealNamesRef);
+        
+        if (querySnapshot.empty) {
+          console.log("[Clear All Meals - Firestore] No meals to clear.");
+        } else {
+          const batch = writeBatch(db);
+          querySnapshot.docs.forEach((doc) => {
+            batch.delete(doc.ref);
+          });
+          await batch.commit();
+          console.log(`[Clear All Meals - Firestore] Successfully cleared ${querySnapshot.size} meals.`);
+        }
+      } else {
+        console.log("[Clear All Meals - localStorage] Clearing for anonymous user.");
+        localStorage.removeItem(LOCAL_STORAGE_LIKED_MEALS_KEY);
+      }
+      setLikedMealsList([]);
+      setIsCurrentFoodLiked(false); // Also update like status for current food if it was liked
+      toast({ description: "ล้างรายการอาหารที่ถูกใจทั้งหมดแล้ว" });
+    } catch (error) {
+      console.error("Error clearing all liked meals:", error);
+      toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถล้างรายการอาหารที่ถูกใจได้", variant: "destructive" });
+    } finally {
+      setIsClearingMeals(false);
+      setIsClearConfirmOpen(false); 
+      setIsMyMealsDialogOpen(false); // Close main dialog after clearing
+      console.log("[Clear All Meals] Operation finished.");
     }
   };
 
@@ -587,7 +644,7 @@ export default function FSFAPage() {
                             {isLiking ? (
                               <Loader2 className="h-6 w-6 animate-spin" />
                             ) : (
-                              <Heart className={`h-6 w-6 transition-colors ${isCurrentFoodLiked ? 'fill-current' : ''}`} />
+                              <Heart className={`h-6 w-6 transition-colors ${isCurrentFoodLiked ? 'fill-current text-green-600' : 'text-pink-500'}`} />
                             )}
                           </Button>
                         )}
@@ -635,7 +692,6 @@ export default function FSFAPage() {
           </Card>
         </PageSection>
 
-        {/* Chatbot Section */}
         <PageSection title="พูดคุยกับ AI ผู้ช่วย 💬🧠" icon={<MessageCircle />} id="chatbot-section" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
           <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
             <CardHeader>
@@ -643,7 +699,7 @@ export default function FSFAPage() {
               <CardDescription className="text-md font-body">สอบถามเกี่ยวกับอาหาร โภชนาการ หรือเรื่องอื่นๆ ที่เกี่ยวข้อง</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <ScrollArea className="h-72 w-full border rounded-md p-4 bg-muted/30" ref={chatScrollAreaRef}>
+              <ScrollArea className="h-72 w-full border rounded-md p-4 bg-muted/30" viewportRef={chatScrollAreaRef}>
                 {chatMessages.length === 0 && (
                   <p className="text-center text-muted-foreground">เริ่มต้นการสนทนาได้เลยค่ะ...</p>
                 )}
@@ -673,6 +729,7 @@ export default function FSFAPage() {
               </ScrollArea>
               <form onSubmit={handleChatSubmit} className="flex items-center space-x-2">
                 <Textarea
+                  ref={chatInputRef}
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   placeholder="พิมพ์ข้อความของคุณที่นี่..."
@@ -681,7 +738,7 @@ export default function FSFAPage() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
-                      handleChatSubmit(e as unknown as React.FormEvent);
+                      handleChatSubmit();
                     }
                   }}
                 />
@@ -742,10 +799,45 @@ export default function FSFAPage() {
               )}
             </ScrollArea>
           </div>
-          <DialogFooter className="mt-auto pt-4 border-t">
-            <Button variant="outline" onClick={() => setIsMyMealsDialogOpen(false)}>
-              ปิด
-            </Button>
+          <DialogFooter className="mt-auto pt-4 border-t flex justify-between w-full">
+            <AlertDialog open={isClearConfirmOpen} onOpenChange={setIsClearConfirmOpen}>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  variant="destructive" 
+                  size="sm"
+                  disabled={likedMealsList.length === 0 || isClearingMeals}
+                  className="flex items-center"
+                  onClick={() => setIsClearConfirmOpen(true)}
+                >
+                  {isClearingMeals ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                  ล้างทั้งหมด
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>ยืนยันการล้างข้อมูล</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    คุณแน่ใจหรือไม่ว่าต้องการล้างมื้ออาหารที่ถูกใจทั้งหมด? การกระทำนี้ไม่สามารถยกเลิกได้
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel onClick={() => setIsClearConfirmOpen(false)} disabled={isClearingMeals}>ยกเลิก</AlertDialogCancel>
+                  <AlertDialogAction 
+                    onClick={handleConfirmClearAllLikedMeals} 
+                    disabled={isClearingMeals}
+                    className="bg-destructive hover:bg-destructive/90"
+                  >
+                    {isClearingMeals ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : null}
+                    ยืนยันล้างทั้งหมด
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <DialogClose asChild>
+              <Button variant="outline" size="sm">
+                ปิด
+              </Button>
+            </DialogClose>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -758,3 +850,4 @@ export default function FSFAPage() {
   );
 }
     
+
