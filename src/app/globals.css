@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 body {
-  font-family: 'Sarabun', 'PT Sans', sans-serif;
+  font-family: 'Mitr', sans-serif;
 }
 
 @layer base {
@@ -100,7 +100,6 @@ body {
 }
 
 @layer base {
-  /* Removed: * { @apply border-border; } */
   body {
     @apply bg-background text-foreground;
   }
