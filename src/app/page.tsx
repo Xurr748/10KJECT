@@ -151,8 +151,11 @@ export default function FSFAPage() {
 
   useEffect(() => {
     const checkIfLiked = async () => {
+      setIsAlreadyLiked(false); // Reset before checking for the current item
+
       if (currentUser && imageAnalysisResult && previewUrl && isFoodIdentified) {
-        setIsLiking(true); // Indicate loading for button state
+        // No setIsLiking(true) or setIsLiking(false) here.
+        // This effect is only for determining initial liked status.
         try {
           const likedMealsRef = collection(db, `users/${currentUser.uid}/likedMeals`);
           const q = query(likedMealsRef, 
@@ -163,13 +166,10 @@ export default function FSFAPage() {
           setIsAlreadyLiked(!querySnapshot.empty);
         } catch (error) {
           console.error("Error checking if meal is liked:", error);
-          setIsAlreadyLiked(false); 
-        } finally {
-          setIsLiking(false);
+          setIsAlreadyLiked(false); // Ensure it's false on error
         }
-      } else {
-        setIsAlreadyLiked(false);
       }
+      // If conditions are not met, isAlreadyLiked remains false due to the initial reset.
     };
     checkIfLiked();
   }, [currentUser, imageAnalysisResult, previewUrl, isFoodIdentified]);
@@ -275,6 +275,18 @@ export default function FSFAPage() {
   };
 
   const handleLikeMeal = async () => {
+    const preconditions = {
+      currentUser: !!currentUser,
+      imageAnalysisResult: !!imageAnalysisResult,
+      previewUrl: !!previewUrl,
+      isFoodIdentified,
+      // Actual values for easier debugging
+      currentUserEmail: currentUser?.email,
+      foodItem: imageAnalysisResult?.foodItem,
+      hasPreviewUrl: typeof previewUrl === 'string' && previewUrl.length > 0,
+    };
+    console.log('Like Meal Preconditions Check:', preconditions);
+
     if (!currentUser || !imageAnalysisResult || !previewUrl || !isFoodIdentified) {
       toast({
         title: "ไม่สามารถถูกใจได้",
@@ -286,7 +298,6 @@ export default function FSFAPage() {
 
     setIsLiking(true);
     try {
-      // Stronger check: Query Firestore directly to ensure the item isn't already liked
       const likedMealsRef = collection(db, `users/${currentUser.uid}/likedMeals`);
       const q = query(likedMealsRef, 
         where("imageUrl", "==", previewUrl), 
@@ -299,12 +310,10 @@ export default function FSFAPage() {
           title: "ถูกใจแล้ว",
           description: "คุณได้ถูกใจรายการอาหารนี้แล้ว",
         });
-        setIsAlreadyLiked(true); // Ensure UI is consistent
-        setIsLiking(false);
-        return;
+        setIsAlreadyLiked(true); 
+        return; 
       }
 
-      // If not already liked, proceed to add
       await addDoc(likedMealsRef, {
         foodName: imageAnalysisResult.foodItem,
         imageUrl: previewUrl, 
@@ -316,9 +325,8 @@ export default function FSFAPage() {
         title: "ถูกใจสำเร็จ!",
         description: `${imageAnalysisResult.foodItem} ถูกเพิ่มใน \"มื้ออาหารของฉัน\" แล้ว`,
       });
-      setIsAlreadyLiked(true); // Optimistic UI update for the button
+      setIsAlreadyLiked(true); 
       
-      // Re-fetch liked meals to update the "My Meals" dialog
       if (currentUser?.uid) {
         fetchLikedMealsData(currentUser.uid);
       }
@@ -368,9 +376,9 @@ export default function FSFAPage() {
                     </DropdownMenuItem>
                      <DropdownMenuItem
                         onClick={() => {
-                          if (currentUser) {
+                          if (currentUser?.uid) { // Ensure UID exists before fetching/opening
+                            fetchLikedMealsData(currentUser.uid); // Refresh data when opening
                             setIsMyMealsDialogOpen(true);
-                            if(currentUser?.uid) fetchLikedMealsData(currentUser.uid); // Refresh data when opening
                           } else {
                             toast({ title: "กรุณาเข้าสู่ระบบ", description: "เพื่อดูมื้ออาหารของคุณ" });
                           }
@@ -433,7 +441,7 @@ export default function FSFAPage() {
                     <div className="flex-shrink-0 self-center md:pt-10">
                       <Button
                         onClick={handleLikeMeal}
-                        disabled={isLiking} // Only disable when isLiking is true, isAlreadyLiked controls appearance
+                        disabled={isLiking} 
                         className={`
                           flex items-center justify-center text-base font-medium py-3 px-6 rounded-lg shadow-md transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2
                           ${isLiking 
@@ -445,7 +453,7 @@ export default function FSFAPage() {
                         `}
                         aria-live="polite"
                       >
-                        {isLiking && !isAlreadyLiked ? ( // Show loader only when liking and not already liked
+                        {isLiking && !isAlreadyLiked ? ( 
                           <Loader2 className="animate-spin mr-2 h-5 w-5" />
                         ) : (
                           <Heart 
@@ -536,7 +544,7 @@ export default function FSFAPage() {
 
       {/* My Meals Dialog */}
       <Dialog open={isMyMealsDialogOpen} onOpenChange={setIsMyMealsDialogOpen}>
-        <DialogContent className="max-w-3xl min-h-[70vh] flex flex-col sm:max-w-2xl md:max-w-3xl"> {/* Responsive max-width */}
+        <DialogContent className="max-w-3xl min-h-[70vh] flex flex-col sm:max-w-2xl md:max-w-3xl"> 
           <DialogHeader>
             <DialogTitle className="text-2xl font-headline text-primary flex items-center">
               <ChefHat className="w-7 h-7 mr-2" />
@@ -547,13 +555,13 @@ export default function FSFAPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="flex-grow overflow-hidden py-4">
-            <ScrollArea className="h-full pr-4"> {/* Added pr-4 for scrollbar spacing */}
+            <ScrollArea className="h-full pr-4"> 
               {isLoadingMyMeals ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-1"> {/* Fewer columns for dialog */}
-                  {[...Array(4)].map((_, index) => ( // Show more skeletons if needed
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-1"> 
+                  {[...Array(4)].map((_, index) => ( 
                     <Card key={index} className="shadow-md rounded-lg overflow-hidden">
                       <CardHeader className="p-0">
-                        <Skeleton className="h-32 w-full" /> {/* Smaller skeleton height */}
+                        <Skeleton className="h-32 w-full" /> 
                       </CardHeader>
                       <CardContent className="p-3 space-y-1">
                         <Skeleton className="h-5 w-3/4 rounded" />
@@ -564,7 +572,7 @@ export default function FSFAPage() {
                 </div>
               ) : likedMeals.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center p-6">
-                  <Info className="w-12 h-12 text-primary mb-3" /> {/* Smaller icon */}
+                  <Info className="w-12 h-12 text-primary mb-3" /> 
                   <p className="text-lg font-semibold text-foreground">ยังไม่มีมื้ออาหารที่ถูกใจ</p>
                   <p className="text-sm text-muted-foreground">
                     เมื่อคุณกดถูกใจมื้ออาหารที่สแกนแล้ว รายการจะแสดงที่นี่ค่ะ
@@ -574,7 +582,7 @@ export default function FSFAPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-1"> {/* Fewer columns for dialog */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-1"> 
                   {likedMeals.map((meal) => (
                     <Card key={meal.id} className="shadow-md rounded-xl overflow-hidden flex flex-col bg-card hover:shadow-lg transition-shadow duration-300">
                       <CardHeader className="p-0 relative">
@@ -630,3 +638,4 @@ export default function FSFAPage() {
     
 
     
+
