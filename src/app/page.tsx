@@ -539,16 +539,16 @@ export default function FSFAPage() {
             <Button
               variant="outline"
               size="icon"
-              className="rounded-full w-11 h-11 md:w-12 md:h-12"
+              className="rounded-full w-11 h-11 md:w-12 md:h-12 group"
               onClick={openMyMealsDialog}
               aria-label="มื้ออาหารของฉัน"
             >
-              <ListChecks className="w-6 h-6 md:w-7 md:h-7 text-accent" />
+              <ListChecks className="w-6 h-6 md:w-7 md:h-7 text-accent group-hover:text-primary" />
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="rounded-full w-11 h-11 md:w-12 md:h-12">
-                  <UserCircle className="w-7 h-7 md:w-8 md:h-8 text-accent" />
+                <Button variant="outline" size="icon" className="rounded-full w-11 h-11 md:w-12 md:h-12 group">
+                  <UserCircle className="w-7 h-7 md:w-8 md:h-8 text-accent group-hover:text-primary" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
