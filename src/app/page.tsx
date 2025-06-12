@@ -117,19 +117,22 @@ export default function FSFAPage() {
   };
 
   const fetchLikedMealsData = async (userId: string) => {
+    console.log(`[My Meals Dialog] Fetching meals for user: ${userId}`);
     setIsLoadingMyMeals(true);
     try {
       const likedMealsRef = collection(db, `users/${userId}/likedMeals`);
       const q = query(likedMealsRef, orderBy('likedAt', 'desc'));
       const querySnapshot = await getDocs(q);
+      console.log('[My Meals Dialog] Raw Firestore docs snapshot:', querySnapshot.docs.map(d => ({id: d.id, data: d.data()})));
       const mealsData = querySnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
       })) as LikedMeal[];
-      console.log('[My Meals Dialog] Fetched meals:', mealsData);
+      console.log('[My Meals Dialog] Fetched and mapped mealsData:', mealsData);
       setLikedMeals(mealsData);
+      console.log('[My Meals Dialog] likedMeals state updated with fetched data.');
     } catch (error) {
-      console.error("Error fetching liked meals:", error);
+      console.error("[My Meals Dialog] Error fetching liked meals:", error);
       setLikedMeals([]); 
       toast({
         title: "เกิดข้อผิดพลาด",
@@ -138,6 +141,7 @@ export default function FSFAPage() {
       });
     } finally {
       setIsLoadingMyMeals(false);
+      console.log('[My Meals Dialog] Finished fetching meals, isLoadingMyMeals set to false.');
     }
   };
   
@@ -153,6 +157,7 @@ export default function FSFAPage() {
   useEffect(() => {
     const checkIfLiked = async () => {
       setIsAlreadyLiked(false); 
+      console.log('[checkIfLiked] Running effect. CurrentUser:', !!currentUser, 'imageAnalysisResult:', !!imageAnalysisResult, 'previewUrl:', !!previewUrl, 'isFoodIdentified:', isFoodIdentified);
 
       if (currentUser && imageAnalysisResult && previewUrl && isFoodIdentified) {
         try {
@@ -162,9 +167,11 @@ export default function FSFAPage() {
             where("foodName", "==", imageAnalysisResult.foodItem)
           );
           const querySnapshot = await getDocs(q);
-          setIsAlreadyLiked(!querySnapshot.empty);
+          const alreadyLiked = !querySnapshot.empty;
+          setIsAlreadyLiked(alreadyLiked);
+          console.log(`[checkIfLiked] Meal: "${imageAnalysisResult.foodItem}" already liked status: ${alreadyLiked}`);
         } catch (error) {
-          console.error("Error checking if meal is liked:", error);
+          console.error("[checkIfLiked] Error checking if meal is liked:", error);
         }
       }
     };
@@ -278,8 +285,7 @@ export default function FSFAPage() {
         previewUrl: !!previewUrl,
         isFoodIdentified,
     };
-    console.log("[Like Meal Preconditions Check]", preconditions);
-
+    console.log("[Like Meal System - Preconditions Check]", preconditions);
 
     if (!preconditions.currentUser || !preconditions.uid || !preconditions.imageAnalysisResult || !preconditions.foodItem || !preconditions.previewUrl || !preconditions.isFoodIdentified) {
       toast({
@@ -290,21 +296,14 @@ export default function FSFAPage() {
       return;
     }
 
-    if (isAlreadyLiked) { 
-      toast({
-        title: "ถูกใจแล้ว",
-        description: "คุณได้ถูกใจรายการอาหารนี้แล้ว",
-      });
-      return; 
-    }
-
     setIsLiking(true);
-    setIsAlreadyLiked(true); // Optimistic UI update for the button
+    // Optimistic UI update for the button - this happens first
+    setIsAlreadyLiked(true); 
 
     try {
       const likedMealsRef = collection(db, `users/${preconditions.uid}/likedMeals`);
       
-      // Double check in Firestore to prevent duplicates if isAlreadyLiked state was stale
+      console.log(`[Like Meal System] Checking Firestore if meal is already liked by user ${preconditions.uid} with foodName: "${preconditions.foodItem}" and imageUrl: "${preconditions.previewUrl}"`);
       const q_doubleCheck = query(likedMealsRef, 
         where("imageUrl", "==", preconditions.previewUrl), 
         where("foodName", "==", preconditions.foodItem)
@@ -312,33 +311,41 @@ export default function FSFAPage() {
       const existingSnapshot = await getDocs(q_doubleCheck);
 
       if (!existingSnapshot.empty) {
-        // Item already exists in DB, UI was optimistically updated, so just show toast.
+        console.log("[Like Meal System] Double check found item already exists in Firestore. No action needed.");
         toast({
           title: "ถูกใจแล้ว",
           description: "คุณได้ถูกใจรายการอาหารนี้แล้ว (ตรวจสอบซ้ำ)",
         });
         // No need to change isAlreadyLiked again as it's already true
-        // Optionally, refresh likedMealsData if dialog data might be desynced
+        // Optionally, refresh likedMealsData if dialog data might be desynced, though fetch on dialog open should handle it.
         // fetchLikedMealsData(preconditions.uid); 
+        setIsLiking(false); // Reset liking state
         return; 
       }
 
-      const newDocRef = await addDoc(likedMealsRef, {
+      const newMealData = {
         foodName: preconditions.foodItem,
         imageUrl: preconditions.previewUrl, 
-        likedAt: serverTimestamp(),
+        likedAt: serverTimestamp(), // Use server timestamp for accurate ordering
         userId: preconditions.uid, 
-      });
-      console.log(`[Like System] Successfully called addDoc for ${preconditions.foodItem}. Doc ID: ${newDocRef.id}`);
+      };
+      console.log("[Like Meal System] Attempting to add new meal to Firestore:", newMealData);
+      const newDocRef = await addDoc(likedMealsRef, newMealData);
+      console.log(`[Like Meal System] Successfully called addDoc. New Doc ID: ${newDocRef.id}, Food: ${preconditions.foodItem}`);
       
-      // Optimistically add to local state for immediate UI update in the dialog
+      // Optimistically add to local state `likedMeals` for immediate UI update in the dialog
       const optimisticMeal: LikedMeal = {
-        id: newDocRef.id,
+        id: newDocRef.id, // Use the new document ID
         foodName: preconditions.foodItem,
         imageUrl: preconditions.previewUrl,
-        likedAt: new Date(), // Client-side timestamp for optimistic UI
+        likedAt: new Date(), // Use client-side Date for optimistic UI, serverTimestamp will correct it later
+        userId: preconditions.uid,
       };
-      setLikedMeals(prevMeals => [optimisticMeal, ...prevMeals]);
+      setLikedMeals(prevMeals => {
+        const updatedMeals = [optimisticMeal, ...prevMeals];
+        console.log('[Like Meal System] Optimistically updated likedMeals state for dialog:', updatedMeals);
+        return updatedMeals;
+      });
       
       toast({
         title: "ถูกใจสำเร็จ!",
@@ -346,12 +353,13 @@ export default function FSFAPage() {
       });
       
       // Fetch new list for dialog to ensure consistency with server (especially serverTimestamp)
-      console.log(`[Like System] Calling fetchLikedMealsData for dialog refresh.`);
-      fetchLikedMealsData(preconditions.uid);
+      console.log(`[Like Meal System] Calling fetchLikedMealsData for dialog refresh to ensure server consistency.`);
+      await fetchLikedMealsData(preconditions.uid); // Ensure this completes
 
     } catch (error) {
-      console.error("Error liking meal:", error);
-      setIsAlreadyLiked(false); // Rollback optimistic UI update for the button
+      console.error("[Like Meal System] Error in handleLikeMeal (saving or fetching):", error);
+      // Rollback optimistic UI update for the button if error occurred
+      setIsAlreadyLiked(false); 
       toast({
         title: "เกิดข้อผิดพลาด",
         description: "ไม่สามารถบันทึกการถูกใจได้ โปรดลองอีกครั้ง",
@@ -359,6 +367,7 @@ export default function FSFAPage() {
       });
     } finally {
       setIsLiking(false);
+      console.log("[Like Meal System] handleLikeMeal finished, isLiking set to false.");
     }
   };
 
@@ -396,6 +405,7 @@ export default function FSFAPage() {
                      <DropdownMenuItem
                         onClick={() => {
                           if (currentUser?.uid) { 
+                            console.log("[Dropdown Menu] Opening 'My Meals' dialog. Fetching latest meals...");
                             fetchLikedMealsData(currentUser.uid); // Refresh data when dialog is opened
                             setIsMyMealsDialogOpen(true);
                           } else {
@@ -466,7 +476,7 @@ export default function FSFAPage() {
                           ${isLiking && !isAlreadyLiked
                             ? 'bg-pink-400 text-white cursor-wait' 
                             : isAlreadyLiked 
-                              ? 'bg-pink-200 text-pink-600 hover:bg-pink-200' 
+                              ? 'bg-pink-200 text-pink-600 hover:bg-pink-200 cursor-default' 
                               : 'bg-pink-500 text-white hover:bg-pink-600 focus:ring-pink-500 active:bg-pink-700'
                           }
                         `}
@@ -661,5 +671,7 @@ export default function FSFAPage() {
 
 
       
+
+    
 
     
