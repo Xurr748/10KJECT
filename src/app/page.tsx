@@ -288,78 +288,87 @@ export default function FSFAPage() {
     console.log(`[Toggle Like] Action for: "${foodNameToToggle}". User: ${currentUser?.uid || 'Anonymous'}. Current isCurrentFoodLiked state by effect: ${isCurrentFoodLiked}`);
     setIsLiking(true);
 
-    const alreadyLikedInCurrentList = likedMealsList.some(meal => meal.name === foodNameToToggle);
-    console.log(`[Toggle Like] Food "${foodNameToToggle}" is ${alreadyLikedInCurrentList ? 'FOUND' : 'NOT FOUND'} in current likedMealsList (count: ${likedMealsList.length}). Current isCurrentFoodLiked (button state before click) was ${isCurrentFoodLiked}. Action will be to ${alreadyLikedInCurrentList ? 'UNLIKE' : 'LIKE'}.`);
-    
-    if (currentUser?.uid) { // Logged-in user: Use Firestore
-      const likedMealNamesRef = collection(db, 'users', currentUser.uid, 'likedMealNames');
-      if (alreadyLikedInCurrentList) { 
-        console.log(`[Toggle Like - Firestore] Attempting to UNLIKE "${foodNameToToggle}"`);
-        try {
-          const q = query(likedMealNamesRef, where("foodName", "==", foodNameToToggle));
-          const querySnapshot = await getDocs(q);
-          if (!querySnapshot.empty) {
-            const docIdToDelete = querySnapshot.docs[0].id;
-            await deleteDoc(doc(db, 'users', currentUser.uid, 'likedMealNames', docIdToDelete));
-            setLikedMealsList(prev => prev.filter(meal => meal.name !== foodNameToToggle));
-            setIsCurrentFoodLiked(false); 
-            toast({ description: `"${foodNameToToggle}" ถูกนำออกจากรายการที่ถูกใจแล้ว` });
-            console.log(`[Toggle Like - Firestore] UNLIKED and removed from Firestore: "${foodNameToToggle}" (Doc ID: ${docIdToDelete}). likedMealsList updated.`);
-          } else {
-            console.warn(`[Toggle Like - Firestore] Tried to unlike "${foodNameToToggle}", but not found in DB. State might be inconsistent. Forcing local removal.`);
-            setLikedMealsList(prev => prev.filter(meal => meal.name !== foodNameToToggle)); 
-            setIsCurrentFoodLiked(false);
+    try {
+      const alreadyLikedInCurrentList = likedMealsList.some(meal => meal.name === foodNameToToggle);
+      console.log(`[Toggle Like] Food "${foodNameToToggle}" is ${alreadyLikedInCurrentList ? 'FOUND' : 'NOT FOUND'} in current likedMealsList (count: ${likedMealsList.length}). Current isCurrentFoodLiked (button state before click) was ${isCurrentFoodLiked}. Action will be to ${alreadyLikedInCurrentList ? 'UNLIKE' : 'LIKE'}.`);
+      
+      if (currentUser?.uid) { // Logged-in user: Use Firestore
+        const likedMealNamesRef = collection(db, 'users', currentUser.uid, 'likedMealNames');
+        if (alreadyLikedInCurrentList) { 
+          console.log(`[Toggle Like - Firestore] Attempting to UNLIKE "${foodNameToToggle}"`);
+          try {
+            const q = query(likedMealNamesRef, where("foodName", "==", foodNameToToggle));
+            const querySnapshot = await getDocs(q);
+            if (!querySnapshot.empty) {
+              const docIdToDelete = querySnapshot.docs[0].id;
+              await deleteDoc(doc(db, 'users', currentUser.uid, 'likedMealNames', docIdToDelete));
+              setLikedMealsList(prev => prev.filter(meal => meal.name !== foodNameToToggle));
+              setIsCurrentFoodLiked(false); 
+              toast({ description: `"${foodNameToToggle}" ถูกนำออกจากรายการที่ถูกใจแล้ว` });
+              console.log(`[Toggle Like - Firestore] UNLIKED and removed from Firestore: "${foodNameToToggle}" (Doc ID: ${docIdToDelete}). likedMealsList updated.`);
+            } else {
+              console.warn(`[Toggle Like - Firestore] Tried to unlike "${foodNameToToggle}", but not found in DB. State might be inconsistent. Forcing local removal.`);
+              setLikedMealsList(prev => prev.filter(meal => meal.name !== foodNameToToggle)); 
+              setIsCurrentFoodLiked(false);
+            }
+          } catch (error) {
+            console.error("[Toggle Like - Firestore] Error unliking meal:", error);
+            toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถยกเลิกการถูกใจได้", variant: "destructive" });
           }
-        } catch (error) {
-          console.error("[Toggle Like - Firestore] Error unliking meal:", error);
-          toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถยกเลิกการถูกใจได้", variant: "destructive" });
-        }
-      } else { 
-        console.log(`[Toggle Like - Firestore] Attempting to LIKE "${foodNameToToggle}"`);
-        try {
-          const newMealData = { foodName: foodNameToToggle, likedAt: serverTimestamp() };
-          console.log('[Toggle Like - Firestore] Data to be added to Firestore:', newMealData);
-          const newDocRef = await addDoc(likedMealNamesRef, newMealData);
-          console.log(`[Toggle Like - Firestore] Successfully added to Firestore. New Doc ID: ${newDocRef.id}`);
-          // Optimistic update + ensuring correct data for sorting/display
-          const newItem: LikedMealItem = { name: foodNameToToggle, id: newDocRef.id, likedAt: new Date() }; // Use client time for immediate sort
-          setLikedMealsList(prev => [newItem, ...prev].sort((a,b) => (b.likedAt as Date).getTime() - (a.likedAt as Date).getTime()));
-          setIsCurrentFoodLiked(true); 
-          toast({ description: `ถูกใจ "${foodNameToToggle}" แล้ว!`});
-          console.log(`[Toggle Like - Firestore] LIKED and added to Firestore: "${foodNameToToggle}". likedMealsList updated.`);
-        } catch (error) {
-          console.error("[Toggle Like - Firestore] Error liking meal:", error);
-          toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถถูกใจได้", variant: "destructive" });
-        }
-      }
-    } else { // Not logged in: Use localStorage
-      let currentLocalLikedNames: string[] = [];
-      const storedNamesJson = localStorage.getItem(LOCAL_STORAGE_LIKED_MEALS_KEY);
-      if (storedNamesJson) {
-        try {
-          currentLocalLikedNames = JSON.parse(storedNamesJson);
-        } catch (e) { console.error("Error parsing localStorage for likes", e); currentLocalLikedNames = [];}
-      }
+        } else { 
+          console.log(`[Toggle Like - Firestore] Attempting to LIKE "${foodNameToToggle}"`);
+          try {
+            const newMealData = { foodName: foodNameToToggle, likedAt: serverTimestamp() };
+            console.log('[Toggle Like - Firestore] Data to be added to Firestore:', newMealData);
+            const newDocRef = await addDoc(likedMealNamesRef, newMealData);
+            console.log(`[Toggle Like - Firestore] Successfully added to Firestore. New Doc ID: ${newDocRef.id}`);
 
-      if (alreadyLikedInCurrentList) { 
-        console.log(`[Toggle Like - localStorage] Attempting to UNLIKE "${foodNameToToggle}"`);
-        currentLocalLikedNames = currentLocalLikedNames.filter(name => name !== foodNameToToggle);
-        setIsCurrentFoodLiked(false); 
-        toast({ description: `"${foodNameToToggle}" ถูกนำออกจากรายการที่ถูกใจแล้ว` });
-        console.log(`[Toggle Like - localStorage] UNLIKED and removed: "${foodNameToToggle}"`);
-      } else { 
-        console.log(`[Toggle Like - localStorage] Attempting to LIKE "${foodNameToToggle}"`);
-        currentLocalLikedNames.push(foodNameToToggle);
-        setIsCurrentFoodLiked(true); 
-        toast({ description: `ถูกใจ "${foodNameToToggle}" แล้ว!` });
-        console.log(`[Toggle Like - localStorage] LIKED and added: "${foodNameToToggle}"`);
+            const newItem: LikedMealItem = { name: foodNameToToggle, id: newDocRef.id, likedAt: new Date() }; // Use client time for immediate sort/display
+            setLikedMealsList(prev => [newItem, ...prev].sort((a,b) => (b.likedAt as Date).getTime() - (a.likedAt as Date).getTime()));
+            setIsCurrentFoodLiked(true); 
+            toast({ description: `ถูกใจ "${foodNameToToggle}" แล้ว!`});
+            console.log(`[Toggle Like - Firestore] LIKED and added to Firestore: "${foodNameToToggle}". likedMealsList updated.`);
+          } catch (error) {
+            console.error("[Toggle Like - Firestore] Error liking meal:", error);
+            toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถถูกใจได้", variant: "destructive" });
+          }
+        }
+      } else { // Not logged in: Use localStorage
+        let currentLocalLikedNames: string[] = [];
+        const storedNamesJson = localStorage.getItem(LOCAL_STORAGE_LIKED_MEALS_KEY);
+        if (storedNamesJson) {
+          try {
+            currentLocalLikedNames = JSON.parse(storedNamesJson);
+          } catch (e) { console.error("Error parsing localStorage for likes", e); currentLocalLikedNames = [];}
+        }
+
+        if (alreadyLikedInCurrentList) { 
+          console.log(`[Toggle Like - localStorage] Attempting to UNLIKE "${foodNameToToggle}"`);
+          currentLocalLikedNames = currentLocalLikedNames.filter(name => name !== foodNameToToggle);
+          setIsCurrentFoodLiked(false); 
+          toast({ description: `"${foodNameToToggle}" ถูกนำออกจากรายการที่ถูกใจแล้ว` });
+          console.log(`[Toggle Like - localStorage] UNLIKED and removed: "${foodNameToToggle}"`);
+        } else { 
+          console.log(`[Toggle Like - localStorage] Attempting to LIKE "${foodNameToToggle}"`);
+          currentLocalLikedNames.push(foodNameToToggle);
+          setIsCurrentFoodLiked(true); 
+          toast({ description: `ถูกใจ "${foodNameToToggle}" แล้ว!` });
+          console.log(`[Toggle Like - localStorage] LIKED and added: "${foodNameToToggle}"`);
+        }
+        localStorage.setItem(LOCAL_STORAGE_LIKED_MEALS_KEY, JSON.stringify(currentLocalLikedNames));
+        setLikedMealsList(currentLocalLikedNames.map(name => ({ name })).sort((a,b) => a.name.localeCompare(b.name))); // Update with sorted list
+        console.log(`[Toggle Like - localStorage] likedMealsList updated.`);
       }
-      localStorage.setItem(LOCAL_STORAGE_LIKED_MEALS_KEY, JSON.stringify(currentLocalLikedNames));
-      setLikedMealsList(currentLocalLikedNames.map(name => ({ name })).sort((a,b) => a.name.localeCompare(b.name))); // Update with sorted list
-      console.log(`[Toggle Like - localStorage] likedMealsList updated.`);
+    } catch (error) {
+      // This catch is for unexpected errors not caught by inner try/catches specifically.
+      console.error("[Toggle Like] UNEXPECTED CRITICAL ERROR in handleToggleLike:", error);
+      toast({ title: "เกิดข้อผิดพลาดร้ายแรง", description: "การดำเนินการถูกใจล้มเหลว โปรดลองอีกครั้ง", variant: "destructive" });
+      // Optionally rollback optimistic UI if appropriate here, e.g. if isCurrentFoodLiked was toggled
+      // For now, the inner try/catches handle their specific rollbacks.
+    } finally {
+      setIsLiking(false);
+      console.log(`[Toggle Like] FINALLY: isLiking set to false for "${foodNameToToggle}".`);
     }
-    setIsLiking(false);
-    console.log(`[Toggle Like] Action complete for: "${foodNameToToggle}". isLiking set to false. isCurrentFoodLiked is now ${!alreadyLikedInCurrentList}.`);
   };
   
   const openMyMealsDialog = () => {
@@ -610,3 +619,4 @@ export default function FSFAPage() {
   );
 }
     
+
