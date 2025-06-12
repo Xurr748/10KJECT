@@ -189,7 +189,7 @@ export default function FSFAPage() {
     setImageError(null);
     setIsLiking(false);
     setIsAlreadyLiked(false);
-    setLikedMeals([]); // Also reset liked meals
+    setLikedMeals([]); 
     setIsMyMealsDialogOpen(false);
   };
 
@@ -296,7 +296,7 @@ export default function FSFAPage() {
         description: `${imageAnalysisResult.foodItem} ถูกเพิ่มใน \"มื้ออาหารของฉัน\" แล้ว`,
       });
       setIsAlreadyLiked(true); 
-      // Refresh liked meals data for the dialog if it's open or will be opened soon
+      
       const likedMealsRefetch = collection(db, `users/${currentUser.uid}/likedMeals`);
       const q = query(likedMealsRefetch, orderBy('likedAt', 'desc'));
       const querySnapshot = await getDocs(q);
@@ -403,11 +403,43 @@ export default function FSFAPage() {
                 <Label htmlFor="food-image-upload" className="text-lg font-body text-foreground">อัปโหลดรูปภาพอาหาร</Label>
                 <Input id="food-image-upload" type="file" accept="image/*" onChange={handleFileChange} className="mt-2 file:text-accent file:font-semibold file:mr-2 file:px-3 file:py-1 file:rounded-full file:border-0 file:bg-accent/20 hover:file:bg-accent/30 text-lg p-2" />
               </div>
-
+              
               {previewUrl && (
-                <div className="mt-4 text-center border border-dashed border-border p-4 rounded-md">
-                  <p className="text-md font-body mb-2 text-muted-foreground">ตัวอย่างรูปภาพ:</p>
-                  <Image src={previewUrl} alt="Food preview" width={300} height={300} className="rounded-md shadow-md mx-auto object-contain max-h-64" />
+                <div className="mt-6 mb-6 flex flex-col items-center space-y-4 md:flex-row md:items-start md:justify-center md:space-y-0 md:space-x-8 border border-dashed border-border p-6 rounded-lg bg-card shadow-sm">
+                  <div className="flex-shrink-0 text-center">
+                    <p className="text-sm font-body mb-2 text-muted-foreground">ตัวอย่างรูปภาพ:</p>
+                    <Image src={previewUrl} alt="Food preview" width={240} height={240} className="rounded-lg shadow-md object-contain max-h-56 mx-auto" data-ai-hint="food meal" />
+                  </div>
+
+                  {currentUser && imageAnalysisResult && isFoodIdentified && (
+                    <div className="flex-shrink-0 self-center md:pt-10">
+                      <Button
+                        onClick={handleLikeMeal}
+                        disabled={isLiking || isAlreadyLiked}
+                        className={`
+                          flex items-center justify-center text-base font-medium py-3 px-6 rounded-lg shadow-md transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2
+                          ${isLiking 
+                            ? 'bg-pink-400 text-white cursor-wait' 
+                            : isAlreadyLiked 
+                              ? 'bg-pink-200 text-pink-600 cursor-not-allowed hover:bg-pink-200'
+                              : 'bg-pink-500 text-white hover:bg-pink-600 focus:ring-pink-500 active:bg-pink-700'
+                          }
+                        `}
+                        aria-live="polite"
+                      >
+                        {isLiking ? (
+                          <Loader2 className="animate-spin mr-2 h-5 w-5" />
+                        ) : (
+                          <Heart 
+                            className={`mr-2 h-5 w-5 
+                              ${isAlreadyLiked ? 'fill-pink-600 text-pink-600' : 'text-white'}
+                            `} 
+                          />
+                        )}
+                        {isAlreadyLiked ? "ถูกใจแล้ว" : "ถูกใจมื้อนี้"}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -466,23 +498,6 @@ export default function FSFAPage() {
                               </ScrollArea>
                             </div>
                           </>
-                        )}
-                        {currentUser && isFoodIdentified && previewUrl && (
-                          <div className="mt-4 pt-4 border-t border-border">
-                            <Button 
-                              onClick={handleLikeMeal} 
-                              disabled={isLiking || isAlreadyLiked}
-                              variant={isAlreadyLiked ? "secondary" : "default"}
-                              className="w-full text-md py-3"
-                            >
-                              {isLiking ? (
-                                <Loader2 className="animate-spin mr-2 h-5 w-5" />
-                              ) : (
-                                <Heart className={`mr-2 h-5 w-5 ${isAlreadyLiked ? 'fill-red-500 text-red-500' : ''}`} />
-                              )}
-                              {isAlreadyLiked ? "ถูกใจแล้ว" : "ถูกใจมื้อนี้"}
-                            </Button>
-                          </div>
                         )}
                       </>
                     ) : (
@@ -592,6 +607,8 @@ export default function FSFAPage() {
     </div>
   );
 }
+    
+
     
 
     
