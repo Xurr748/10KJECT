@@ -636,7 +636,9 @@ export default function FSFAPage() {
     const [isLoading, setIsLoading] = useState(false);
   
     const handleRegister = async (event: React.FormEvent) => {
+      console.log('[RegisterDialog] handleRegister called. Event object:', event); // Debug log 1
       event.preventDefault();
+      console.log('[RegisterDialog] event.preventDefault() called.'); // Debug log 2
       setIsLoading(true);
   
       if (password !== confirmPassword) {
@@ -667,7 +669,7 @@ export default function FSFAPage() {
         });
         setIsRegisterDialogOpen(false); 
       } catch (error: any) {
-        console.error('Registration error:', error);
+        console.error('[RegisterDialog] Registration error in catch block:', error); // Debug log 3
         let errorMessage = "เกิดข้อผิดพลาดในการลงทะเบียน";
         if (error.code === 'auth/email-already-in-use') {
           errorMessage = "อีเมลนี้ถูกใช้งานแล้ว";
@@ -683,6 +685,7 @@ export default function FSFAPage() {
         });
       } finally {
         setIsLoading(false);
+        console.log('[RegisterDialog] handleRegister finally block executed.'); // Debug log 4
       }
     };
 
@@ -1117,4 +1120,6 @@ export default function FSFAPage() {
     </div>
   );
 }
+    
+
     
