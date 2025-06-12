@@ -12,7 +12,7 @@ import {
 } from '@/ai/flows/food-image-analyzer';
 import { auth, db, serverTimestamp } from '@/lib/firebase'; 
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { collection, addDoc, query, where, getDocs, orderBy, Timestamp as FirestoreTimestamp } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, orderBy, Timestamp as FirestoreTimestamp, doc, getDoc } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 
@@ -83,6 +83,7 @@ export default function FSFAPage() {
   const [imageAnalysisResult, setImageAnalysisResult] = useState<ScanFoodImageOutput | null>(null);
   const [isLoadingImageAnalysis, setIsLoadingImageAnalysis] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
+  
   const [isLiking, setIsLiking] = useState(false);
   const [isAlreadyLiked, setIsAlreadyLiked] = useState(false);
 
@@ -114,49 +115,57 @@ export default function FSFAPage() {
     }
   };
 
+  const fetchLikedMealsData = async (userId: string) => {
+    setIsLoadingMyMeals(true);
+    try {
+      const likedMealsRef = collection(db, `users/${userId}/likedMeals`);
+      const q = query(likedMealsRef, orderBy('likedAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      const mealsData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as LikedMeal[];
+      setLikedMeals(mealsData);
+    } catch (error) {
+      console.error("Error fetching liked meals:", error);
+      setLikedMeals([]); 
+      toast({
+        title: "เกิดข้อผิดพลาด",
+        description: "ไม่สามารถโหลด 'มื้ออาหารของฉัน' ได้",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingMyMeals(false);
+    }
+  };
+  
   useEffect(() => {
-    if (currentUser) {
-      const fetchLikedMealsData = async () => {
-        setIsLoadingMyMeals(true);
-        try {
-          const likedMealsRef = collection(db, `users/${currentUser.uid}/likedMeals`);
-          const q = query(likedMealsRef, orderBy('likedAt', 'desc'));
-          const querySnapshot = await getDocs(q);
-          const mealsData = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data(),
-          })) as LikedMeal[];
-          setLikedMeals(mealsData);
-        } catch (error) {
-          console.error("Error fetching liked meals:", error);
-          setLikedMeals([]); 
-          toast({
-            title: "เกิดข้อผิดพลาด",
-            description: "ไม่สามารถโหลด 'มื้ออาหารของฉัน' ได้",
-            variant: "destructive",
-          });
-        } finally {
-          setIsLoadingMyMeals(false);
-        }
-      };
-      fetchLikedMealsData();
+    if (currentUser?.uid) {
+      fetchLikedMealsData(currentUser.uid);
     } else {
       setLikedMeals([]); 
       setIsLoadingMyMeals(false);
     }
-  }, [currentUser, toast]);
+  }, [currentUser]);
+
 
   useEffect(() => {
     const checkIfLiked = async () => {
       if (currentUser && imageAnalysisResult && previewUrl && isFoodIdentified) {
+        setIsLiking(true); // Indicate loading for button state
         try {
           const likedMealsRef = collection(db, `users/${currentUser.uid}/likedMeals`);
-          const q = query(likedMealsRef, where("imageUrl", "==", previewUrl), where("foodName", "==", imageAnalysisResult.foodItem));
+          const q = query(likedMealsRef, 
+            where("imageUrl", "==", previewUrl), 
+            where("foodName", "==", imageAnalysisResult.foodItem)
+          );
           const querySnapshot = await getDocs(q);
           setIsAlreadyLiked(!querySnapshot.empty);
         } catch (error) {
           console.error("Error checking if meal is liked:", error);
           setIsAlreadyLiked(false); 
+        } finally {
+          setIsLiking(false);
         }
       } else {
         setIsAlreadyLiked(false);
@@ -172,7 +181,7 @@ export default function FSFAPage() {
       toast({
         title: "ออกจากระบบสำเร็จ",
       });
-      resetState(); 
+      // resetState is called by onAuthStateChanged
     } catch (error: unknown) {
       console.error("Logout error:", error);
       toast({
@@ -189,8 +198,8 @@ export default function FSFAPage() {
     setImageError(null);
     setIsLiking(false);
     setIsAlreadyLiked(false);
-    setLikedMeals([]); 
-    setIsMyMealsDialogOpen(false);
+    // setLikedMeals([]); // Keep likedMeals if user is still logged in, onAuthStateChanged handles full reset
+    // setIsMyMealsDialogOpen(false); // Dialog state should persist unless explicitly closed
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -204,7 +213,7 @@ export default function FSFAPage() {
       reader.readAsDataURL(file);
       setImageAnalysisResult(null); 
       setImageError(null);
-      setIsAlreadyLiked(false); 
+      setIsAlreadyLiked(false); // Reset for new image
     }
   };
 
@@ -215,7 +224,7 @@ export default function FSFAPage() {
     }
     setIsLoadingImageAnalysis(true);
     setImageError(null);
-    setIsAlreadyLiked(false);
+    setIsAlreadyLiked(false); // Reset for new analysis
     
     const reader = new FileReader();
     reader.readAsDataURL(selectedFile);
@@ -274,37 +283,45 @@ export default function FSFAPage() {
       });
       return;
     }
-    if (isAlreadyLiked) {
-       toast({
-        title: "ถูกใจแล้ว",
-        description: "คุณได้ถูกใจรายการอาหารนี้แล้ว",
-      });
-      return;
-    }
 
     setIsLiking(true);
     try {
+      // Stronger check: Query Firestore directly to ensure the item isn't already liked
       const likedMealsRef = collection(db, `users/${currentUser.uid}/likedMeals`);
+      const q = query(likedMealsRef, 
+        where("imageUrl", "==", previewUrl), 
+        where("foodName", "==", imageAnalysisResult.foodItem)
+      );
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        toast({
+          title: "ถูกใจแล้ว",
+          description: "คุณได้ถูกใจรายการอาหารนี้แล้ว",
+        });
+        setIsAlreadyLiked(true); // Ensure UI is consistent
+        setIsLiking(false);
+        return;
+      }
+
+      // If not already liked, proceed to add
       await addDoc(likedMealsRef, {
         foodName: imageAnalysisResult.foodItem,
         imageUrl: previewUrl, 
         likedAt: serverTimestamp(),
-        userId: currentUser.uid,
+        userId: currentUser.uid, 
       });
+      
       toast({
         title: "ถูกใจสำเร็จ!",
         description: `${imageAnalysisResult.foodItem} ถูกเพิ่มใน \"มื้ออาหารของฉัน\" แล้ว`,
       });
-      setIsAlreadyLiked(true); 
+      setIsAlreadyLiked(true); // Optimistic UI update for the button
       
-      const likedMealsRefetch = collection(db, `users/${currentUser.uid}/likedMeals`);
-      const q = query(likedMealsRefetch, orderBy('likedAt', 'desc'));
-      const querySnapshot = await getDocs(q);
-      const mealsData = querySnapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-      })) as LikedMeal[];
-      setLikedMeals(mealsData);
+      // Re-fetch liked meals to update the "My Meals" dialog
+      if (currentUser?.uid) {
+        fetchLikedMealsData(currentUser.uid);
+      }
 
     } catch (error) {
       console.error("Error liking meal:", error);
@@ -353,6 +370,7 @@ export default function FSFAPage() {
                         onClick={() => {
                           if (currentUser) {
                             setIsMyMealsDialogOpen(true);
+                            if(currentUser?.uid) fetchLikedMealsData(currentUser.uid); // Refresh data when opening
                           } else {
                             toast({ title: "กรุณาเข้าสู่ระบบ", description: "เพื่อดูมื้ออาหารของคุณ" });
                           }
@@ -415,7 +433,7 @@ export default function FSFAPage() {
                     <div className="flex-shrink-0 self-center md:pt-10">
                       <Button
                         onClick={handleLikeMeal}
-                        disabled={isLiking || isAlreadyLiked}
+                        disabled={isLiking} // Only disable when isLiking is true, isAlreadyLiked controls appearance
                         className={`
                           flex items-center justify-center text-base font-medium py-3 px-6 rounded-lg shadow-md transition-all duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-offset-2
                           ${isLiking 
@@ -427,7 +445,7 @@ export default function FSFAPage() {
                         `}
                         aria-live="polite"
                       >
-                        {isLiking ? (
+                        {isLiking && !isAlreadyLiked ? ( // Show loader only when liking and not already liked
                           <Loader2 className="animate-spin mr-2 h-5 w-5" />
                         ) : (
                           <Heart 
