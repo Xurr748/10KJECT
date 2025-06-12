@@ -105,8 +105,6 @@ export default function FSFAPage() {
   }, []);
   
   useEffect(() => {
-    // Defined inside useEffect or useCallback to capture current `currentUser` and `toast`.
-    // Or pass them as arguments if defined outside.
     const loadUserLikedMealNames = async () => {
       console.log(`[My Meals Load Effect] Loading liked meal names. User: ${currentUser?.uid || 'Anonymous'}`);
       setIsLoadingMyMeals(true);
@@ -151,16 +149,17 @@ export default function FSFAPage() {
     };
   
     loadUserLikedMealNames();
-  }, [currentUser]); // Corrected dependency array
+  }, [currentUser]);
+  
 
   useEffect(() => {
+    setIsCurrentFoodLiked(false); // Reset for new item
     const currentFoodName = imageAnalysisResult?.foodItem;
     if (currentFoodName && currentFoodName !== UNIDENTIFIED_FOOD_MESSAGE) {
       const isLiked = likedMealsList.some(meal => meal.name === currentFoodName);
       setIsCurrentFoodLiked(isLiked);
       console.log(`[Like Status Effect] Food: "${currentFoodName}", Is Liked: ${isLiked}. Checked against likedMealsList (count: ${likedMealsList.length}):`, likedMealsList.map(m => m.name));
     } else {
-      setIsCurrentFoodLiked(false); 
       if (currentFoodName === UNIDENTIFIED_FOOD_MESSAGE) {
         console.log(`[Like Status Effect] Food not identified. isCurrentFoodLiked set to false.`);
       } else if (!currentFoodName) {
@@ -184,8 +183,6 @@ export default function FSFAPage() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      // setLikedMealsList([]); // Cleared by useEffect on currentUser change
-      // setIsCurrentFoodLiked(false); // Also handled by useEffect on likedMealsList change
       toast({
         title: "ออกจากระบบสำเร็จ",
       });
@@ -204,7 +201,6 @@ export default function FSFAPage() {
     setPreviewUrl(null);
     setImageAnalysisResult(null);
     setImageError(null);
-    // setIsCurrentFoodLiked(false); // This will be handled by the useEffect for isCurrentFoodLiked when imageAnalysisResult becomes null
     console.log('[State Reset] Image related states reset.');
   };
 
@@ -229,7 +225,6 @@ export default function FSFAPage() {
     }
     setIsLoadingImageAnalysis(true);
     setImageError(null);
-    // setIsCurrentFoodLiked(false); // Handled by effect
     console.log('[Image Analysis] Starting analysis for file:', selectedFile.name);
     
     const reader = new FileReader();
@@ -290,15 +285,15 @@ export default function FSFAPage() {
       toast({ title: "ไม่สามารถถูกใจได้", description: "ไม่สามารถระบุชื่ออาหารได้", variant: "destructive" });
       return;
     }
-    console.log(`[Toggle Like] Action for: "${foodNameToToggle}". User: ${currentUser?.uid || 'Anonymous'}. Current isLiked state: ${isCurrentFoodLiked}`);
+    console.log(`[Toggle Like] Action for: "${foodNameToToggle}". User: ${currentUser?.uid || 'Anonymous'}. Current isCurrentFoodLiked state by effect: ${isCurrentFoodLiked}`);
     setIsLiking(true);
 
-    const alreadyLikedInCurrentState = likedMealsList.some(meal => meal.name === foodNameToToggle);
-    console.log(`[Toggle Like] Food "${foodNameToToggle}" is ${alreadyLikedInCurrentState ? 'FOUND' : 'NOT FOUND'} in current likedMealsList (count: ${likedMealsList.length})`);
-
+    const alreadyLikedInCurrentList = likedMealsList.some(meal => meal.name === foodNameToToggle);
+    console.log(`[Toggle Like] Food "${foodNameToToggle}" is ${alreadyLikedInCurrentList ? 'FOUND' : 'NOT FOUND'} in current likedMealsList (count: ${likedMealsList.length}). Current isCurrentFoodLiked (button state before click) was ${isCurrentFoodLiked}. Action will be to ${alreadyLikedInCurrentList ? 'UNLIKE' : 'LIKE'}.`);
+    
     if (currentUser?.uid) { // Logged-in user: Use Firestore
       const likedMealNamesRef = collection(db, 'users', currentUser.uid, 'likedMealNames');
-      if (alreadyLikedInCurrentState) { 
+      if (alreadyLikedInCurrentList) { 
         console.log(`[Toggle Like - Firestore] Attempting to UNLIKE "${foodNameToToggle}"`);
         try {
           const q = query(likedMealNamesRef, where("foodName", "==", foodNameToToggle));
@@ -307,12 +302,13 @@ export default function FSFAPage() {
             const docIdToDelete = querySnapshot.docs[0].id;
             await deleteDoc(doc(db, 'users', currentUser.uid, 'likedMealNames', docIdToDelete));
             setLikedMealsList(prev => prev.filter(meal => meal.name !== foodNameToToggle));
-            // setIsCurrentFoodLiked(false); // Handled by useEffect
+            setIsCurrentFoodLiked(false); 
             toast({ description: `"${foodNameToToggle}" ถูกนำออกจากรายการที่ถูกใจแล้ว` });
-            console.log(`[Toggle Like - Firestore] UNLIKED and removed from Firestore: "${foodNameToToggle}" (Doc ID: ${docIdToDelete})`);
+            console.log(`[Toggle Like - Firestore] UNLIKED and removed from Firestore: "${foodNameToToggle}" (Doc ID: ${docIdToDelete}). likedMealsList updated.`);
           } else {
             console.warn(`[Toggle Like - Firestore] Tried to unlike "${foodNameToToggle}", but not found in DB. State might be inconsistent. Forcing local removal.`);
-            setLikedMealsList(prev => prev.filter(meal => meal.name !== foodNameToToggle)); // Ensure local state is correct
+            setLikedMealsList(prev => prev.filter(meal => meal.name !== foodNameToToggle)); 
+            setIsCurrentFoodLiked(false);
           }
         } catch (error) {
           console.error("[Toggle Like - Firestore] Error unliking meal:", error);
@@ -322,12 +318,15 @@ export default function FSFAPage() {
         console.log(`[Toggle Like - Firestore] Attempting to LIKE "${foodNameToToggle}"`);
         try {
           const newMealData = { foodName: foodNameToToggle, likedAt: serverTimestamp() };
+          console.log('[Toggle Like - Firestore] Data to be added to Firestore:', newMealData);
           const newDocRef = await addDoc(likedMealNamesRef, newMealData);
-          // Optimistic update: Prepend to list
-          setLikedMealsList(prev => [{ name: foodNameToToggle, id: newDocRef.id, likedAt: new Date() }, ...prev]);
-          // setIsCurrentFoodLiked(true); // Handled by useEffect
+          console.log(`[Toggle Like - Firestore] Successfully added to Firestore. New Doc ID: ${newDocRef.id}`);
+          // Optimistic update + ensuring correct data for sorting/display
+          const newItem: LikedMealItem = { name: foodNameToToggle, id: newDocRef.id, likedAt: new Date() }; // Use client time for immediate sort
+          setLikedMealsList(prev => [newItem, ...prev].sort((a,b) => (b.likedAt as Date).getTime() - (a.likedAt as Date).getTime()));
+          setIsCurrentFoodLiked(true); 
           toast({ description: `ถูกใจ "${foodNameToToggle}" แล้ว!`});
-          console.log(`[Toggle Like - Firestore] LIKED and added to Firestore: "${foodNameToToggle}" (New Doc ID: ${newDocRef.id})`);
+          console.log(`[Toggle Like - Firestore] LIKED and added to Firestore: "${foodNameToToggle}". likedMealsList updated.`);
         } catch (error) {
           console.error("[Toggle Like - Firestore] Error liking meal:", error);
           toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถถูกใจได้", variant: "destructive" });
@@ -342,33 +341,29 @@ export default function FSFAPage() {
         } catch (e) { console.error("Error parsing localStorage for likes", e); currentLocalLikedNames = [];}
       }
 
-      if (alreadyLikedInCurrentState) { 
+      if (alreadyLikedInCurrentList) { 
         console.log(`[Toggle Like - localStorage] Attempting to UNLIKE "${foodNameToToggle}"`);
         currentLocalLikedNames = currentLocalLikedNames.filter(name => name !== foodNameToToggle);
-        // setIsCurrentFoodLiked(false); // Handled by useEffect
+        setIsCurrentFoodLiked(false); 
         toast({ description: `"${foodNameToToggle}" ถูกนำออกจากรายการที่ถูกใจแล้ว` });
         console.log(`[Toggle Like - localStorage] UNLIKED and removed: "${foodNameToToggle}"`);
       } else { 
         console.log(`[Toggle Like - localStorage] Attempting to LIKE "${foodNameToToggle}"`);
         currentLocalLikedNames.push(foodNameToToggle);
-        // setIsCurrentFoodLiked(true); // Handled by useEffect
+        setIsCurrentFoodLiked(true); 
         toast({ description: `ถูกใจ "${foodNameToToggle}" แล้ว!` });
         console.log(`[Toggle Like - localStorage] LIKED and added: "${foodNameToToggle}"`);
       }
       localStorage.setItem(LOCAL_STORAGE_LIKED_MEALS_KEY, JSON.stringify(currentLocalLikedNames));
-      setLikedMealsList(currentLocalLikedNames.map(name => ({ name })).sort((a,b) => a.name.localeCompare(b.name)));
+      setLikedMealsList(currentLocalLikedNames.map(name => ({ name })).sort((a,b) => a.name.localeCompare(b.name))); // Update with sorted list
+      console.log(`[Toggle Like - localStorage] likedMealsList updated.`);
     }
     setIsLiking(false);
-    console.log(`[Toggle Like] Action complete for: "${foodNameToToggle}". isLiking set to false.`);
+    console.log(`[Toggle Like] Action complete for: "${foodNameToToggle}". isLiking set to false. isCurrentFoodLiked is now ${!alreadyLikedInCurrentList}.`);
   };
   
-  // This function is primarily for the "My Meals" dialog when it opens.
-  // The main list (`likedMealsList`) is updated by `loadUserLikedMealNames` via useEffect on `currentUser` change.
   const openMyMealsDialog = () => {
     console.log("[My Meals Dialog] Opening dialog. Current likedMealsList count:", likedMealsList.length);
-    // Optionally, re-fetch or ensure data is fresh if dialog can be open for long periods
-    // For now, assume likedMealsList is kept up-to-date by the useEffect on currentUser
-    // and by handleToggleLike directly manipulating it.
     setIsMyMealsDialogOpen(true);
   };
 
@@ -455,8 +450,8 @@ export default function FSFAPage() {
               </div>
               
               {previewUrl && (
-                <div className="mt-6 mb-6 flex flex-col items-center space-y-4 md:items-start md:justify-center md:space-y-0 md:space-x-8 border border-dashed border-border p-6 rounded-lg bg-card shadow-sm">
-                  <div className="flex-shrink-0 text-center">
+                <div className="mt-6 mb-6 flex flex-col items-center space-y-4 md:items-center md:justify-center md:space-y-0 md:space-x-8 border border-dashed border-border p-6 rounded-lg bg-card shadow-sm">
+                  <div className="flex-shrink-0 flex flex-col items-center">
                     <p className="text-sm font-body mb-2 text-muted-foreground">ตัวอย่างรูปภาพ:</p>
                     <Image src={previewUrl} alt="Food preview" width={240} height={240} className="rounded-lg shadow-md object-contain max-h-56 mx-auto" data-ai-hint="food meal" />
                   </div>
@@ -588,6 +583,11 @@ export default function FSFAPage() {
                   {likedMealsList.map((meal, index) => (
                     <li key={meal.id || `${meal.name}-${index}`} className="p-3 bg-card border rounded-lg shadow-sm text-foreground font-body text-md">
                       {meal.name}
+                      {meal.likedAt && currentUser && (
+                        <span className="block text-xs text-muted-foreground mt-1">
+                          ถูกใจเมื่อ: {formatDate(meal.likedAt)}
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>
