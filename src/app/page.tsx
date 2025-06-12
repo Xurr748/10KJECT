@@ -84,39 +84,36 @@ export default function FSFAPage() {
   const [isLoadingImageAnalysis, setIsLoadingImageAnalysis] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
   
-  // State for the new like system
-  const [isLiking, setIsLiking] = useState(false); // Loading state for the like button action
-  const [isCurrentFoodLiked, setIsCurrentFoodLiked] = useState(false); // Is the food currently shown in analysis results liked?
+  const [isLiking, setIsLiking] = useState(false); 
+  const [isCurrentFoodLiked, setIsCurrentFoodLiked] = useState(false); 
   
-  // State for "My Meals" Dialog
   const [isMyMealsDialogOpen, setIsMyMealsDialogOpen] = useState(false);
-  const [likedMealsList, setLikedMealsList] = useState<LikedMealItem[]>([]); // Stores {name: string, id?: string}
+  const [likedMealsList, setLikedMealsList] = useState<LikedMealItem[]>([]); 
   const [isLoadingMyMeals, setIsLoadingMyMeals] = useState(false);
 
   const isFoodIdentified = imageAnalysisResult && imageAnalysisResult.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      console.log('[Auth Effect] Auth state changed. User:', user?.uid || 'Anonymous');
       setCurrentUser(user);
-      if (!user) {
-        // When user logs out, or initially no user, reset relevant states
-        // Liked meals will be re-fetched for anonymous (localStorage) or new user
-      }
-      // Resetting image-specific states when auth changes might be too aggressive
-      // Consider if image analysis should persist across login/logout
-      // For now, we'll let loadLikedMealNames handle fetching appropriate data
     });
-    return () => unsubscribeAuth(); 
+    return () => {
+      console.log('[Auth Effect] Unsubscribing auth listener.');
+      unsubscribeAuth();
+    } 
   }, []);
   
-  // Effect to load liked meal names from Firestore (if logged in) or localStorage (if not)
   useEffect(() => {
+    // Defined inside useEffect or useCallback to capture current `currentUser` and `toast`.
+    // Or pass them as arguments if defined outside.
     const loadUserLikedMealNames = async () => {
-      console.log(`[My Meals Effect] Loading liked meal names. User: ${currentUser?.uid || 'Anonymous'}`);
+      console.log(`[My Meals Load Effect] Loading liked meal names. User: ${currentUser?.uid || 'Anonymous'}`);
       setIsLoadingMyMeals(true);
       let fetchedMealItems: LikedMealItem[] = [];
   
-      if (currentUser?.uid) { // Logged-in user: Fetch from Firestore
+      if (currentUser?.uid) {
+        console.log(`[My Meals Load Effect] Fetching from Firestore for user ${currentUser.uid}`);
         try {
           const likedMealNamesRef = collection(db, `users/${currentUser.uid}/likedMealNames`);
           const q = query(likedMealNamesRef, orderBy('likedAt', 'desc'));
@@ -124,47 +121,51 @@ export default function FSFAPage() {
           fetchedMealItems = querySnapshot.docs.map(doc => ({
             id: doc.id,
             name: doc.data().foodName as string,
-            likedAt: doc.data().likedAt, // Keep for potential future sorting/display logic
+            likedAt: doc.data().likedAt, 
           }));
-          console.log('[My Meals Effect] Fetched from Firestore:', fetchedMealItems);
+          console.log('[My Meals Load Effect] Fetched from Firestore:', fetchedMealItems.map(i => i.name));
         } catch (error) {
-          console.error("[My Meals Effect] Error fetching liked meal names from Firestore:", error);
+          console.error("[My Meals Load Effect] Error fetching liked meal names from Firestore:", error);
           toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดรายการที่ถูกใจจากระบบคลาวด์ได้", variant: "destructive" });
         }
-      } else { // Not logged in: Fetch from localStorage
+      } else { 
+        console.log('[My Meals Load Effect] Fetching from localStorage for anonymous user.');
         const localData = localStorage.getItem(LOCAL_STORAGE_LIKED_MEALS_KEY);
         if (localData) {
           try {
             const names: string[] = JSON.parse(localData);
-            fetchedMealItems = names.map(name => ({ name })).sort((a, b) => a.name.localeCompare(b.name)); // Simple alpha sort for local
-            console.log('[My Meals Effect] Fetched from localStorage:', fetchedMealItems);
+            fetchedMealItems = names.map(name => ({ name })).sort((a, b) => a.name.localeCompare(b.name)); 
+            console.log('[My Meals Load Effect] Fetched from localStorage:', fetchedMealItems.map(i => i.name));
           } catch (e) {
-            console.error("[My Meals Effect] Error parsing liked meal names from localStorage:", e);
-            localStorage.removeItem(LOCAL_STORAGE_LIKED_MEALS_KEY); // Clear corrupted data
+            console.error("[My Meals Load Effect] Error parsing liked meal names from localStorage:", e);
+            localStorage.removeItem(LOCAL_STORAGE_LIKED_MEALS_KEY); 
             toast({ title: "ข้อมูลที่ถูกใจเสียหาย", description: "ข้อมูลที่ถูกใจในเครื่องถูกล้าง โปรดลองใหม่อีกครั้ง", variant: "destructive" });
           }
         } else {
-           console.log('[My Meals Effect] No data in localStorage.');
+           console.log('[My Meals Load Effect] No data in localStorage.');
         }
       }
       setLikedMealsList(fetchedMealItems);
       setIsLoadingMyMeals(false);
-      console.log('[My Meals Effect] Finished loading. likedMealsList state updated.');
+      console.log('[My Meals Load Effect] Finished loading. likedMealsList state updated with count:', fetchedMealItems.length);
     };
   
     loadUserLikedMealNames();
-  }, [currentUser, toast]); // Re-fetch when user logs in/out
+  }, [currentUser]); // Corrected dependency array
 
-  // Effect to determine if the *currently displayed* food item in analysis results is liked
   useEffect(() => {
-    if (imageAnalysisResult?.foodItem && imageAnalysisResult.foodItem !== UNIDENTIFIED_FOOD_MESSAGE) {
-      const currentFoodName = imageAnalysisResult.foodItem;
+    const currentFoodName = imageAnalysisResult?.foodItem;
+    if (currentFoodName && currentFoodName !== UNIDENTIFIED_FOOD_MESSAGE) {
       const isLiked = likedMealsList.some(meal => meal.name === currentFoodName);
       setIsCurrentFoodLiked(isLiked);
-      console.log(`[Like Status Effect] Food: "${currentFoodName}", Is Liked: ${isLiked}, Based on likedMealsList of length: ${likedMealsList.length}`);
+      console.log(`[Like Status Effect] Food: "${currentFoodName}", Is Liked: ${isLiked}. Checked against likedMealsList (count: ${likedMealsList.length}):`, likedMealsList.map(m => m.name));
     } else {
-      setIsCurrentFoodLiked(false); // No valid food item to check or no analysis result
-      console.log(`[Like Status Effect] No valid food item or analysis result. isCurrentFoodLiked set to false.`);
+      setIsCurrentFoodLiked(false); 
+      if (currentFoodName === UNIDENTIFIED_FOOD_MESSAGE) {
+        console.log(`[Like Status Effect] Food not identified. isCurrentFoodLiked set to false.`);
+      } else if (!currentFoodName) {
+        console.log(`[Like Status Effect] No current food name from analysis. isCurrentFoodLiked set to false.`);
+      }
     }
   }, [imageAnalysisResult, likedMealsList]);
 
@@ -173,7 +174,7 @@ export default function FSFAPage() {
     if (!timestamp) return 'ไม่ระบุวันที่';
     const date = timestamp instanceof FirestoreTimestamp ? timestamp.toDate() : timestamp;
     try {
-      return format(date, "d MMM yy", { locale: th }); // Shorter format for dialog
+      return format(date, "d MMM yy", { locale: th }); 
     } catch (error) {
       console.error("Error formatting date:", error, timestamp);
       return 'วันที่ไม่ถูกต้อง';
@@ -183,13 +184,12 @@ export default function FSFAPage() {
   const handleLogout = async () => {
     try {
       await signOut(auth);
-      setLikedMealsList([]); // Clear liked meals from state on logout
-      setIsCurrentFoodLiked(false); // Reset like status of current food item
+      // setLikedMealsList([]); // Cleared by useEffect on currentUser change
+      // setIsCurrentFoodLiked(false); // Also handled by useEffect on likedMealsList change
       toast({
         title: "ออกจากระบบสำเร็จ",
       });
-      // The useEffect for loadUserLikedMealNames will re-run due to currentUser change,
-      // and will load from localStorage if applicable.
+      console.log('[Logout] User logged out.');
     } catch (error: unknown) {
       console.error("Logout error:", error);
       toast({
@@ -204,19 +204,21 @@ export default function FSFAPage() {
     setPreviewUrl(null);
     setImageAnalysisResult(null);
     setImageError(null);
-    setIsCurrentFoodLiked(false); // Reset like status for the new image context
+    // setIsCurrentFoodLiked(false); // This will be handled by the useEffect for isCurrentFoodLiked when imageAnalysisResult becomes null
+    console.log('[State Reset] Image related states reset.');
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      resetImageRelatedStates(); // Reset before setting new file
+      resetImageRelatedStates(); 
       setSelectedFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreviewUrl(reader.result as string);
       };
       reader.readAsDataURL(file);
+      console.log('[File Change] New file selected:', file.name);
     }
   };
 
@@ -227,7 +229,8 @@ export default function FSFAPage() {
     }
     setIsLoadingImageAnalysis(true);
     setImageError(null);
-    setIsCurrentFoodLiked(false); // Ensure reset before new analysis potentially updates it
+    // setIsCurrentFoodLiked(false); // Handled by effect
+    console.log('[Image Analysis] Starting analysis for file:', selectedFile.name);
     
     const reader = new FileReader();
     reader.readAsDataURL(selectedFile);
@@ -235,7 +238,8 @@ export default function FSFAPage() {
       const foodImage = reader.result as string;
       try {
         const result = await scanFoodImage({ foodImage } as ScanFoodImageInput);
-        setImageAnalysisResult(result); // This will trigger the useEffect to check if the new food is liked
+        setImageAnalysisResult(result); 
+        console.log('[Image Analysis] Analysis successful. Result:', result);
         
         const identified = result.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
         if (identified) {
@@ -251,13 +255,13 @@ export default function FSFAPage() {
           });
         }
       } catch (error: unknown) {
-        console.error('Error analyzing image:', error);
+        console.error('[Image Analysis] Error analyzing image:', error);
         let errorMessage = 'วิเคราะห์รูปภาพไม่สำเร็จ โปรดลองอีกครั้ง';
         if (error instanceof Error) {
           errorMessage = error.message;
         }
         setImageError(errorMessage);
-        setImageAnalysisResult(null); // Clear results on error
+        setImageAnalysisResult(null); 
         toast({
           title: "เกิดข้อผิดพลาดในการวิเคราะห์",
           description: errorMessage,
@@ -265,17 +269,19 @@ export default function FSFAPage() {
         });
       } finally {
         setIsLoadingImageAnalysis(false);
+        console.log('[Image Analysis] Analysis process finished.');
       }
     };
     reader.onerror = () => {
       setImageError('ไม่สามารถอ่านไฟล์รูปภาพที่เลือก');
       setIsLoadingImageAnalysis(false);
       setImageAnalysisResult(null); 
-       toast({
+      toast({
           title: "ข้อผิดพลาดในการอ่านไฟล์",
           description: "ไม่สามารถอ่านไฟล์รูปภาพที่เลือก",
           variant: "destructive",
         });
+      console.error('[Image Analysis] FileReader error.');
     };
   };
 
@@ -284,15 +290,16 @@ export default function FSFAPage() {
       toast({ title: "ไม่สามารถถูกใจได้", description: "ไม่สามารถระบุชื่ออาหารได้", variant: "destructive" });
       return;
     }
-    console.log(`[Toggle Like] Attempting to toggle like for: "${foodNameToToggle}"`);
+    console.log(`[Toggle Like] Action for: "${foodNameToToggle}". User: ${currentUser?.uid || 'Anonymous'}. Current isLiked state: ${isCurrentFoodLiked}`);
     setIsLiking(true);
 
-    const alreadyLiked = likedMealsList.some(meal => meal.name === foodNameToToggle);
-    console.log(`[Toggle Like] Before action, food "${foodNameToToggle}" is ${alreadyLiked ? 'LIKED' : 'NOT LIKED'} in current state.`);
+    const alreadyLikedInCurrentState = likedMealsList.some(meal => meal.name === foodNameToToggle);
+    console.log(`[Toggle Like] Food "${foodNameToToggle}" is ${alreadyLikedInCurrentState ? 'FOUND' : 'NOT FOUND'} in current likedMealsList (count: ${likedMealsList.length})`);
 
     if (currentUser?.uid) { // Logged-in user: Use Firestore
       const likedMealNamesRef = collection(db, 'users', currentUser.uid, 'likedMealNames');
-      if (alreadyLiked) { // User wants to UNLIKE
+      if (alreadyLikedInCurrentState) { 
+        console.log(`[Toggle Like - Firestore] Attempting to UNLIKE "${foodNameToToggle}"`);
         try {
           const q = query(likedMealNamesRef, where("foodName", "==", foodNameToToggle));
           const querySnapshot = await getDocs(q);
@@ -300,25 +307,27 @@ export default function FSFAPage() {
             const docIdToDelete = querySnapshot.docs[0].id;
             await deleteDoc(doc(db, 'users', currentUser.uid, 'likedMealNames', docIdToDelete));
             setLikedMealsList(prev => prev.filter(meal => meal.name !== foodNameToToggle));
-            setIsCurrentFoodLiked(false);
+            // setIsCurrentFoodLiked(false); // Handled by useEffect
             toast({ description: `"${foodNameToToggle}" ถูกนำออกจากรายการที่ถูกใจแล้ว` });
-            console.log(`[Toggle Like - Firestore] UNLIKED and removed: "${foodNameToToggle}"`);
+            console.log(`[Toggle Like - Firestore] UNLIKED and removed from Firestore: "${foodNameToToggle}" (Doc ID: ${docIdToDelete})`);
           } else {
-            console.warn(`[Toggle Like - Firestore] Tried to unlike "${foodNameToToggle}", but not found in DB. State might be inconsistent.`);
-            // Force refresh local state from DB if this happens
-             await loadUserLikedMealNames(); // Defined elsewhere, re-fetches and sets likedMealsList
+            console.warn(`[Toggle Like - Firestore] Tried to unlike "${foodNameToToggle}", but not found in DB. State might be inconsistent. Forcing local removal.`);
+            setLikedMealsList(prev => prev.filter(meal => meal.name !== foodNameToToggle)); // Ensure local state is correct
           }
         } catch (error) {
           console.error("[Toggle Like - Firestore] Error unliking meal:", error);
           toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถยกเลิกการถูกใจได้", variant: "destructive" });
         }
-      } else { // User wants to LIKE
+      } else { 
+        console.log(`[Toggle Like - Firestore] Attempting to LIKE "${foodNameToToggle}"`);
         try {
-          const newDocRef = await addDoc(likedMealNamesRef, { foodName: foodNameToToggle, likedAt: serverTimestamp() });
-          setLikedMealsList(prev => [...prev, { name: foodNameToToggle, id: newDocRef.id, likedAt: new Date() }].sort((a,b) => (b.likedAt as Date).getTime() - (a.likedAt as Date).getTime()));
-          setIsCurrentFoodLiked(true);
+          const newMealData = { foodName: foodNameToToggle, likedAt: serverTimestamp() };
+          const newDocRef = await addDoc(likedMealNamesRef, newMealData);
+          // Optimistic update: Prepend to list
+          setLikedMealsList(prev => [{ name: foodNameToToggle, id: newDocRef.id, likedAt: new Date() }, ...prev]);
+          // setIsCurrentFoodLiked(true); // Handled by useEffect
           toast({ description: `ถูกใจ "${foodNameToToggle}" แล้ว!`});
-          console.log(`[Toggle Like - Firestore] LIKED and added: "${foodNameToToggle}"`);
+          console.log(`[Toggle Like - Firestore] LIKED and added to Firestore: "${foodNameToToggle}" (New Doc ID: ${newDocRef.id})`);
         } catch (error) {
           console.error("[Toggle Like - Firestore] Error liking meal:", error);
           toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถถูกใจได้", variant: "destructive" });
@@ -333,14 +342,16 @@ export default function FSFAPage() {
         } catch (e) { console.error("Error parsing localStorage for likes", e); currentLocalLikedNames = [];}
       }
 
-      if (alreadyLiked) { // User wants to UNLIKE
+      if (alreadyLikedInCurrentState) { 
+        console.log(`[Toggle Like - localStorage] Attempting to UNLIKE "${foodNameToToggle}"`);
         currentLocalLikedNames = currentLocalLikedNames.filter(name => name !== foodNameToToggle);
-        setIsCurrentFoodLiked(false);
+        // setIsCurrentFoodLiked(false); // Handled by useEffect
         toast({ description: `"${foodNameToToggle}" ถูกนำออกจากรายการที่ถูกใจแล้ว` });
         console.log(`[Toggle Like - localStorage] UNLIKED and removed: "${foodNameToToggle}"`);
-      } else { // User wants to LIKE
+      } else { 
+        console.log(`[Toggle Like - localStorage] Attempting to LIKE "${foodNameToToggle}"`);
         currentLocalLikedNames.push(foodNameToToggle);
-        setIsCurrentFoodLiked(true);
+        // setIsCurrentFoodLiked(true); // Handled by useEffect
         toast({ description: `ถูกใจ "${foodNameToToggle}" แล้ว!` });
         console.log(`[Toggle Like - localStorage] LIKED and added: "${foodNameToToggle}"`);
       }
@@ -348,44 +359,17 @@ export default function FSFAPage() {
       setLikedMealsList(currentLocalLikedNames.map(name => ({ name })).sort((a,b) => a.name.localeCompare(b.name)));
     }
     setIsLiking(false);
-    console.log(`[Toggle Like] Action complete for: "${foodNameToToggle}". Current isCurrentFoodLiked: ${!alreadyLiked}`);
+    console.log(`[Toggle Like] Action complete for: "${foodNameToToggle}". isLiking set to false.`);
   };
   
-  // Function to load liked meal names, used by useEffect and potentially by other actions
-  const loadUserLikedMealNames = async () => {
-    console.log(`[loadUserLikedMealNames Func] Loading. User: ${currentUser?.uid || 'Anonymous'}`);
-    setIsLoadingMyMeals(true);
-    let fetchedMealItems: LikedMealItem[] = [];
-
-    if (currentUser?.uid) {
-      try {
-        const likedMealNamesRef = collection(db, `users/${currentUser.uid}/likedMealNames`);
-        const q = query(likedMealNamesRef, orderBy('likedAt', 'desc'));
-        const querySnapshot = await getDocs(q);
-        fetchedMealItems = querySnapshot.docs.map(doc => ({
-          id: doc.id,
-          name: doc.data().foodName as string,
-          likedAt: doc.data().likedAt,
-        }));
-      } catch (error) {
-        console.error("[loadUserLikedMealNames Func] Error fetching from Firestore:", error);
-        toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดรายการที่ถูกใจจากระบบคลาวด์ได้", variant: "destructive" });
-      }
-    } else {
-      const localData = localStorage.getItem(LOCAL_STORAGE_LIKED_MEALS_KEY);
-      if (localData) {
-        try {
-          const names: string[] = JSON.parse(localData);
-          fetchedMealItems = names.map(name => ({ name })).sort((a, b) => a.name.localeCompare(b.name));
-        } catch (e) {
-          console.error("[loadUserLikedMealNames Func] Error parsing from localStorage:", e);
-          localStorage.removeItem(LOCAL_STORAGE_LIKED_MEALS_KEY);
-        }
-      }
-    }
-    setLikedMealsList(fetchedMealItems);
-    setIsLoadingMyMeals(false);
-    console.log(`[loadUserLikedMealNames Func] Finished. Fetched ${fetchedMealItems.length} items.`);
+  // This function is primarily for the "My Meals" dialog when it opens.
+  // The main list (`likedMealsList`) is updated by `loadUserLikedMealNames` via useEffect on `currentUser` change.
+  const openMyMealsDialog = () => {
+    console.log("[My Meals Dialog] Opening dialog. Current likedMealsList count:", likedMealsList.length);
+    // Optionally, re-fetch or ensure data is fresh if dialog can be open for long periods
+    // For now, assume likedMealsList is kept up-to-date by the useEffect on currentUser
+    // and by handleToggleLike directly manipulating it.
+    setIsMyMealsDialogOpen(true);
   };
 
 
@@ -409,10 +393,7 @@ export default function FSFAPage() {
               variant="ghost"
               size="icon"
               className="rounded-full w-11 h-11 md:w-12 md:h-12"
-              onClick={() => {
-                loadUserLikedMealNames(); // Ensure data is fresh when opening
-                setIsMyMealsDialogOpen(true);
-              }}
+              onClick={openMyMealsDialog}
               aria-label="มื้ออาหารของฉัน"
             >
               <ListChecks className="w-6 h-6 md:w-7 md:h-7 text-primary" />
@@ -572,7 +553,6 @@ export default function FSFAPage() {
 
       </main>
 
-      {/* My Meals Dialog - Shows only names now */}
       <Dialog open={isMyMealsDialogOpen} onOpenChange={setIsMyMealsDialogOpen}>
         <DialogContent className="max-w-md min-h-[50vh] flex flex-col sm:max-w-md"> 
           <DialogHeader>
@@ -608,11 +588,6 @@ export default function FSFAPage() {
                   {likedMealsList.map((meal, index) => (
                     <li key={meal.id || `${meal.name}-${index}`} className="p-3 bg-card border rounded-lg shadow-sm text-foreground font-body text-md">
                       {meal.name}
-                      {/* Optionally, if you want to show likedAt for Firestore items:
-                      {currentUser && meal.likedAt && (
-                        <span className="text-xs text-muted-foreground ml-2">({formatDate(meal.likedAt)})</span>
-                      )}
-                      */}
                     </li>
                   ))}
                 </ul>
