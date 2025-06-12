@@ -598,11 +598,11 @@ export default function FSFAPage() {
             <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4 md:space-y-6">
               <div>
                 <Label htmlFor="food-image-upload" className="text-sm sm:text-base md:text-lg font-body text-foreground">อัปโหลดรูปภาพอาหาร</Label>
-                <Input id="food-image-upload" type="file" accept="image/*" onChange={handleFileChange} className="mt-1 sm:mt-2 file:text-accent file:font-semibold file:mr-2 file:px-2 sm:file:px-3 file:py-1 file:rounded-full file:border-0 file:bg-accent/20 hover:file:bg-accent/30 text-xs sm:text-sm md:text-base p-1 sm:p-2" />
+                <Input id="food-image-upload" type="file" accept="image/*" onChange={handleFileChange} className="mt-1 sm:mt-2 file:text-primary-foreground file:font-semibold file:mr-2 file:px-2 sm:file:px-3 file:py-1 file:rounded-md file:border-0 file:bg-primary hover:file:bg-primary/90 text-xs sm:text-sm md:text-base p-1 sm:p-2" />
               </div>
               
               {previewUrl && (
-                 <div className="mt-2 sm:mt-4 md:mt-6 mb-2 sm:mb-4 md:mb-6 flex flex-col items-center space-y-1 sm:space-y-2 md:space-y-4 border border-dashed border-border p-2 sm:p-4 md:p-6 rounded-lg bg-card shadow-sm">
+                 <div className="mt-2 sm:mt-4 md:mt-6 mb-2 sm:mb-4 md:mb-6 flex flex-col items-center space-y-1 sm:space-y-2 md:space-y-4 border border-border/60 p-2 sm:p-4 md:p-6 rounded-lg bg-muted/20 shadow-inner">
                     <div className="flex-shrink-0 flex flex-col items-center">
                       <p className="text-xs sm:text-sm font-body mb-1 sm:mb-2 text-muted-foreground">ตัวอย่างรูปภาพ:</p>
                       <Image src={previewUrl} alt="Food preview" width={150} height={150} className="rounded-lg shadow-md object-contain max-h-36 sm:max-h-48 md:max-h-56 mx-auto" data-ai-hint="food meal" />
@@ -802,7 +802,7 @@ export default function FSFAPage() {
               ) : (
                 <ul className="space-y-1 sm:space-y-2 p-1">
                   {likedMealsList.map((meal, index) => (
-                    <li key={meal.id || `${meal.name}-${index}`} className="p-2 sm:p-3 bg-card border rounded-lg shadow-sm text-foreground font-body text-xs sm:text-sm md:text-base">
+                    <li key={meal.id || `${meal.name}-${index}`} className="p-2 sm:p-3 bg-card border rounded-lg shadow-sm text-foreground font-body text-xs sm:text-sm md:text-base hover:bg-muted/40 transition-colors duration-150 cursor-default">
                       {meal.name}
                       {meal.likedAt && currentUser && (
                         <span className="block text-xs text-muted-foreground mt-1">
