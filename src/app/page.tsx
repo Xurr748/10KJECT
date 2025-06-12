@@ -12,7 +12,9 @@ import {
 } from '@/ai/flows/food-image-analyzer';
 import { auth, db, serverTimestamp } from '@/lib/firebase'; 
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { collection, addDoc, query, where, getDocs } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, orderBy, Timestamp as FirestoreTimestamp } from 'firebase/firestore';
+import { format } from 'date-fns';
+import { th } from 'date-fns/locale';
 
 
 // ShadCN UI Components
@@ -24,6 +26,14 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -31,9 +41,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Skeleton } from '@/components/ui/skeleton';
+
 
 // Lucide Icons
-import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2, Heart, ChefHat } from 'lucide-react';
+import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2, Heart, ChefHat, CalendarDays } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 const GENERIC_NUTRITION_UNAVAILABLE = "ไม่สามารถระบุข้อมูลทางโภชนาการได้";
@@ -53,6 +65,12 @@ const PageSection: React.FC<{title: string; icon: React.ReactNode; children: Rea
 );
 PageSection.displayName = 'PageSection';
 
+interface LikedMeal {
+  id: string;
+  foodName: string;
+  imageUrl: string;
+  likedAt: FirestoreTimestamp; 
+}
 
 export default function FSFAPage() {
   const { toast } = useToast();
@@ -68,6 +86,10 @@ export default function FSFAPage() {
   const [isLiking, setIsLiking] = useState(false);
   const [isAlreadyLiked, setIsAlreadyLiked] = useState(false);
 
+  const [isMyMealsDialogOpen, setIsMyMealsDialogOpen] = useState(false);
+  const [likedMeals, setLikedMeals] = useState<LikedMeal[]>([]);
+  const [isLoadingMyMeals, setIsLoadingMyMeals] = useState(false);
+
 
   const isFoodIdentified = imageAnalysisResult && imageAnalysisResult.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
 
@@ -81,19 +103,60 @@ export default function FSFAPage() {
     return () => unsubscribeAuth(); 
   }, []);
 
+  const formatDate = (timestamp: FirestoreTimestamp | Date | undefined) => {
+    if (!timestamp) return 'ไม่ระบุวันที่';
+    const date = timestamp instanceof FirestoreTimestamp ? timestamp.toDate() : timestamp;
+    try {
+      return format(date, "d MMMM yyyy, HH:mm น.", { locale: th });
+    } catch (error) {
+      console.error("Error formatting date:", error, timestamp);
+      return 'วันที่ไม่ถูกต้อง';
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser) {
+      const fetchLikedMealsData = async () => {
+        setIsLoadingMyMeals(true);
+        try {
+          const likedMealsRef = collection(db, `users/${currentUser.uid}/likedMeals`);
+          const q = query(likedMealsRef, orderBy('likedAt', 'desc'));
+          const querySnapshot = await getDocs(q);
+          const mealsData = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data(),
+          })) as LikedMeal[];
+          setLikedMeals(mealsData);
+        } catch (error) {
+          console.error("Error fetching liked meals:", error);
+          setLikedMeals([]); 
+          toast({
+            title: "เกิดข้อผิดพลาด",
+            description: "ไม่สามารถโหลด 'มื้ออาหารของฉัน' ได้",
+            variant: "destructive",
+          });
+        } finally {
+          setIsLoadingMyMeals(false);
+        }
+      };
+      fetchLikedMealsData();
+    } else {
+      setLikedMeals([]); 
+      setIsLoadingMyMeals(false);
+    }
+  }, [currentUser, toast]);
+
   useEffect(() => {
     const checkIfLiked = async () => {
       if (currentUser && imageAnalysisResult && previewUrl && isFoodIdentified) {
         try {
           const likedMealsRef = collection(db, `users/${currentUser.uid}/likedMeals`);
-          // Check if an item with the same image URL (acting as a unique enough identifier for this specific scan)
-          // and same food name already exists.
           const q = query(likedMealsRef, where("imageUrl", "==", previewUrl), where("foodName", "==", imageAnalysisResult.foodItem));
           const querySnapshot = await getDocs(q);
           setIsAlreadyLiked(!querySnapshot.empty);
         } catch (error) {
           console.error("Error checking if meal is liked:", error);
-          setIsAlreadyLiked(false); // Default to not liked on error
+          setIsAlreadyLiked(false); 
         }
       } else {
         setIsAlreadyLiked(false);
@@ -109,7 +172,7 @@ export default function FSFAPage() {
       toast({
         title: "ออกจากระบบสำเร็จ",
       });
-      resetState(); // Ensure all page state is reset
+      resetState(); 
     } catch (error: unknown) {
       console.error("Logout error:", error);
       toast({
@@ -126,6 +189,8 @@ export default function FSFAPage() {
     setImageError(null);
     setIsLiking(false);
     setIsAlreadyLiked(false);
+    setLikedMeals([]); // Also reset liked meals
+    setIsMyMealsDialogOpen(false);
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -139,7 +204,7 @@ export default function FSFAPage() {
       reader.readAsDataURL(file);
       setImageAnalysisResult(null); 
       setImageError(null);
-      setIsAlreadyLiked(false); // Reset liked status for new image
+      setIsAlreadyLiked(false); 
     }
   };
 
@@ -222,17 +287,25 @@ export default function FSFAPage() {
       const likedMealsRef = collection(db, `users/${currentUser.uid}/likedMeals`);
       await addDoc(likedMealsRef, {
         foodName: imageAnalysisResult.foodItem,
-        imageUrl: previewUrl, // This is the base64 data URI
+        imageUrl: previewUrl, 
         likedAt: serverTimestamp(),
         userId: currentUser.uid,
-        // Optionally store the full analysis:
-        // analysisDetails: imageAnalysisResult 
       });
       toast({
         title: "ถูกใจสำเร็จ!",
-        description: `${imageAnalysisResult.foodItem} ถูกเพิ่มใน "มื้ออาหารของฉัน" แล้ว`,
+        description: `${imageAnalysisResult.foodItem} ถูกเพิ่มใน \"มื้ออาหารของฉัน\" แล้ว`,
       });
-      setIsAlreadyLiked(true); // Update liked status
+      setIsAlreadyLiked(true); 
+      // Refresh liked meals data for the dialog if it's open or will be opened soon
+      const likedMealsRefetch = collection(db, `users/${currentUser.uid}/likedMeals`);
+      const q = query(likedMealsRefetch, orderBy('likedAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      const mealsData = querySnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as LikedMeal[];
+      setLikedMeals(mealsData);
+
     } catch (error) {
       console.error("Error liking meal:", error);
       toast({
@@ -276,12 +349,19 @@ export default function FSFAPage() {
                     <DropdownMenuItem disabled>
                       <span className="truncate">{currentUser.email}</span>
                     </DropdownMenuItem>
-                     <DropdownMenuItem asChild>
-                      <Link href="/my-meals" className="flex items-center w-full cursor-pointer">
+                     <DropdownMenuItem
+                        onClick={() => {
+                          if (currentUser) {
+                            setIsMyMealsDialogOpen(true);
+                          } else {
+                            toast({ title: "กรุณาเข้าสู่ระบบ", description: "เพื่อดูมื้ออาหารของคุณ" });
+                          }
+                        }}
+                        className="flex items-center w-full cursor-pointer"
+                      >
                         <ChefHat className="mr-2 h-4 w-4" />
                         <span>มื้ออาหารของฉัน</span>
-                      </Link>
-                    </DropdownMenuItem>
+                      </DropdownMenuItem>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
                       <LogOut className="mr-2 h-4 w-4" />
@@ -421,10 +501,97 @@ export default function FSFAPage() {
 
       </main>
 
+      {/* My Meals Dialog */}
+      <Dialog open={isMyMealsDialogOpen} onOpenChange={setIsMyMealsDialogOpen}>
+        <DialogContent className="max-w-3xl min-h-[70vh] flex flex-col sm:max-w-2xl md:max-w-3xl"> {/* Responsive max-width */}
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-headline text-primary flex items-center">
+              <ChefHat className="w-7 h-7 mr-2" />
+              มื้ออาหารของฉัน
+            </DialogTitle>
+            <DialogDescription>
+              รายการอาหารที่คุณกดถูกใจไว้
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-grow overflow-hidden py-4">
+            <ScrollArea className="h-full pr-4"> {/* Added pr-4 for scrollbar spacing */}
+              {isLoadingMyMeals ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-1"> {/* Fewer columns for dialog */}
+                  {[...Array(4)].map((_, index) => ( // Show more skeletons if needed
+                    <Card key={index} className="shadow-md rounded-lg overflow-hidden">
+                      <CardHeader className="p-0">
+                        <Skeleton className="h-32 w-full" /> {/* Smaller skeleton height */}
+                      </CardHeader>
+                      <CardContent className="p-3 space-y-1">
+                        <Skeleton className="h-5 w-3/4 rounded" />
+                        <Skeleton className="h-3 w-1/2 rounded" />
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              ) : likedMeals.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center p-6">
+                  <Info className="w-12 h-12 text-primary mb-3" /> {/* Smaller icon */}
+                  <p className="text-lg font-semibold text-foreground">ยังไม่มีมื้ออาหารที่ถูกใจ</p>
+                  <p className="text-sm text-muted-foreground">
+                    เมื่อคุณกดถูกใจมื้ออาหารที่สแกนแล้ว รายการจะแสดงที่นี่ค่ะ
+                  </p>
+                  <Button onClick={() => setIsMyMealsDialogOpen(false)} className="mt-4 text-sm" size="sm">
+                    <Utensils className="mr-2 h-4 w-4" /> ไปสแกนอาหาร
+                  </Button>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-1"> {/* Fewer columns for dialog */}
+                  {likedMeals.map((meal) => (
+                    <Card key={meal.id} className="shadow-md rounded-xl overflow-hidden flex flex-col bg-card hover:shadow-lg transition-shadow duration-300">
+                      <CardHeader className="p-0 relative">
+                        {meal.imageUrl ? (
+                          <Image
+                            src={meal.imageUrl}
+                            alt={meal.foodName}
+                            width={250} 
+                            height={160} 
+                            className="object-cover w-full h-32 md:h-40 rounded-t-xl" 
+                            data-ai-hint="food meal"
+                          />
+                        ) : (
+                          <div className="w-full h-32 md:h-40 rounded-t-xl bg-muted flex items-center justify-center">
+                            <Utensils className="w-10 h-10 text-muted-foreground" />
+                          </div>
+                        )}
+                      </CardHeader>
+                      <CardContent className="p-3 flex-grow flex flex-col justify-between">
+                        <div>
+                          <CardTitle className="text-md font-headline text-primary mb-1 truncate" title={meal.foodName}>
+                            {meal.foodName}
+                          </CardTitle>
+                          <CardDescription className="text-xs text-muted-foreground flex items-center">
+                            <CalendarDays className="w-3 h-3 mr-1.5" />
+                            ถูกใจเมื่อ: {formatDate(meal.likedAt)}
+                          </CardDescription>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </div>
+          <DialogFooter className="mt-auto pt-4 border-t">
+            <Button variant="outline" onClick={() => setIsMyMealsDialogOpen(false)}>
+              ปิด
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+
       <footer className="text-center py-8 mt-12 md:mt-16 border-t border-border/50">
         <p className="text-muted-foreground font-body">&copy; {new Date().getFullYear()} FSFA (Food Security For All) สงวนลิขสิทธิ์</p>
       </footer>
     </div>
   );
 }
+    
+
     
