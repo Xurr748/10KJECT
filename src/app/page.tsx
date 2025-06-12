@@ -136,10 +136,14 @@ export default function FSFAPage() {
     const localUserId = currentUser?.uid;
     console.log('[My Meals Load Effect] currentUser object at start of loadUserLikedMealNames:', JSON.stringify(currentUser));
     console.log(`[My Meals Load Effect] Attempting to load liked meal names. User ID from currentUser.uid: '${localUserId || 'Anonymous'}' (Type: ${typeof localUserId})`);
-
+  
+    if (!localUserId || typeof localUserId !== 'string' || localUserId.trim() === '') {
+      console.warn(`[My Meals Load Effect] User ID is invalid or empty ('${localUserId}'). Will attempt to load from localStorage if available, but Firestore operations for this user will be skipped.`);
+    }
+  
     setIsLoadingMyMeals(true);
     let fetchedMealItems: LikedMealItem[] = [];
-
+  
     if (localUserId && typeof localUserId === 'string' && localUserId.trim() !== '') {
       console.log(`[My Meals Load Effect] User ID '${localUserId}' is valid and non-empty. Fetching from Firestore.`);
       try {
@@ -479,6 +483,8 @@ export default function FSFAPage() {
         const userId = currentUser.uid;
         if (!userId || typeof userId !== 'string' || userId.trim() === '') {
           toast({ title: "ข้อผิดพลาด", description: "ID ผู้ใช้ไม่ถูกต้อง ไม่สามารถล้างข้อมูลได้", variant: "destructive" });
+          setIsClearingMeals(false); // Ensure state is reset on early exit
+          setIsClearConfirmOpen(false);
           return;
         }
         console.log(`[Clear All Meals - Firestore] Clearing for user ID: ${userId}`);
@@ -500,7 +506,7 @@ export default function FSFAPage() {
         localStorage.removeItem(LOCAL_STORAGE_LIKED_MEALS_KEY);
       }
       setLikedMealsList([]);
-      setIsCurrentFoodLiked(false); // Also update like status for current food if it was liked
+      setIsCurrentFoodLiked(false); 
       toast({ description: "ล้างรายการอาหารที่ถูกใจทั้งหมดแล้ว" });
     } catch (error) {
       console.error("Error clearing all liked meals:", error);
@@ -508,7 +514,7 @@ export default function FSFAPage() {
     } finally {
       setIsClearingMeals(false);
       setIsClearConfirmOpen(false); 
-      setIsMyMealsDialogOpen(false); // Close main dialog after clearing
+      setIsMyMealsDialogOpen(false); 
       console.log("[Clear All Meals] Operation finished.");
     }
   };
@@ -531,7 +537,7 @@ export default function FSFAPage() {
           </div>
           <div className="flex items-center space-x-2 md:space-x-3 ml-4">
             <Button
-              variant="ghost"
+              variant="outline"
               size="icon"
               className="rounded-full w-11 h-11 md:w-12 md:h-12"
               onClick={openMyMealsDialog}
@@ -541,7 +547,7 @@ export default function FSFAPage() {
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="rounded-full w-11 h-11 md:w-12 md:h-12">
+                <Button variant="outline" size="icon" className="rounded-full w-11 h-11 md:w-12 md:h-12">
                   <UserCircle className="w-7 h-7 md:w-8 md:h-8 text-primary" />
                 </Button>
               </DropdownMenuTrigger>
@@ -596,12 +602,12 @@ export default function FSFAPage() {
               </div>
               
               {previewUrl && (
-                <div className="mt-6 mb-6 flex flex-col items-center space-y-4 md:items-center md:justify-center md:space-y-0 md:space-x-8 border border-dashed border-border p-6 rounded-lg bg-card shadow-sm">
-                  <div className="flex-shrink-0 flex flex-col items-center">
-                    <p className="text-sm font-body mb-2 text-muted-foreground">ตัวอย่างรูปภาพ:</p>
-                    <Image src={previewUrl} alt="Food preview" width={240} height={240} className="rounded-lg shadow-md object-contain max-h-56 mx-auto" data-ai-hint="food meal" />
+                 <div className="mt-6 mb-6 flex flex-col items-center space-y-4 md:items-center md:justify-center md:space-y-0 md:space-x-8 border border-dashed border-border p-6 rounded-lg bg-card shadow-sm">
+                    <div className="flex-shrink-0 flex flex-col items-center">
+                      <p className="text-sm font-body mb-2 text-muted-foreground">ตัวอย่างรูปภาพ:</p>
+                      <Image src={previewUrl} alt="Food preview" width={240} height={240} className="rounded-lg shadow-md object-contain max-h-56 mx-auto" data-ai-hint="food meal" />
+                    </div>
                   </div>
-                </div>
               )}
 
               {imageError && <p className="text-destructive text-sm font-body flex items-center"><AlertCircle className="w-4 h-4 mr-1" />{imageError}</p>}
@@ -637,7 +643,7 @@ export default function FSFAPage() {
                             size="icon"
                             onClick={() => handleToggleLike(imageAnalysisResult?.foodItem)}
                             disabled={isLiking}
-                            className="rounded-full text-pink-500 hover:bg-pink-500/10 data-[state=liked]:text-green-600 data-[state=liked]:bg-green-500/20"
+                            className="rounded-full hover:bg-pink-500/10 data-[state=liked]:bg-green-500/20"
                             data-state={isCurrentFoodLiked ? 'liked' : 'unliked'}
                             aria-label={isCurrentFoodLiked ? 'ยกเลิกการถูกใจ' : 'ถูกใจ'}
                           >
@@ -695,8 +701,8 @@ export default function FSFAPage() {
         <PageSection title="พูดคุยกับ AI ผู้ช่วย 💬🧠" icon={<MessageCircle />} id="chatbot-section" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
           <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
             <CardHeader>
-              <CardTitle className="text-2xl font-headline text-accent">FSFA Chatbot</CardTitle>
-              <CardDescription className="text-md font-body">สอบถามเกี่ยวกับอาหาร โภชนาการ หรือเรื่องอื่นๆ ที่เกี่ยวข้อง</CardDescription>
+              <CardTitle className="text-2xl font-headline text-accent">Momu Ai</CardTitle>
+              <CardDescription className="text-md font-body">สอบถามเกี่ยวกับอาหารและโภชนาการได้ที่นี้😉</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <ScrollArea className="h-72 w-full border rounded-md p-4 bg-muted/30" viewportRef={chatScrollAreaRef}>
@@ -850,4 +856,3 @@ export default function FSFAPage() {
   );
 }
     
-
