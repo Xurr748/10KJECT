@@ -319,7 +319,6 @@ export default function FSFAPage() {
         if (!userId || typeof userId !== 'string' || userId.trim() === '') {
             console.error("[Toggle Like - Firestore] Invalid User ID. Aborting Firestore operation.");
             toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถดำเนินการได้เนื่องจาก ID ผู้ใช้ไม่ถูกต้อง", variant: "destructive"});
-            // No return here, finally will set isLiking to false
         } else {
             const likedMealNamesRef = collection(db, 'users', userId, 'likedMealNames');
             if (alreadyLikedInCurrentList) { 
@@ -532,7 +531,7 @@ export default function FSFAPage() {
                             size="icon"
                             onClick={() => handleToggleLike(imageAnalysisResult?.foodItem)}
                             disabled={isLiking}
-                            className="rounded-full text-pink-500 hover:bg-pink-500/10 data-[state=liked]:text-pink-600 data-[state=liked]:bg-pink-500/20"
+                            className="rounded-full text-pink-500 hover:bg-pink-500/10 data-[state=liked]:text-green-600 data-[state=liked]:bg-green-500/20"
                             data-state={isCurrentFoodLiked ? 'liked' : 'unliked'}
                             aria-label={isCurrentFoodLiked ? 'ยกเลิกการถูกใจ' : 'ถูกใจ'}
                           >
@@ -651,4 +650,3 @@ export default function FSFAPage() {
   );
 }
     
-
