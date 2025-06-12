@@ -392,7 +392,7 @@ export default function FSFAPage() {
                 console.log(`[Toggle Like - Firestore] Successfully added to Firestore. New Doc ID: ${newDocRef.id}`);
 
                 const newItem: LikedMealItem = { name: foodNameToToggle, id: newDocRef.id, likedAt: new Date() }; 
-                setLikedMealsList(prev => [newItem, ...prev].sort((a,b) => (b.likedAt instanceof Date && a.likedAt instanceof Date) ? b.likedAt.getTime() - a.likedAt.getTime() : 0));
+                setLikedMealsList(prev => [{ name: foodNameToToggle, id: newDocRef.id, likedAt: new Date() }, ...prev].sort((a,b) => (b.likedAt instanceof Date && a.likedAt instanceof Date) ? b.likedAt.getTime() - a.likedAt.getTime() : 0));
                 setIsCurrentFoodLiked(true); 
                 toast({ description: `ถูกใจ "${foodNameToToggle}" แล้ว!`});
                 console.log(`[Toggle Like - Firestore] LIKED and added to Firestore: "${foodNameToToggle}". likedMealsList updated.`);
@@ -543,12 +543,12 @@ export default function FSFAPage() {
               onClick={openMyMealsDialog}
               aria-label="มื้ออาหารของฉัน"
             >
-              <ListChecks className="w-6 h-6 md:w-7 md:h-7 text-primary" />
+              <ListChecks className="w-6 h-6 md:w-7 md:h-7 text-accent" />
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon" className="rounded-full w-11 h-11 md:w-12 md:h-12">
-                  <UserCircle className="w-7 h-7 md:w-8 md:h-8 text-primary" />
+                  <UserCircle className="w-7 h-7 md:w-8 md:h-8 text-accent" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
