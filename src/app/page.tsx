@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+// Removed: import { useRouter } from 'next/navigation'; 
 import { 
   scanFoodImage, 
   type ScanFoodImageInput, 
@@ -17,7 +17,7 @@ import {
   type ChatMessage
 } from '@/ai/flows/post-scan-chat';
 import { auth, db, serverTimestamp } from '@/lib/firebase'; 
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, type User } from 'firebase/auth'; // Added auth functions
 import { collection, addDoc, query, where, getDocs, orderBy, Timestamp as FirestoreTimestamp, doc, deleteDoc, writeBatch } from 'firebase/firestore';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
@@ -39,6 +39,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
+  DialogTrigger, // Added DialogTrigger
 } from "@/components/ui/dialog";
 import {
   AlertDialog,
@@ -92,7 +93,7 @@ interface LikedMealItem {
 
 export default function FSFAPage() {
   const { toast } = useToast();
-  const router = useRouter();
+  // Removed: const router = useRouter(); 
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
@@ -120,11 +121,20 @@ export default function FSFAPage() {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const chatScrollAreaRef = useRef<HTMLDivElement>(null);
 
+  // State for Login and Register Dialogs
+  const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false);
+  const [isRegisterDialogOpen, setIsRegisterDialogOpen] = useState(false);
+
+
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       console.log('[Auth Effect] Auth state changed. User object (stringified):', JSON.stringify(user));
       console.log('[Auth Effect] User UID:', user?.uid || 'Anonymous');
       setCurrentUser(user);
+      if (user) { // Close dialogs if user logs in/registers
+        setIsLoginDialogOpen(false);
+        setIsRegisterDialogOpen(false);
+      }
     });
     return () => {
       console.log('[Auth Effect] Unsubscribing auth listener.');
@@ -519,6 +529,240 @@ export default function FSFAPage() {
     }
   };
 
+  // Login Dialog Content Component
+  const LoginDialogContent = () => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+  
+    const handleLogin = async (event: React.FormEvent) => {
+      event.preventDefault();
+      setIsLoading(true);
+      try {
+        await signInWithEmailAndPassword(auth, email, password);
+        toast({
+          title: "เข้าสู่ระบบสำเร็จ",
+          description: "ยินดีต้อนรับกลับ!",
+        });
+        setIsLoginDialogOpen(false); 
+      } catch (error: any) {
+        console.error('Login error:', error);
+        let errorMessage = "เกิดข้อผิดพลาดในการเข้าสู่ระบบ";
+        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+          errorMessage = "อีเมลหรือรหัสผ่านไม่ถูกต้อง";
+        } else if (error.code === 'auth/invalid-email') {
+          errorMessage = "รูปแบบอีเมลไม่ถูกต้อง";
+        }
+        toast({
+          title: "เข้าสู่ระบบไม่สำเร็จ",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    return (
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-2xl font-headline text-primary text-center">เข้าสู่ระบบ</DialogTitle>
+          <DialogDescription className="text-center">
+            ยินดีต้อนรับกลับ! กรอกข้อมูลเพื่อเข้าสู่ระบบ
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleLogin} className="space-y-6 px-6 pb-6">
+          <div className="space-y-2">
+            <Label htmlFor="login-email">อีเมล</Label>
+            <Input
+              id="login-email"
+              type="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="text-lg p-3"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="login-password">รหัสผ่าน</Label>
+            <Input
+              id="login-password"
+              type="password"
+              placeholder="••••••••"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              className="text-lg p-3"
+            />
+          </div>
+          <Button type="submit" className="w-full text-lg py-6" size="lg" disabled={isLoading}>
+            {isLoading ? (
+              <>
+                <Loader2 className="animate-spin -ml-1 mr-3 h-5 w-5" />
+                กำลังเข้าสู่ระบบ...
+              </>
+            ) : (
+              <>
+                <LogIn className="mr-2 h-5 w-5" /> เข้าสู่ระบบ
+              </>
+            )}
+          </Button>
+        </form>
+        <DialogFooter className="px-6 pb-6 flex flex-col items-center space-y-2 pt-0 border-t-0">
+          <p className="text-sm text-muted-foreground">
+            ยังไม่มีบัญชี?{' '}
+            <Button
+              variant="link"
+              className="p-0 h-auto font-medium text-primary hover:underline"
+              onClick={() => {
+                setIsLoginDialogOpen(false);
+                setIsRegisterDialogOpen(true);
+              }}
+            >
+              <UserPlus className="mr-1 h-4 w-4" /> ลงทะเบียนที่นี่
+            </Button>
+          </p>
+        </DialogFooter>
+      </DialogContent>
+    );
+  };
+
+  // Register Dialog Content Component
+  const RegisterDialogContent = () => {
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+  
+    const handleRegister = async (event: React.FormEvent) => {
+      event.preventDefault();
+      setIsLoading(true);
+  
+      if (password !== confirmPassword) {
+        toast({
+          title: "ลงทะเบียนไม่สำเร็จ",
+          description: "รหัสผ่านและการยืนยันรหัสผ่านไม่ตรงกัน",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+  
+      if (password.length < 6) {
+        toast({
+          title: "ลงทะเบียนไม่สำเร็จ",
+          description: "รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+  
+      try {
+        await createUserWithEmailAndPassword(auth, email, password);
+        toast({
+          title: "ลงทะเบียนสำเร็จ",
+          description: "บัญชีของคุณถูกสร้างเรียบร้อยแล้ว",
+        });
+        setIsRegisterDialogOpen(false); 
+      } catch (error: any) {
+        console.error('Registration error:', error);
+        let errorMessage = "เกิดข้อผิดพลาดในการลงทะเบียน";
+        if (error.code === 'auth/email-already-in-use') {
+          errorMessage = "อีเมลนี้ถูกใช้งานแล้ว";
+        } else if (error.code === 'auth/invalid-email') {
+          errorMessage = "รูปแบบอีเมลไม่ถูกต้อง";
+        } else if (error.code === 'auth/weak-password') {
+          errorMessage = "รหัสผ่านคาดเดายาก โปรดใช้รหัสผ่านที่ซับซ้อนกว่านี้";
+        }
+        toast({
+          title: "ลงทะเบียนไม่สำเร็จ",
+          description: errorMessage,
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    return (
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-2xl font-headline text-primary text-center">สร้างบัญชีใหม่</DialogTitle>
+          <DialogDescription className="text-center">
+            กรอกข้อมูลเพื่อลงทะเบียนใช้งาน
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleRegister} className="space-y-6 px-6 pb-6">
+            <div className="space-y-2">
+              <Label htmlFor="register-email">อีเมล</Label>
+              <Input
+                id="register-email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="text-lg p-3"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="register-password">รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)</Label>
+              <Input
+                id="register-password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                className="text-lg p-3"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="register-confirmPassword">ยืนยันรหัสผ่าน</Label>
+              <Input
+                id="register-confirmPassword"
+                type="password"
+                placeholder="••••••••"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                className="text-lg p-3"
+              />
+            </div>
+            <Button type="submit" className="w-full text-lg py-6" size="lg" disabled={isLoading}>
+              {isLoading ? (
+                <>
+                  <Loader2 className="animate-spin -ml-1 mr-3 h-5 w-5" />
+                  กำลังลงทะเบียน...
+                </>
+              ) : (
+                <>
+                  <UserPlus className="mr-2 h-5 w-5" /> สร้างบัญชี
+                </>
+              )}
+            </Button>
+          </form>
+          <DialogFooter className="px-6 pb-6 flex flex-col items-center space-y-2 pt-0 border-t-0">
+            <p className="text-sm text-muted-foreground">
+              มีบัญชีอยู่แล้ว?{' '}
+              <Button
+                variant="link"
+                className="p-0 h-auto font-medium text-primary hover:underline"
+                onClick={() => {
+                  setIsRegisterDialogOpen(false);
+                  setIsLoginDialogOpen(true);
+                }}
+              >
+                 <LogIn className="mr-1 h-4 w-4" /> เข้าสู่ระบบที่นี่
+              </Button>
+            </p>
+          </DialogFooter>
+      </DialogContent>
+    );
+  };
+
 
   return (
     <div className="min-h-screen bg-background text-foreground font-body p-2 sm:p-4 md:p-8">
@@ -567,17 +811,13 @@ export default function FSFAPage() {
                   </>
                 ) : (
                   <>
-                    <DropdownMenuItem asChild>
-                      <Link href="/login" className="flex items-center w-full cursor-pointer">
+                    <DropdownMenuItem onSelect={() => setIsLoginDialogOpen(true)} className="cursor-pointer">
                         <LogIn className="mr-2 h-4 w-4" />
                         <span>เข้าสู่ระบบ</span>
-                      </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/register" className="flex items-center w-full cursor-pointer">
+                    <DropdownMenuItem onSelect={() => setIsRegisterDialogOpen(true)} className="cursor-pointer">
                         <UserPlus className="mr-2 h-4 w-4" />
                         <span>ลงทะเบียน</span>
-                      </Link>
                     </DropdownMenuItem>
                   </>
                 )}
@@ -769,6 +1009,7 @@ export default function FSFAPage() {
 
       </main>
 
+      {/* My Meals Dialog */}
       <Dialog open={isMyMealsDialogOpen} onOpenChange={setIsMyMealsDialogOpen}>
         <DialogContent className="max-w-xs sm:max-w-sm md:max-w-md min-h-[60vh] sm:min-h-[50vh] flex flex-col p-3 sm:p-4 md:p-6"> 
           <DialogHeader>
@@ -859,6 +1100,16 @@ export default function FSFAPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Login Dialog */}
+      <Dialog open={isLoginDialogOpen} onOpenChange={setIsLoginDialogOpen}>
+        <LoginDialogContent />
+      </Dialog>
+
+      {/* Register Dialog */}
+      <Dialog open={isRegisterDialogOpen} onOpenChange={setIsRegisterDialogOpen}>
+        <RegisterDialogContent />
+      </Dialog>
+
 
       <footer className="text-center py-4 sm:py-6 md:py-8 mt-6 sm:mt-8 md:mt-12 lg:mt-16 border-t border-border/50">
         <p className="text-xs sm:text-sm text-muted-foreground font-body">&copy; {new Date().getFullYear()} FSFA (Food Security For All) สงวนลิขสิทธิ์</p>
@@ -867,4 +1118,3 @@ export default function FSFAPage() {
   );
 }
     
-
