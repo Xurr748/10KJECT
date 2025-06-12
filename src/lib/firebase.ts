@@ -3,7 +3,7 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getAnalytics, type Analytics, isSupported } from 'firebase/analytics'; // Import isSupported for robustness
-import { getFirestore, type Firestore } from 'firebase/firestore'; // Import Firestore
+import { getFirestore, type Firestore, serverTimestamp } from 'firebase/firestore'; // Import Firestore and serverTimestamp
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -45,4 +45,5 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export { app, auth, db, analytics };
+export { app, auth, db, analytics, serverTimestamp };
+

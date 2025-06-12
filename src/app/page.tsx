@@ -10,8 +10,10 @@ import {
   type ScanFoodImageInput, 
   type ScanFoodImageOutput 
 } from '@/ai/flows/food-image-analyzer';
-import { auth } from '@/lib/firebase'; 
+import { auth, db, serverTimestamp } from '@/lib/firebase'; 
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { collection, addDoc, query, where, getDocs } from 'firebase/firestore';
+
 
 // ShadCN UI Components
 import { Button } from '@/components/ui/button';
@@ -31,7 +33,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 // Lucide Icons
-import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2 } from 'lucide-react';
+import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2, Heart, ChefHat } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 const GENERIC_NUTRITION_UNAVAILABLE = "ไม่สามารถระบุข้อมูลทางโภชนาการได้";
@@ -63,15 +65,42 @@ export default function FSFAPage() {
   const [imageAnalysisResult, setImageAnalysisResult] = useState<ScanFoodImageOutput | null>(null);
   const [isLoadingImageAnalysis, setIsLoadingImageAnalysis] = useState(false);
   const [imageError, setImageError] = useState<string | null>(null);
+  const [isLiking, setIsLiking] = useState(false);
+  const [isAlreadyLiked, setIsAlreadyLiked] = useState(false);
+
 
   const isFoodIdentified = imageAnalysisResult && imageAnalysisResult.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
 
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
+      if (!user) {
+        resetState(); 
+      }
     });
     return () => unsubscribeAuth(); 
   }, []);
+
+  useEffect(() => {
+    const checkIfLiked = async () => {
+      if (currentUser && imageAnalysisResult && previewUrl && isFoodIdentified) {
+        try {
+          const likedMealsRef = collection(db, `users/${currentUser.uid}/likedMeals`);
+          // Check if an item with the same image URL (acting as a unique enough identifier for this specific scan)
+          // and same food name already exists.
+          const q = query(likedMealsRef, where("imageUrl", "==", previewUrl), where("foodName", "==", imageAnalysisResult.foodItem));
+          const querySnapshot = await getDocs(q);
+          setIsAlreadyLiked(!querySnapshot.empty);
+        } catch (error) {
+          console.error("Error checking if meal is liked:", error);
+          setIsAlreadyLiked(false); // Default to not liked on error
+        }
+      } else {
+        setIsAlreadyLiked(false);
+      }
+    };
+    checkIfLiked();
+  }, [currentUser, imageAnalysisResult, previewUrl, isFoodIdentified]);
 
 
   const handleLogout = async () => {
@@ -80,7 +109,7 @@ export default function FSFAPage() {
       toast({
         title: "ออกจากระบบสำเร็จ",
       });
-      resetState();
+      resetState(); // Ensure all page state is reset
     } catch (error: unknown) {
       console.error("Logout error:", error);
       toast({
@@ -95,6 +124,8 @@ export default function FSFAPage() {
     setPreviewUrl(null);
     setImageAnalysisResult(null);
     setImageError(null);
+    setIsLiking(false);
+    setIsAlreadyLiked(false);
   };
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -108,6 +139,7 @@ export default function FSFAPage() {
       reader.readAsDataURL(file);
       setImageAnalysisResult(null); 
       setImageError(null);
+      setIsAlreadyLiked(false); // Reset liked status for new image
     }
   };
 
@@ -118,6 +150,7 @@ export default function FSFAPage() {
     }
     setIsLoadingImageAnalysis(true);
     setImageError(null);
+    setIsAlreadyLiked(false);
     
     const reader = new FileReader();
     reader.readAsDataURL(selectedFile);
@@ -167,6 +200,52 @@ export default function FSFAPage() {
     };
   };
 
+  const handleLikeMeal = async () => {
+    if (!currentUser || !imageAnalysisResult || !previewUrl || !isFoodIdentified) {
+      toast({
+        title: "ไม่สามารถถูกใจได้",
+        description: "ต้องเข้าสู่ระบบและมีผลการวิเคราะห์อาหารก่อน",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (isAlreadyLiked) {
+       toast({
+        title: "ถูกใจแล้ว",
+        description: "คุณได้ถูกใจรายการอาหารนี้แล้ว",
+      });
+      return;
+    }
+
+    setIsLiking(true);
+    try {
+      const likedMealsRef = collection(db, `users/${currentUser.uid}/likedMeals`);
+      await addDoc(likedMealsRef, {
+        foodName: imageAnalysisResult.foodItem,
+        imageUrl: previewUrl, // This is the base64 data URI
+        likedAt: serverTimestamp(),
+        userId: currentUser.uid,
+        // Optionally store the full analysis:
+        // analysisDetails: imageAnalysisResult 
+      });
+      toast({
+        title: "ถูกใจสำเร็จ!",
+        description: `${imageAnalysisResult.foodItem} ถูกเพิ่มใน "มื้ออาหารของฉัน" แล้ว`,
+      });
+      setIsAlreadyLiked(true); // Update liked status
+    } catch (error) {
+      console.error("Error liking meal:", error);
+      toast({
+        title: "เกิดข้อผิดพลาด",
+        description: "ไม่สามารถบันทึกการถูกใจได้ โปรดลองอีกครั้ง",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLiking(false);
+    }
+  };
+
+
   return (
     <div className="min-h-screen bg-background text-foreground font-body p-4 md:p-8">
       <header className="py-8 text-center bg-gradient-to-r from-primary/10 via-secondary/20 to-primary/10 rounded-lg shadow-md mb-12">
@@ -197,6 +276,13 @@ export default function FSFAPage() {
                     <DropdownMenuItem disabled>
                       <span className="truncate">{currentUser.email}</span>
                     </DropdownMenuItem>
+                     <DropdownMenuItem asChild>
+                      <Link href="/my-meals" className="flex items-center w-full cursor-pointer">
+                        <ChefHat className="mr-2 h-4 w-4" />
+                        <span>มื้ออาหารของฉัน</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
                       <LogOut className="mr-2 h-4 w-4" />
                       <span>ออกจากระบบ</span>
@@ -301,6 +387,23 @@ export default function FSFAPage() {
                             </div>
                           </>
                         )}
+                        {currentUser && isFoodIdentified && previewUrl && (
+                          <div className="mt-4 pt-4 border-t border-border">
+                            <Button 
+                              onClick={handleLikeMeal} 
+                              disabled={isLiking || isAlreadyLiked}
+                              variant={isAlreadyLiked ? "secondary" : "default"}
+                              className="w-full text-md py-3"
+                            >
+                              {isLiking ? (
+                                <Loader2 className="animate-spin mr-2 h-5 w-5" />
+                              ) : (
+                                <Heart className={`mr-2 h-5 w-5 ${isAlreadyLiked ? 'fill-red-500 text-red-500' : ''}`} />
+                              )}
+                              {isAlreadyLiked ? "ถูกใจแล้ว" : "ถูกใจมื้อนี้"}
+                            </Button>
+                          </div>
+                        )}
                       </>
                     ) : (
                        <p className="text-md font-body text-foreground/80">
@@ -325,8 +428,3 @@ export default function FSFAPage() {
   );
 }
     
-
-    
-
-
-
