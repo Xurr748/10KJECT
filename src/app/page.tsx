@@ -72,10 +72,10 @@ const GENERIC_SAFETY_UNAVAILABLE = "ไม่มีคำแนะนำด้�
 const LOCAL_STORAGE_LIKED_MEALS_KEY = 'fsfa-likedMealNames';
 
 const PageSection: React.FC<{title: string; icon: React.ReactNode; children: React.ReactNode; id: string; className?: string; titleBgColor?: string; titleTextColor?: string;}> = ({ title, icon, children, id, className, titleBgColor = "bg-primary", titleTextColor = "text-primary-foreground" }) => (
-  <section id={id} className={`py-12 ${className || ''}`}>
+  <section id={id} className={`py-6 sm:py-8 md:py-12 ${className || ''}`}>
     <div className="container mx-auto px-4">
-      <h2 className={`text-4xl font-headline font-semibold text-center mb-10 ${titleTextColor} ${titleBgColor} py-3 rounded-lg shadow-md`}>
-        {React.cloneElement(icon as React.ReactElement, { className: "inline-block w-10 h-10 mr-3" })}
+      <h2 className={`text-xl sm:text-2xl md:text-3xl font-headline font-semibold text-center mb-4 sm:mb-6 md:mb-8 ${titleTextColor} ${titleBgColor} py-2 sm:py-3 rounded-lg shadow-md`}>
+        {React.cloneElement(icon as React.ReactElement, { className: "inline-block w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 mr-2 sm:mr-3" })}
         {title}
       </h2>
       {children}
@@ -483,7 +483,7 @@ export default function FSFAPage() {
         const userId = currentUser.uid;
         if (!userId || typeof userId !== 'string' || userId.trim() === '') {
           toast({ title: "ข้อผิดพลาด", description: "ID ผู้ใช้ไม่ถูกต้อง ไม่สามารถล้างข้อมูลได้", variant: "destructive" });
-          setIsClearingMeals(false); // Ensure state is reset on early exit
+          setIsClearingMeals(false); 
           setIsClearConfirmOpen(false);
           return;
         }
@@ -521,34 +521,34 @@ export default function FSFAPage() {
 
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-body p-4 md:p-8">
-      <header className="py-8 text-center bg-gradient-to-r from-primary/10 via-secondary/20 to-primary/10 rounded-lg shadow-md mb-12">
-        <div className="container mx-auto px-4 flex justify-between items-center">
+    <div className="min-h-screen bg-background text-foreground font-body p-2 sm:p-4 md:p-8">
+      <header className="py-4 sm:py-6 md:py-8 text-center bg-gradient-to-r from-primary/10 via-secondary/20 to-primary/10 rounded-lg shadow-md mb-6 sm:mb-8 md:mb-12">
+        <div className="container mx-auto px-2 sm:px-4 flex justify-between items-center">
           <div className="flex-1 text-left md:text-center">
              <Link href="/" className="inline-block">
-              <h1 className="text-4xl md:text-5xl font-headline font-bold text-primary flex items-center justify-start md:justify-center">
-                <Utensils className="w-10 h-10 md:w-12 md:h-12 mr-2 md:mr-4" />
-                FSFA <span className="text-2xl md:text-3xl font-normal ml-2 text-foreground/90">(Food Security For All 🍉🥗)</span>
+              <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-headline font-bold text-primary flex items-center justify-start md:justify-center">
+                <Utensils className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 mr-1 sm:mr-2 md:mr-4" />
+                FSFA <span className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-normal ml-1 sm:ml-2 text-foreground/90">(Food Security For All 🍉🥗)</span>
               </h1>
             </Link>
-            <p className="mt-1 md:mt-2 text-lg md:text-xl text-foreground/80 font-body text-left md:text-center">
+            <p className="mt-1 text-xs sm:text-sm md:text-base lg:text-lg text-foreground/80 font-body text-left md:text-center">
               สร้างความมั่นคงทางอาหารและสุขภาวะทางโภชนาการที่ดีสำหรับทุกคน
             </p>
           </div>
-          <div className="flex items-center space-x-2 md:space-x-3 ml-4">
+          <div className="flex items-center space-x-1 sm:space-x-2 md:space-x-3 ml-1 sm:ml-2 md:ml-4">
             <Button
               variant="outline"
               size="icon"
-              className="rounded-full w-11 h-11 md:w-12 md:h-12 group"
+              className="rounded-full w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 group"
               onClick={openMyMealsDialog}
               aria-label="มื้ออาหารของฉัน"
             >
-              <ListChecks className="w-6 h-6 md:w-7 md:h-7 text-accent group-hover:text-primary" />
+              <ListChecks className="w-4 h-4 sm:w-5 sm:h-5 md:w-7 md:h-7 text-accent group-hover:text-primary" />
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="rounded-full w-11 h-11 md:w-12 md:h-12 group">
-                  <UserCircle className="w-7 h-7 md:w-8 md:h-8 text-accent group-hover:text-primary" />
+                <Button variant="outline" size="icon" className="rounded-full w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 group">
+                  <UserCircle className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 text-accent group-hover:text-primary" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
@@ -587,54 +587,59 @@ export default function FSFAPage() {
         </div>
       </header>
 
-      <main className="container mx-auto px-4 space-y-10 md:space-y-16">
+      <main className="container mx-auto px-1 sm:px-2 md:px-4 space-y-6 sm:space-y-8 md:space-y-10 lg:space-y-16">
 
         <PageSection title="อาหารอะไรที่อยู่บนจานของคุณ? 🤔🍽️" icon={<Brain />} id="image-scanner" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-primary" titleTextColor="text-primary-foreground">
-          <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
-            <CardHeader>
-              <CardTitle className="text-2xl font-headline text-primary">AI วิเคราะห์อาหาร 🤖🥕</CardTitle>
-              <CardDescription className="text-md font-body">อัปโหลดรูปภาพอาหาร แล้ว AI ของเราจะให้ข้อมูลทางโภชนาการและคำแนะนำด้านความปลอดภัย</CardDescription>
+          <Card className="max-w-xl md:max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-lg sm:text-xl md:text-2xl font-headline text-primary">AI วิเคราะห์อาหาร 🤖🥕</CardTitle>
+              <CardDescription className="text-xs sm:text-sm md:text-base font-body">อัปโหลดรูปภาพอาหาร แล้ว AI ของเราจะให้ข้อมูลทางโภชนาการและคำแนะนำด้านความปลอดภัย</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-6">
+            <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4 md:space-y-6">
               <div>
-                <Label htmlFor="food-image-upload" className="text-lg font-body text-foreground">อัปโหลดรูปภาพอาหาร</Label>
-                <Input id="food-image-upload" type="file" accept="image/*" onChange={handleFileChange} className="mt-2 file:text-accent file:font-semibold file:mr-2 file:px-3 file:py-1 file:rounded-full file:border-0 file:bg-accent/20 hover:file:bg-accent/30 text-lg p-2" />
+                <Label htmlFor="food-image-upload" className="text-sm sm:text-base md:text-lg font-body text-foreground">อัปโหลดรูปภาพอาหาร</Label>
+                <Input id="food-image-upload" type="file" accept="image/*" onChange={handleFileChange} className="mt-1 sm:mt-2 file:text-accent file:font-semibold file:mr-2 file:px-2 sm:file:px-3 file:py-1 file:rounded-full file:border-0 file:bg-accent/20 hover:file:bg-accent/30 text-xs sm:text-sm md:text-base p-1 sm:p-2" />
               </div>
               
               {previewUrl && (
-                 <div className="mt-6 mb-6 flex flex-col items-center space-y-4 md:items-center md:justify-center md:space-y-0 md:space-x-8 border border-dashed border-border p-6 rounded-lg bg-card shadow-sm">
+                 <div className="mt-2 sm:mt-4 md:mt-6 mb-2 sm:mb-4 md:mb-6 flex flex-col items-center space-y-1 sm:space-y-2 md:space-y-4 border border-dashed border-border p-2 sm:p-4 md:p-6 rounded-lg bg-card shadow-sm">
                     <div className="flex-shrink-0 flex flex-col items-center">
-                      <p className="text-sm font-body mb-2 text-muted-foreground">ตัวอย่างรูปภาพ:</p>
-                      <Image src={previewUrl} alt="Food preview" width={240} height={240} className="rounded-lg shadow-md object-contain max-h-56 mx-auto" data-ai-hint="food meal" />
+                      <p className="text-xs sm:text-sm font-body mb-1 sm:mb-2 text-muted-foreground">ตัวอย่างรูปภาพ:</p>
+                      <Image src={previewUrl} alt="Food preview" width={150} height={150} className="rounded-lg shadow-md object-contain max-h-36 sm:max-h-48 md:max-h-56 mx-auto" data-ai-hint="food meal" />
                     </div>
                   </div>
               )}
 
-              {imageError && <p className="text-destructive text-sm font-body flex items-center"><AlertCircle className="w-4 h-4 mr-1" />{imageError}</p>}
+              {imageError && <p className="text-destructive text-xs sm:text-sm font-body flex items-center"><AlertCircle className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />{imageError}</p>}
 
-              <Button onClick={handleImageAnalysis} disabled={isLoadingImageAnalysis || !selectedFile} className="w-full text-lg py-6" size="lg">
+              <Button 
+                onClick={handleImageAnalysis} 
+                disabled={isLoadingImageAnalysis || !selectedFile} 
+                className="w-full text-sm sm:text-base md:text-lg py-2 sm:py-3 md:py-4" 
+                size="default" 
+              >
                 {isLoadingImageAnalysis ? (
                   <>
-                    <Loader2 className="animate-spin -ml-1 mr-3 h-5 w-5" />
+                    <Loader2 className="animate-spin -ml-1 mr-2 sm:mr-3 h-4 w-4 sm:h-5 sm:h-5" />
                     กำลังวิเคราะห์...
                   </>
                 ) : (
-                  <> <UploadCloud className="mr-2 h-6 w-6" /> วิเคราะห์รูปภาพ </>
+                  <> <UploadCloud className="mr-2 h-4 w-4 sm:h-5 sm:h-5 md:h-6 md:w-6" /> วิเคราะห์รูปภาพ </>
                 )}
               </Button>
 
               {imageAnalysisResult && (
-                <Card className="mt-8 shadow-md rounded-lg overflow-hidden bg-card border border-primary/30">
-                  <CardHeader className="pb-2 bg-primary/10">
-                      <CardTitle className="text-xl font-headline text-primary flex items-center">
-                      {isFoodIdentified ? <CheckCircle className="w-6 h-6 mr-2 text-green-500" /> : <Info className="w-6 h-6 mr-2 text-yellow-500" />}
+                <Card className="mt-4 sm:mt-6 md:mt-8 shadow-md rounded-lg overflow-hidden bg-card border border-primary/30">
+                  <CardHeader className="p-3 sm:p-4 pb-1 sm:pb-2 bg-primary/10">
+                      <CardTitle className="text-base sm:text-lg md:text-xl font-headline text-primary flex items-center">
+                      {isFoodIdentified ? <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 mr-2 text-green-500" /> : <Info className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 mr-2 text-yellow-500" />}
                       ผลการวิเคราะห์
                       </CardTitle>
                   </CardHeader>
-                  <CardContent className="p-4 md:p-6 space-y-4">
+                  <CardContent className="p-3 sm:p-4 md:p-6 space-y-2 sm:space-y-3 md:space-y-4">
                     <div>
                       <div className="flex items-center justify-between">
-                        <h4 className="font-semibold text-lg font-body text-foreground">
+                        <h4 className="font-semibold text-sm sm:text-base md:text-lg font-body text-foreground">
                           {imageAnalysisResult.foodItem === UNIDENTIFIED_FOOD_MESSAGE ? "อาหารที่ระบุได้:" : "อาหารที่ระบุได้:"}
                         </h4>
                         {isFoodIdentified && (
@@ -643,19 +648,19 @@ export default function FSFAPage() {
                             size="icon"
                             onClick={() => handleToggleLike(imageAnalysisResult?.foodItem)}
                             disabled={isLiking}
-                            className="rounded-full hover:bg-pink-500/10 data-[state=liked]:bg-green-500/20"
+                            className="rounded-full hover:bg-pink-500/10 data-[state=liked]:bg-green-500/20 w-7 h-7 sm:w-8 sm:h-8 md:w-9 md:h-9"
                             data-state={isCurrentFoodLiked ? 'liked' : 'unliked'}
                             aria-label={isCurrentFoodLiked ? 'ยกเลิกการถูกใจ' : 'ถูกใจ'}
                           >
                             {isLiking ? (
-                              <Loader2 className="h-6 w-6 animate-spin" />
+                              <Loader2 className="h-4 w-4 sm:h-5 sm:h-5 md:h-6 md:h-6 animate-spin" />
                             ) : (
-                              <Heart className={`h-6 w-6 transition-colors ${isCurrentFoodLiked ? 'fill-current text-green-600' : 'text-pink-500'}`} />
+                              <Heart className={`h-4 w-4 sm:h-5 sm:h-5 md:h-6 md:h-6 transition-colors ${isCurrentFoodLiked ? 'fill-current text-green-600' : 'text-pink-500'}`} />
                             )}
                           </Button>
                         )}
                       </div>
-                      <p className="text-md font-body text-foreground/80">
+                      <p className="text-xs sm:text-sm md:text-base font-body text-foreground/80">
                         {imageAnalysisResult.foodItem === UNIDENTIFIED_FOOD_MESSAGE 
                            ? "ขออภัยค่ะ ไม่สามารถระบุรายการอาหารในภาพได้ชัดเจน โปรดลองภาพอื่นที่มีแสงสว่างเพียงพอ หรือลองเปลี่ยนมุมถ่ายภาพนะคะ"
                            : imageAnalysisResult.foodItem
@@ -667,9 +672,9 @@ export default function FSFAPage() {
                       <>
                         <Separator />
                         <div>
-                          <h4 className="font-semibold text-lg font-body text-foreground">ข้อมูลทางโภชนาการ:</h4>
-                          <ScrollArea className="max-h-40 pr-2">
-                              <p className="text-md font-body text-foreground/80 whitespace-pre-wrap">{imageAnalysisResult.nutritionalInformation}</p>
+                          <h4 className="font-semibold text-sm sm:text-base md:text-lg font-body text-foreground">ข้อมูลทางโภชนาการ:</h4>
+                          <ScrollArea className="max-h-24 sm:max-h-32 md:max-h-40 pr-1 sm:pr-2">
+                              <p className="text-xs sm:text-sm md:text-base font-body text-foreground/80 whitespace-pre-wrap">{imageAnalysisResult.nutritionalInformation}</p>
                           </ScrollArea>
                         </div>
                       </>
@@ -678,11 +683,11 @@ export default function FSFAPage() {
                       <>
                         <Separator />
                         <div>
-                          <h4 className="font-semibold text-lg font-body text-foreground flex items-center">
-                            <MessageSquareWarning className="w-5 h-5 mr-2 text-orange-500"/>คำแนะนำด้านความปลอดภัย:
+                          <h4 className="font-semibold text-sm sm:text-base md:text-lg font-body text-foreground flex items-center">
+                            <MessageSquareWarning className="w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5 mr-1 sm:mr-2 text-orange-500"/>คำแนะนำด้านความปลอดภัย:
                           </h4>
-                          <ScrollArea className="max-h-40 mt-2 pr-2">
-                              <ul className="list-disc pl-5 space-y-1 text-md font-body text-foreground/80">
+                          <ScrollArea className="max-h-24 sm:max-h-32 md:max-h-40 mt-1 sm:mt-2 pr-1 sm:pr-2">
+                              <ul className="list-disc pl-3 sm:pl-4 md:pl-5 space-y-1 text-xs sm:text-sm md:text-base font-body text-foreground/80">
                                 {imageAnalysisResult.safetyPrecautions.map((precaution, index) => (
                                   precaution !== GENERIC_SAFETY_UNAVAILABLE ? <li key={index}>{precaution}</li> : null
                                 )).filter(Boolean)}
@@ -699,47 +704,47 @@ export default function FSFAPage() {
         </PageSection>
 
         <PageSection title="พูดคุยกับ AI ผู้ช่วย 💬🧠" icon={<MessageCircle />} id="chatbot-section" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
-          <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
-            <CardHeader>
-              <CardTitle className="text-2xl font-headline text-accent">Momu Ai</CardTitle>
-              <CardDescription className="text-md font-body">สอบถามเกี่ยวกับอาหารและโภชนาการได้ที่นี้😉</CardDescription>
+          <Card className="max-w-xl md:max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
+            <CardHeader className="p-4 sm:p-6">
+              <CardTitle className="text-lg sm:text-xl md:text-2xl font-headline text-accent">Momu Ai</CardTitle>
+              <CardDescription className="text-xs sm:text-sm md:text-base font-body">สอบถามเกี่ยวกับอาหารและโภชนาการได้ที่นี้😉</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <ScrollArea className="h-72 w-full border rounded-md p-4 bg-muted/30" viewportRef={chatScrollAreaRef}>
+            <CardContent className="p-4 sm:p-6 space-y-2 sm:space-y-3 md:space-y-4">
+              <ScrollArea className="h-48 sm:h-60 md:h-72 w-full border rounded-md p-2 sm:p-4 bg-muted/30" viewportRef={chatScrollAreaRef}>
                 {chatMessages.length === 0 && (
-                  <p className="text-center text-muted-foreground">เริ่มต้นการสนทนาได้เลยค่ะ...</p>
+                  <p className="text-center text-xs sm:text-sm md:text-base text-muted-foreground">เริ่มต้นการสนทนาได้เลยค่ะ...</p>
                 )}
                 {chatMessages.map((msg, index) => (
                   <div
                     key={index}
-                    className={`mb-3 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                    className={`mb-1 sm:mb-2 md:mb-3 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                   >
                     <div
-                      className={`p-3 rounded-lg max-w-[80%] shadow ${
+                      className={`p-2 sm:p-3 rounded-lg max-w-[80%] shadow ${
                         msg.role === 'user'
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-secondary text-secondary-foreground'
                       }`}
                     >
-                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                      <p className="text-xs sm:text-sm whitespace-pre-wrap">{msg.content}</p>
                     </div>
                   </div>
                 ))}
                 {isChatLoading && (
-                  <div className="flex justify-start mb-2">
-                    <div className="p-3 rounded-lg bg-secondary text-secondary-foreground shadow">
-                      <Loader2 className="h-5 w-5 animate-spin" />
+                  <div className="flex justify-start mb-1 sm:mb-2">
+                    <div className="p-2 sm:p-3 rounded-lg bg-secondary text-secondary-foreground shadow">
+                      <Loader2 className="h-3 w-3 sm:h-4 sm:h-4 md:h-5 md:h-5 animate-spin" />
                     </div>
                   </div>
                 )}
               </ScrollArea>
-              <form onSubmit={handleChatSubmit} className="flex items-center space-x-2">
+              <form onSubmit={handleChatSubmit} className="flex items-center space-x-1 sm:space-x-2">
                 <Textarea
                   ref={chatInputRef}
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   placeholder="พิมพ์ข้อความของคุณที่นี่..."
-                  className="flex-grow resize-none p-3 text-md"
+                  className="flex-grow resize-none p-2 md:p-3 text-xs sm:text-sm md:text-base"
                   rows={1}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
@@ -748,8 +753,13 @@ export default function FSFAPage() {
                     }
                   }}
                 />
-                <Button type="submit" size="lg" className="text-lg py-3 px-6" disabled={isChatLoading || !chatInput.trim()}>
-                  {isChatLoading ? <Loader2 className="animate-spin h-5 w-5" /> : <Send className="h-5 w-5" />}
+                <Button 
+                  type="submit" 
+                  size="default" 
+                  className="text-sm sm:text-base md:text-lg py-2 md:py-3 px-2 sm:px-3 md:px-4" 
+                  disabled={isChatLoading || !chatInput.trim()}
+                >
+                  {isChatLoading ? <Loader2 className="animate-spin h-3 w-3 sm:h-4 sm:h-4 md:h-5 md:h-5" /> : <Send className="h-3 w-3 sm:h-4 sm:h-4 md:h-5 md:h-5" />}
                   <span className="sr-only">Send</span>
                 </Button>
               </form>
@@ -760,39 +770,39 @@ export default function FSFAPage() {
       </main>
 
       <Dialog open={isMyMealsDialogOpen} onOpenChange={setIsMyMealsDialogOpen}>
-        <DialogContent className="max-w-md min-h-[50vh] flex flex-col sm:max-w-md"> 
+        <DialogContent className="max-w-xs sm:max-w-sm md:max-w-md min-h-[60vh] sm:min-h-[50vh] flex flex-col p-3 sm:p-4 md:p-6"> 
           <DialogHeader>
-            <DialogTitle className="text-2xl font-headline text-primary flex items-center">
-              <ListChecks className="w-7 h-7 mr-2" />
+            <DialogTitle className="text-lg sm:text-xl md:text-2xl font-headline text-primary flex items-center">
+              <ListChecks className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 mr-2" />
               มื้ออาหารของฉัน
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="text-xs sm:text-sm">
               รายการชื่ออาหารที่คุณกดถูกใจไว้
             </DialogDescription>
           </DialogHeader>
-          <div className="flex-grow overflow-hidden py-4">
-            <ScrollArea className="h-full pr-4"> 
+          <div className="flex-grow overflow-hidden py-1 sm:py-2 md:py-4">
+            <ScrollArea className="h-full pr-1 sm:pr-2"> 
               {isLoadingMyMeals ? (
-                <div className="space-y-3 p-1">
+                <div className="space-y-1 sm:space-y-2 md:space-y-3 p-1">
                   {[...Array(5)].map((_, index) => ( 
-                    <Skeleton key={index} className="h-8 w-full rounded-md" />
+                    <Skeleton key={index} className="h-6 sm:h-7 md:h-8 w-full rounded-md" />
                   ))}
                 </div>
               ) : likedMealsList.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center p-6">
-                  <Info className="w-12 h-12 text-primary mb-3" /> 
-                  <p className="text-lg font-semibold text-foreground">ยังไม่มีมื้ออาหารที่ถูกใจ</p>
-                  <p className="text-sm text-muted-foreground">
+                <div className="flex flex-col items-center justify-center h-full text-center p-2 sm:p-4 md:p-6">
+                  <Info className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 text-primary mb-1 sm:mb-2 md:mb-3" /> 
+                  <p className="text-sm sm:text-base md:text-lg font-semibold text-foreground">ยังไม่มีมื้ออาหารที่ถูกใจ</p>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     เมื่อคุณกดถูกใจมื้ออาหารที่สแกนแล้ว ชื่ออาหารจะแสดงที่นี่ค่ะ
                   </p>
-                  <Button onClick={() => setIsMyMealsDialogOpen(false)} className="mt-4 text-sm" size="sm">
-                    <Utensils className="mr-2 h-4 w-4" /> ไปสแกนอาหาร
+                  <Button onClick={() => setIsMyMealsDialogOpen(false)} className="mt-2 sm:mt-3 md:mt-4 text-xs sm:text-sm" size="sm">
+                    <Utensils className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" /> ไปสแกนอาหาร
                   </Button>
                 </div>
               ) : (
-                <ul className="space-y-2 p-1">
+                <ul className="space-y-1 sm:space-y-2 p-1">
                   {likedMealsList.map((meal, index) => (
-                    <li key={meal.id || `${meal.name}-${index}`} className="p-3 bg-card border rounded-lg shadow-sm text-foreground font-body text-md">
+                    <li key={meal.id || `${meal.name}-${index}`} className="p-2 sm:p-3 bg-card border rounded-lg shadow-sm text-foreground font-body text-xs sm:text-sm md:text-base">
                       {meal.name}
                       {meal.likedAt && currentUser && (
                         <span className="block text-xs text-muted-foreground mt-1">
@@ -805,42 +815,43 @@ export default function FSFAPage() {
               )}
             </ScrollArea>
           </div>
-          <DialogFooter className="mt-auto pt-4 border-t flex justify-between w-full">
+          <DialogFooter className="mt-auto pt-2 sm:pt-3 md:pt-4 border-t flex justify-between w-full">
             <AlertDialog open={isClearConfirmOpen} onOpenChange={setIsClearConfirmOpen}>
               <AlertDialogTrigger asChild>
                 <Button 
                   variant="destructive" 
                   size="sm"
                   disabled={likedMealsList.length === 0 || isClearingMeals}
-                  className="flex items-center"
+                  className="flex items-center text-xs sm:text-sm"
                   onClick={() => setIsClearConfirmOpen(true)}
                 >
-                  {isClearingMeals ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                  {isClearingMeals ? <Loader2 className="animate-spin mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" /> : <Trash2 className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />}
                   ล้างทั้งหมด
                 </Button>
               </AlertDialogTrigger>
-              <AlertDialogContent>
+              <AlertDialogContent className="p-3 sm:p-4 md:p-6">
                 <AlertDialogHeader>
-                  <AlertDialogTitle>ยืนยันการล้างข้อมูล</AlertDialogTitle>
-                  <AlertDialogDescription>
+                  <AlertDialogTitle className="text-sm sm:text-base md:text-lg">ยืนยันการล้างข้อมูล</AlertDialogTitle>
+                  <AlertDialogDescription className="text-xs sm:text-sm">
                     คุณแน่ใจหรือไม่ว่าต้องการล้างมื้ออาหารที่ถูกใจทั้งหมด? การกระทำนี้ไม่สามารถยกเลิกได้
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => setIsClearConfirmOpen(false)} disabled={isClearingMeals}>ยกเลิก</AlertDialogCancel>
+                  <AlertDialogCancel onClick={() => setIsClearConfirmOpen(false)} disabled={isClearingMeals} size="sm" className="text-xs sm:text-sm">ยกเลิก</AlertDialogCancel>
                   <AlertDialogAction 
                     onClick={handleConfirmClearAllLikedMeals} 
                     disabled={isClearingMeals}
-                    className="bg-destructive hover:bg-destructive/90"
+                    className="bg-destructive hover:bg-destructive/90 text-xs sm:text-sm"
+                    size="sm"
                   >
-                    {isClearingMeals ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : null}
+                    {isClearingMeals ? <Loader2 className="animate-spin mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" /> : null}
                     ยืนยันล้างทั้งหมด
                   </AlertDialogAction>
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
             <DialogClose asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" className="text-xs sm:text-sm">
                 ปิด
               </Button>
             </DialogClose>
@@ -849,10 +860,11 @@ export default function FSFAPage() {
       </Dialog>
 
 
-      <footer className="text-center py-8 mt-12 md:mt-16 border-t border-border/50">
-        <p className="text-muted-foreground font-body">&copy; {new Date().getFullYear()} FSFA (Food Security For All) สงวนลิขสิทธิ์</p>
+      <footer className="text-center py-4 sm:py-6 md:py-8 mt-6 sm:mt-8 md:mt-12 lg:mt-16 border-t border-border/50">
+        <p className="text-xs sm:text-sm text-muted-foreground font-body">&copy; {new Date().getFullYear()} FSFA (Food Security For All) สงวนลิขสิทธิ์</p>
       </footer>
     </div>
   );
 }
     
+
