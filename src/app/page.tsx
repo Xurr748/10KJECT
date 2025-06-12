@@ -10,6 +10,12 @@ import {
   type ScanFoodImageInput, 
   type ScanFoodImageOutput 
 } from '@/ai/flows/food-image-analyzer';
+import {
+  chatWithBot,
+  type ChatInput as AIChatInput, // Renamed to avoid conflict
+  type ChatOutput as AIChatOutput, // Renamed to avoid conflict
+  type ChatMessage
+} from '@/ai/flows/post-scan-chat';
 import { auth, db, serverTimestamp } from '@/lib/firebase'; 
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { collection, addDoc, query, where, getDocs, orderBy, Timestamp as FirestoreTimestamp, doc, deleteDoc } from 'firebase/firestore';
@@ -42,10 +48,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
 
 
 // Lucide Icons
-import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2, Heart, ChefHat, Settings, MessageSquareWarning } from 'lucide-react';
+import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2, Heart, ChefHat, Settings, MessageSquareWarning, Send, MessageCircle } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 const GENERIC_NUTRITION_UNAVAILABLE = "ไม่สามารถระบุข้อมูลทางโภชนาการได้";
@@ -68,8 +75,8 @@ PageSection.displayName = 'PageSection';
 
 interface LikedMealItem {
   name: string;
-  id?: string; // Firestore document ID, undefined for localStorage items
-  likedAt?: FirestoreTimestamp | Date; // For sorting, mainly from Firestore
+  id?: string; 
+  likedAt?: FirestoreTimestamp | Date; 
 }
 
 export default function FSFAPage() {
@@ -93,6 +100,12 @@ export default function FSFAPage() {
 
   const isFoodIdentified = imageAnalysisResult && imageAnalysisResult.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
 
+  // Chatbot states
+  const [chatInput, setChatInput] = useState('');
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [isChatLoading, setIsChatLoading] = useState(false);
+  const chatScrollAreaRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       console.log('[Auth Effect] Auth state changed. User object (stringified):', JSON.stringify(user));
@@ -107,7 +120,6 @@ export default function FSFAPage() {
   
   const loadUserLikedMealNames = async () => {
     const localUserId = currentUser?.uid;
-    // Log the currentUser object and specifically the uid
     console.log('[My Meals Load Effect] currentUser object at start of loadUserLikedMealNames:', JSON.stringify(currentUser));
     console.log(`[My Meals Load Effect] Attempting to load liked meal names. User ID from currentUser.uid: '${localUserId || 'Anonymous'}' (Type: ${typeof localUserId})`);
 
@@ -144,7 +156,7 @@ export default function FSFAPage() {
         toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดรายการที่ถูกใจจากระบบคลาวด์ได้", variant: "destructive" });
       }
     } else { 
-      if (currentUser) { // currentUser object exists but uid is invalid or empty
+      if (currentUser) { 
         console.warn(`[My Meals Load Effect] currentUser object exists but UID is invalid or empty. UID: '${localUserId}'. Skipping Firestore fetch, will use localStorage.`);
       }
       console.log('[My Meals Load Effect] User not logged in or UID invalid. Fetching from localStorage.');
@@ -174,7 +186,7 @@ export default function FSFAPage() {
   
 
   useEffect(() => {
-    setIsCurrentFoodLiked(false); // Reset for new item
+    setIsCurrentFoodLiked(false); 
     const currentFoodName = imageAnalysisResult?.foodItem;
     if (currentFoodName && currentFoodName !== UNIDENTIFIED_FOOD_MESSAGE) {
       const isLiked = likedMealsList.some(meal => meal.name === currentFoodName);
@@ -188,6 +200,16 @@ export default function FSFAPage() {
       }
     }
   }, [imageAnalysisResult, likedMealsList]);
+
+  useEffect(() => {
+    // Scroll to bottom of chat messages
+    if (chatScrollAreaRef.current) {
+      const scrollableViewport = chatScrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
+      if (scrollableViewport) {
+        scrollableViewport.scrollTop = scrollableViewport.scrollHeight;
+      }
+    }
+  }, [chatMessages]);
 
 
   const formatDate = (timestamp: FirestoreTimestamp | Date | undefined) => {
@@ -365,7 +387,7 @@ export default function FSFAPage() {
               }
             }
         }
-      } else { // Not logged in: Use localStorage
+      } else { 
         let currentLocalLikedNames: string[] = [];
         const storedNamesJson = localStorage.getItem(LOCAL_STORAGE_LIKED_MEALS_KEY);
         if (storedNamesJson) {
@@ -402,9 +424,36 @@ export default function FSFAPage() {
   
   const openMyMealsDialog = () => {
     console.log("[My Meals Dialog] Opening dialog. Current likedMealsList count:", likedMealsList.length);
-    // Optionally re-fetch here if data can get stale often, but useEffect on currentUser should handle most cases.
-    // loadUserLikedMealNames(); // Could be added here if needed for more aggressive refresh
     setIsMyMealsDialogOpen(true);
+  };
+
+  const handleChatSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const messageContent = chatInput.trim();
+    if (!messageContent) return;
+
+    const newUserMessage: ChatMessage = { role: 'user', content: messageContent };
+    setChatMessages(prev => [...prev, newUserMessage]);
+    setChatInput('');
+    setIsChatLoading(true);
+
+    try {
+      const chatHistoryForAPI = chatMessages.slice(-5); // Send last 5 messages as history for context
+      const result: AIChatOutput = await chatWithBot({ message: messageContent, history: chatHistoryForAPI });
+      const newBotMessage: ChatMessage = { role: 'model', content: result.response };
+      setChatMessages(prev => [...prev, newBotMessage]);
+    } catch (error) {
+      console.error("Error in chatWithBot:", error);
+      const errorMessage: ChatMessage = { role: 'model', content: "ขออภัยค่ะ มีปัญหาในการเชื่อมต่อกับ AI โปรดลองอีกครั้ง" };
+      setChatMessages(prev => [...prev, errorMessage]);
+      toast({
+        title: "Chatbot Error",
+        description: "ไม่สามารถรับการตอบกลับจาก AI ได้",
+        variant: "destructive",
+      });
+    } finally {
+      setIsChatLoading(false);
+    }
   };
 
 
@@ -582,6 +631,65 @@ export default function FSFAPage() {
                   </CardContent>
                 </Card>
               )}
+            </CardContent>
+          </Card>
+        </PageSection>
+
+        {/* Chatbot Section */}
+        <PageSection title="พูดคุยกับ AI ผู้ช่วย 💬🧠" icon={<MessageCircle />} id="chatbot-section" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
+          <Card className="max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
+            <CardHeader>
+              <CardTitle className="text-2xl font-headline text-accent">FSFA Chatbot</CardTitle>
+              <CardDescription className="text-md font-body">สอบถามเกี่ยวกับอาหาร โภชนาการ หรือเรื่องอื่นๆ ที่เกี่ยวข้อง</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <ScrollArea className="h-72 w-full border rounded-md p-4 bg-muted/30" ref={chatScrollAreaRef}>
+                {chatMessages.length === 0 && (
+                  <p className="text-center text-muted-foreground">เริ่มต้นการสนทนาได้เลยค่ะ...</p>
+                )}
+                {chatMessages.map((msg, index) => (
+                  <div
+                    key={index}
+                    className={`mb-3 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    <div
+                      className={`p-3 rounded-lg max-w-[80%] shadow ${
+                        msg.role === 'user'
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-secondary text-secondary-foreground'
+                      }`}
+                    >
+                      <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    </div>
+                  </div>
+                ))}
+                {isChatLoading && (
+                  <div className="flex justify-start mb-2">
+                    <div className="p-3 rounded-lg bg-secondary text-secondary-foreground shadow">
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    </div>
+                  </div>
+                )}
+              </ScrollArea>
+              <form onSubmit={handleChatSubmit} className="flex items-center space-x-2">
+                <Textarea
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="พิมพ์ข้อความของคุณที่นี่..."
+                  className="flex-grow resize-none p-3 text-md"
+                  rows={1}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleChatSubmit(e as unknown as React.FormEvent);
+                    }
+                  }}
+                />
+                <Button type="submit" size="lg" className="text-lg py-3 px-6" disabled={isChatLoading || !chatInput.trim()}>
+                  {isChatLoading ? <Loader2 className="animate-spin h-5 w-5" /> : <Send className="h-5 w-5" />}
+                  <span className="sr-only">Send</span>
+                </Button>
+              </form>
             </CardContent>
           </Card>
         </PageSection>
