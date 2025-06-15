@@ -65,7 +65,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 
 // Lucide Icons
-import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2, Heart, ChefHat, Settings, MessageSquareWarning, Send, MessageCircle, Trash2, Volume2, VolumeX } from 'lucide-react';
+import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2, Heart, ChefHat, Settings, MessageSquareWarning, Send, MessageCircle, Trash2 } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 const GENERIC_NUTRITION_UNAVAILABLE = "ไม่สามารถระบุข้อมูลทางโภชนาการได้";
@@ -124,8 +124,6 @@ export default function FSFAPage() {
   // State for Login and Register Dialogs
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false);
   const [isRegisterDialogOpen, setIsRegisterDialogOpen] = useState(false);
-
-  const [isSpeaking, setIsSpeaking] = useState(false);
 
 
   useEffect(() => {
@@ -240,16 +238,6 @@ export default function FSFAPage() {
     }
   }, [chatMessages]);
 
-  // Cleanup speechSynthesis on component unmount or when imageAnalysisResult changes
-  useEffect(() => {
-    return () => {
-      if (window.speechSynthesis && window.speechSynthesis.speaking) {
-        window.speechSynthesis.cancel();
-        setIsSpeaking(false);
-      }
-    };
-  }, [imageAnalysisResult]);
-
 
   const formatDate = (timestamp: FirestoreTimestamp | Date | undefined) => {
     if (!timestamp) return 'ไม่ระบุวันที่';
@@ -283,10 +271,6 @@ export default function FSFAPage() {
     setPreviewUrl(null);
     setImageAnalysisResult(null);
     setImageError(null);
-    if (window.speechSynthesis && window.speechSynthesis.speaking) {
-      window.speechSynthesis.cancel();
-    }
-    setIsSpeaking(false);
     console.log('[State Reset] Image related states reset.');
   };
 
@@ -311,10 +295,6 @@ export default function FSFAPage() {
     }
     setIsLoadingImageAnalysis(true);
     setImageError(null);
-    if (window.speechSynthesis.speaking) { // Cancel any ongoing speech
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false);
-    }
     console.log('[Image Analysis] Starting analysis for file:', selectedFile.name);
     
     const reader = new FileReader();
@@ -549,78 +529,6 @@ export default function FSFAPage() {
     }
   };
 
-  const handleSpeakAnalysis = () => {
-    if (!imageAnalysisResult) return;
-
-    if (!('speechSynthesis' in window)) {
-      toast({ 
-        title: "ขออภัยค่ะ", 
-        description: "เบราว์เซอร์ของคุณไม่รองรับการอ่านออกเสียง", 
-        variant: "destructive" 
-      });
-      return;
-    }
-
-    if (window.speechSynthesis.speaking) {
-      window.speechSynthesis.cancel();
-      setIsSpeaking(false); 
-      return;
-    }
-
-    const { foodItem, nutritionalInformation, safetyPrecautions } = imageAnalysisResult;
-    let textToSpeak = "";
-
-    if (foodItem && foodItem !== UNIDENTIFIED_FOOD_MESSAGE) {
-      textToSpeak += `อาหารที่ระบุได้คือ ${foodItem}. `;
-    } else {
-      textToSpeak += `${UNIDENTIFIED_FOOD_MESSAGE}. `;
-    }
-
-    if (nutritionalInformation && nutritionalInformation !== GENERIC_NUTRITION_UNAVAILABLE) {
-      textToSpeak += `ข้อมูลทางโภชนาการ: ${nutritionalInformation}. `;
-    } else if (foodItem && foodItem !== UNIDENTIFIED_FOOD_MESSAGE) {
-      textToSpeak += `${GENERIC_NUTRITION_UNAVAILABLE}. `;
-    }
-    
-    const validPrecautions = safetyPrecautions?.filter(p => p && p.trim() !== "" && p !== GENERIC_SAFETY_UNAVAILABLE);
-    if (validPrecautions && validPrecautions.length > 0) {
-      textToSpeak += `คำแนะนำด้านความปลอดภัย: ${validPrecautions.join('. ')}.`;
-    } else if (foodItem && foodItem !== UNIDENTIFIED_FOOD_MESSAGE) {
-       textToSpeak += `${GENERIC_SAFETY_UNAVAILABLE}.`;
-    }
-
-    // Only speak if there's something more than just "Cannot identify food type."
-    if (textToSpeak.trim() === UNIDENTIFIED_FOOD_MESSAGE + ".") {
-        toast({ 
-          title: "ไม่มีข้อมูลให้อ่าน", 
-          description: "ผลการวิเคราะห์ไม่มีข้อมูลเพียงพอสำหรับการอ่านออกเสียงค่ะ", 
-          variant: "default"
-        });
-        return;
-    }
-    
-    const utterance = new SpeechSynthesisUtterance(textToSpeak.trim());
-    utterance.lang = 'th-TH';
-    utterance.onstart = () => {
-      setIsSpeaking(true);
-      console.log("Speech started for: ", textToSpeak.trim());
-    };
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      console.log("Speech ended.");
-    };
-    utterance.onerror = (event) => {
-      console.error("SpeechSynthesisUtterance.onerror", event);
-      toast({ 
-        title: "เกิดข้อผิดพลาด", 
-        description: "ไม่สามารถอ่านออกเสียงได้ในขณะนี้", 
-        variant: "destructive" 
-      });
-      setIsSpeaking(false);
-    };
-    
-    window.speechSynthesis.speak(utterance);
-  };
 
   // Login Dialog Content Component
   const LoginDialogContent = () => {
@@ -972,21 +880,6 @@ export default function FSFAPage() {
                       {isFoodIdentified ? <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 mr-2 text-green-500" /> : <Info className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 mr-2 text-yellow-500" />}
                       ผลการวิเคราะห์
                       </CardTitle>
-                      {imageAnalysisResult && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={handleSpeakAnalysis}
-                          className="rounded-full hover:bg-primary/20 w-7 h-7 sm:w-8 sm:h-8"
-                          aria-label={isSpeaking ? "หยุดอ่าน" : "อ่านผลวิเคราะห์"}
-                        >
-                          {isSpeaking ? (
-                            <VolumeX className="h-4 w-4 sm:h-5 sm:h-5 text-destructive" />
-                          ) : (
-                            <Volume2 className="h-4 w-4 sm:h-5 sm:h-5 text-primary" />
-                          )}
-                        </Button>
-                      )}
                     </div>
                   </CardHeader>
                   <CardContent className="p-3 sm:p-4 md:p-6 space-y-2 sm:space-y-3 md:space-y-4">
@@ -1176,7 +1069,7 @@ export default function FSFAPage() {
                   variant="destructive" 
                   size="sm"
                   disabled={likedMealsList.length === 0 || isClearingMeals}
-                  className="flex items-center text-xs sm:text-sm"
+                  className="flex items-center text-xs"
                   onClick={() => setIsClearConfirmOpen(true)}
                 >
                   {isClearingMeals ? <Loader2 className="animate-spin mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" /> : <Trash2 className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />}
@@ -1191,11 +1084,11 @@ export default function FSFAPage() {
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                  <AlertDialogCancel onClick={() => setIsClearConfirmOpen(false)} disabled={isClearingMeals} size="sm" className="text-xs sm:text-sm">ยกเลิก</AlertDialogCancel>
+                  <AlertDialogCancel onClick={() => setIsClearConfirmOpen(false)} disabled={isClearingMeals} size="sm" className="text-xs">ยกเลิก</AlertDialogCancel>
                   <AlertDialogAction 
                     onClick={handleConfirmClearAllLikedMeals} 
                     disabled={isClearingMeals}
-                    className="bg-destructive hover:bg-destructive/90 text-xs sm:text-sm"
+                    className="bg-destructive hover:bg-destructive/90 text-xs"
                     size="sm"
                   >
                     {isClearingMeals ? <Loader2 className="animate-spin mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" /> : null}
@@ -1205,7 +1098,7 @@ export default function FSFAPage() {
               </AlertDialogContent>
             </AlertDialog>
             <DialogClose asChild>
-              <Button variant="outline" size="sm" className="text-xs sm:text-sm">
+              <Button variant="outline" size="sm" className="text-xs">
                 ปิด
               </Button>
             </DialogClose>
@@ -1233,4 +1126,5 @@ export default function FSFAPage() {
     
 
     
+
 
