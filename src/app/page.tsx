@@ -65,7 +65,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 
 // Lucide Icons
-import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2, Heart, ChefHat, Settings, MessageSquareWarning, Send, MessageCircle, Trash2 } from 'lucide-react';
+import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2, Heart, ChefHat, Settings, MessageSquareWarning, Send, MessageCircle, Trash2, Volume2, VolumeX } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 const GENERIC_NUTRITION_UNAVAILABLE = "ไม่สามารถระบุข้อมูลทางโภชนาการได้";
@@ -124,6 +124,8 @@ export default function FSFAPage() {
   // State for Login and Register Dialogs
   const [isLoginDialogOpen, setIsLoginDialogOpen] = useState(false);
   const [isRegisterDialogOpen, setIsRegisterDialogOpen] = useState(false);
+
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
 
   useEffect(() => {
@@ -238,6 +240,16 @@ export default function FSFAPage() {
     }
   }, [chatMessages]);
 
+  // Cleanup speechSynthesis on component unmount or when imageAnalysisResult changes
+  useEffect(() => {
+    return () => {
+      if (window.speechSynthesis && window.speechSynthesis.speaking) {
+        window.speechSynthesis.cancel();
+        setIsSpeaking(false);
+      }
+    };
+  }, [imageAnalysisResult]);
+
 
   const formatDate = (timestamp: FirestoreTimestamp | Date | undefined) => {
     if (!timestamp) return 'ไม่ระบุวันที่';
@@ -271,6 +283,10 @@ export default function FSFAPage() {
     setPreviewUrl(null);
     setImageAnalysisResult(null);
     setImageError(null);
+    if (window.speechSynthesis && window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
     console.log('[State Reset] Image related states reset.');
   };
 
@@ -295,6 +311,10 @@ export default function FSFAPage() {
     }
     setIsLoadingImageAnalysis(true);
     setImageError(null);
+    if (window.speechSynthesis.speaking) { // Cancel any ongoing speech
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    }
     console.log('[Image Analysis] Starting analysis for file:', selectedFile.name);
     
     const reader = new FileReader();
@@ -529,6 +549,79 @@ export default function FSFAPage() {
     }
   };
 
+  const handleSpeakAnalysis = () => {
+    if (!imageAnalysisResult) return;
+
+    if (!('speechSynthesis' in window)) {
+      toast({ 
+        title: "ขออภัยค่ะ", 
+        description: "เบราว์เซอร์ของคุณไม่รองรับการอ่านออกเสียง", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    if (window.speechSynthesis.speaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false); 
+      return;
+    }
+
+    const { foodItem, nutritionalInformation, safetyPrecautions } = imageAnalysisResult;
+    let textToSpeak = "";
+
+    if (foodItem && foodItem !== UNIDENTIFIED_FOOD_MESSAGE) {
+      textToSpeak += `อาหารที่ระบุได้คือ ${foodItem}. `;
+    } else {
+      textToSpeak += `${UNIDENTIFIED_FOOD_MESSAGE}. `;
+    }
+
+    if (nutritionalInformation && nutritionalInformation !== GENERIC_NUTRITION_UNAVAILABLE) {
+      textToSpeak += `ข้อมูลทางโภชนาการ: ${nutritionalInformation}. `;
+    } else if (foodItem && foodItem !== UNIDENTIFIED_FOOD_MESSAGE) {
+      textToSpeak += `${GENERIC_NUTRITION_UNAVAILABLE}. `;
+    }
+    
+    const validPrecautions = safetyPrecautions?.filter(p => p && p.trim() !== "" && p !== GENERIC_SAFETY_UNAVAILABLE);
+    if (validPrecautions && validPrecautions.length > 0) {
+      textToSpeak += `คำแนะนำด้านความปลอดภัย: ${validPrecautions.join('. ')}.`;
+    } else if (foodItem && foodItem !== UNIDENTIFIED_FOOD_MESSAGE) {
+       textToSpeak += `${GENERIC_SAFETY_UNAVAILABLE}.`;
+    }
+
+    // Only speak if there's something more than just "Cannot identify food type."
+    if (textToSpeak.trim() === UNIDENTIFIED_FOOD_MESSAGE + ".") {
+        toast({ 
+          title: "ไม่มีข้อมูลให้อ่าน", 
+          description: "ผลการวิเคราะห์ไม่มีข้อมูลเพียงพอสำหรับการอ่านออกเสียงค่ะ", 
+          variant: "default"
+        });
+        return;
+    }
+    
+    const utterance = new SpeechSynthesisUtterance(textToSpeak.trim());
+    utterance.lang = 'th-TH';
+    utterance.onstart = () => {
+      setIsSpeaking(true);
+      console.log("Speech started for: ", textToSpeak.trim());
+    };
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      console.log("Speech ended.");
+    };
+    utterance.onerror = (event) => {
+      console.error("SpeechSynthesisUtterance.onerror", event);
+      toast({ 
+        title: "เกิดข้อผิดพลาด", 
+        description: "ไม่สามารถอ่านออกเสียงได้ในขณะนี้", 
+        variant: "destructive" 
+      });
+      setIsSpeaking(false);
+    };
+    
+    window.speechSynthesis.speak(utterance);
+  };
+
   // Login Dialog Content Component
   const LoginDialogContent = () => {
     const [email, setEmail] = useState('');
@@ -636,9 +729,9 @@ export default function FSFAPage() {
     const [isLoading, setIsLoading] = useState(false);
   
     const handleRegister = async (event: React.FormEvent) => {
-      console.log('[RegisterDialog] handleRegister called. Event object:', event); // Debug log 1
+      console.log('[RegisterDialog] handleRegister called. Event object:', event); 
       event.preventDefault();
-      console.log('[RegisterDialog] event.preventDefault() called.'); // Debug log 2
+      console.log('[RegisterDialog] event.preventDefault() called.'); 
       setIsLoading(true);
   
       if (password !== confirmPassword) {
@@ -669,7 +762,7 @@ export default function FSFAPage() {
         });
         setIsRegisterDialogOpen(false); 
       } catch (error: any) {
-        console.error('[RegisterDialog] Registration error in catch block:', error); // Debug log 3
+        console.error('[RegisterDialog] Registration error in catch block:', error); 
         let errorMessage = "เกิดข้อผิดพลาดในการลงทะเบียน";
         if (error.code === 'auth/email-already-in-use') {
           errorMessage = "อีเมลนี้ถูกใช้งานแล้ว";
@@ -685,7 +778,7 @@ export default function FSFAPage() {
         });
       } finally {
         setIsLoading(false);
-        console.log('[RegisterDialog] handleRegister finally block executed.'); // Debug log 4
+        console.log('[RegisterDialog] handleRegister finally block executed.'); 
       }
     };
 
@@ -874,10 +967,27 @@ export default function FSFAPage() {
               {imageAnalysisResult && (
                 <Card className="mt-4 sm:mt-6 md:mt-8 shadow-md rounded-lg overflow-hidden bg-card border border-primary/30">
                   <CardHeader className="p-3 sm:p-4 pb-1 sm:pb-2 bg-primary/10">
+                    <div className="flex items-center justify-between">
                       <CardTitle className="text-base sm:text-lg md:text-xl font-headline text-primary flex items-center">
                       {isFoodIdentified ? <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 mr-2 text-green-500" /> : <Info className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 mr-2 text-yellow-500" />}
                       ผลการวิเคราะห์
                       </CardTitle>
+                      {imageAnalysisResult && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={handleSpeakAnalysis}
+                          className="rounded-full hover:bg-primary/20 w-7 h-7 sm:w-8 sm:h-8"
+                          aria-label={isSpeaking ? "หยุดอ่าน" : "อ่านผลวิเคราะห์"}
+                        >
+                          {isSpeaking ? (
+                            <VolumeX className="h-4 w-4 sm:h-5 sm:h-5 text-destructive" />
+                          ) : (
+                            <Volume2 className="h-4 w-4 sm:h-5 sm:h-5 text-primary" />
+                          )}
+                        </Button>
+                      )}
+                    </div>
                   </CardHeader>
                   <CardContent className="p-3 sm:p-4 md:p-6 space-y-2 sm:space-y-3 md:space-y-4">
                     <div>
@@ -1123,3 +1233,4 @@ export default function FSFAPage() {
     
 
     
+
