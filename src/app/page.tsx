@@ -1043,7 +1043,7 @@ export default function FSFAPage() {
                     เมื่อคุณกดถูกใจมื้ออาหารที่สแกนแล้ว ชื่ออาหารจะแสดงที่นี่ค่ะ
                   </p>
                   <Button onClick={() => setIsMyMealsDialogOpen(false)} className="mt-2 sm:mt-3 md:mt-4 text-xs sm:text-sm" size="sm">
-                    <Utensils className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" /> ไปสแกนอาหาร
+                    <Utensils className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:h-4" /> ไปสแกนอาหาร
                   </Button>
                 </div>
               ) : (
@@ -1072,7 +1072,7 @@ export default function FSFAPage() {
                   className="flex items-center text-xs"
                   onClick={() => setIsClearConfirmOpen(true)}
                 >
-                  {isClearingMeals ? <Loader2 className="animate-spin mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" /> : <Trash2 className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />}
+                  {isClearingMeals ? <Loader2 className="animate-spin mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:h-4" /> : <Trash2 className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:h-4" />}
                   ล้างทั้งหมด
                 </Button>
               </AlertDialogTrigger>
@@ -1091,7 +1091,7 @@ export default function FSFAPage() {
                     className="bg-destructive hover:bg-destructive/90 text-xs"
                     size="sm"
                   >
-                    {isClearingMeals ? <Loader2 className="animate-spin mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" /> : null}
+                    {isClearingMeals ? <Loader2 className="animate-spin mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:h-4" /> : null}
                     ยืนยันล้างทั้งหมด
                   </AlertDialogAction>
                 </AlertDialogFooter>
@@ -1118,7 +1118,7 @@ export default function FSFAPage() {
 
 
       <footer className="text-center py-4 sm:py-6 md:py-8 mt-6 sm:mt-8 md:mt-12 lg:mt-16 border-t border-border/50">
-        <p className="text-xs sm:text-sm text-muted-foreground font-body">&copy; {new Date().getFullYear()} FSFA (Food Security For All) สงวนลิขสิทธิ์</p>
+        
       </footer>
     </div>
   );
@@ -1126,5 +1126,6 @@ export default function FSFAPage() {
     
 
     
+
 
 
