@@ -79,7 +79,7 @@ if (!missingKeys) {
     } catch (error: any) {
       console.error("🔴 Error initializing Firebase Auth:", error.message, error);
       // @ts-ignore
-      auth = {} as Auth;
+      auth = undefined;
     }
 
     try {
@@ -88,7 +88,7 @@ if (!missingKeys) {
     } catch (error: any) {
       console.error("🔴 Error initializing Firebase Firestore:", error.message, error);
       // @ts-ignore
-      db = {} as Firestore;
+      db = undefined;
     }
 
     if (typeof window !== 'undefined') {
@@ -115,10 +115,6 @@ if (!missingKeys) {
 
 if (missingKeys) {
   console.error("🔴 Firebase services (auth, db, analytics) were NOT fully initialized due to missing configuration or initialization errors. Please check previous logs. YOU MAY NEED TO RESTART THE NEXT.JS SERVER AFTER CORRECTING .env FILES.");
-  // @ts-ignore
-  if (!auth) auth = {} as Auth;
-  // @ts-ignore
-  if (!db) db = {} as Firestore;
 }
 
 export { app, auth, db, analytics, serverTimestamp };

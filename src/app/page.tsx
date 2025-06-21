@@ -127,6 +127,11 @@ export default function FSFAPage() {
 
 
   useEffect(() => {
+    if (!auth) {
+      console.warn("[Auth Effect] Firebase Auth is not initialized. Skipping auth listener.");
+      setCurrentUser(null);
+      return;
+    }
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       console.log('[Auth Effect] Auth state changed. User object (stringified):', JSON.stringify(user));
       console.log('[Auth Effect] User UID:', user?.uid || 'Anonymous');
@@ -156,6 +161,14 @@ export default function FSFAPage() {
   
     if (localUserId && typeof localUserId === 'string' && localUserId.trim() !== '') {
       console.log(`[My Meals Load Effect] User ID '${localUserId}' is valid and non-empty. Fetching from Firestore.`);
+
+      if (!db) {
+        console.error("[My Meals Load Effect] Firestore (db) is not initialized. Cannot fetch from Firestore.");
+        toast({ title: "ข้อผิดพลาดการเชื่อมต่อ", description: "ไม่สามารถเชื่อมต่อกับฐานข้อมูลได้", variant: "destructive" });
+        setIsLoadingMyMeals(false);
+        return;
+      }
+
       try {
         const firestorePath = `users/${localUserId}/likedMealNames`;
         console.log(`[My Meals Load Effect] Firestore path to be used: ${firestorePath}`);
@@ -251,6 +264,11 @@ export default function FSFAPage() {
   };
   
   const handleLogout = async () => {
+    if (!auth) {
+      console.error("Logout error: Firebase Auth not initialized.");
+      toast({ title: "เกิดข้อผิดพลาด", description: "การตั้งค่า Firebase ไม่สมบูรณ์", variant: "destructive" });
+      return;
+    }
     try {
       await signOut(auth);
       toast({
@@ -363,6 +381,12 @@ export default function FSFAPage() {
       console.log(`[Toggle Like] Food "${foodNameToToggle}" is ${alreadyLikedInCurrentList ? 'FOUND' : 'NOT FOUND'} in current likedMealsList (count: ${likedMealsList.length}). Current isCurrentFoodLiked (button state before click) was ${isCurrentFoodLiked}. Action will be to ${alreadyLikedInCurrentList ? 'UNLIKE' : 'LIKE'}.`);
       
       if (currentUser?.uid) { 
+        if (!db) {
+            console.error("[Toggle Like - Firestore] Firestore (db) is not initialized.");
+            toast({ title: "ข้อผิดพลาดการเชื่อมต่อ", description: "ไม่สามารถเชื่อมต่อกับฐานข้อมูลได้", variant: "destructive" });
+            setIsLiking(false);
+            return;
+        }
         const userId = currentUser.uid;
         console.log(`[Toggle Like - Firestore] Current User ID: '${userId}'`);
         if (!userId || typeof userId !== 'string' || userId.trim() === '') {
@@ -490,6 +514,13 @@ export default function FSFAPage() {
     console.log("[Clear All Meals] Starting operation. User:", currentUser?.uid || "Anonymous");
     try {
       if (currentUser?.uid) {
+        if (!db) {
+          console.error("[Clear All Meals - Firestore] Firestore (db) is not initialized.");
+          toast({ title: "ข้อผิดพลาดการเชื่อมต่อ", description: "ไม่สามารถล้างข้อมูลได้", variant: "destructive" });
+          setIsClearingMeals(false); 
+          setIsClearConfirmOpen(false);
+          return;
+        }
         const userId = currentUser.uid;
         if (!userId || typeof userId !== 'string' || userId.trim() === '') {
           toast({ title: "ข้อผิดพลาด", description: "ID ผู้ใช้ไม่ถูกต้อง ไม่สามารถล้างข้อมูลได้", variant: "destructive" });
@@ -539,6 +570,14 @@ export default function FSFAPage() {
     const handleLogin = async (event: React.FormEvent) => {
       event.preventDefault();
       setIsLoading(true);
+
+      if (!auth) {
+        console.error('Login error: Firebase Auth not initialized.');
+        toast({ title: "เข้าสู่ระบบไม่สำเร็จ", description: "การตั้งค่า Firebase ไม่สมบูรณ์", variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
+
       try {
         await signInWithEmailAndPassword(auth, email, password);
         toast({
@@ -658,6 +697,12 @@ export default function FSFAPage() {
           description: "รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร",
           variant: "destructive",
         });
+        setIsLoading(false);
+        return;
+      }
+
+      if (!auth) {
+        toast({ title: "ลงทะเบียนไม่สำเร็จ", description: "การตั้งค่า Firebase ไม่สมบูรณ์", variant: "destructive" });
         setIsLoading(false);
         return;
       }
@@ -1126,6 +1171,7 @@ export default function FSFAPage() {
     
 
     
+
 
 
 
