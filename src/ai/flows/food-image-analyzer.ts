@@ -21,10 +21,14 @@ const ScanFoodImageInputSchema = z.object({
 });
 export type ScanFoodImageInput = z.infer<typeof ScanFoodImageInputSchema>;
 
+const NutritionalInfoObjectSchema = z.object({
+  summary: z.string().describe("A brief, one-sentence summary about the nutritional information, e.g., 'ข้อมูลโภชนาการโดยประมาณต่อหนึ่งหน่วยบริโภค...' (in Thai)."),
+  details: z.array(z.string()).describe("An array of strings, each representing a single nutritional fact, e.g., 'พลังงาน: 300-400 กิโลแคลอรี' (in Thai)."),
+});
+
 const ScanFoodImageOutputSchema = z.object({
   foodItem: z.string().describe('The identified food item (in Thai). This may indicate if the food is similar to what was identified.'),
-  nutritionalInformation:
-    z.string().describe('Detailed nutritional information about the food item (in Thai). This may be for a similar food item.'),
+  nutritionalInformation: NutritionalInfoObjectSchema.describe('Structured nutritional information about the food item (in Thai). This may be for a similar food item.'),
   safetyPrecautions: z.array(z.string())
     .length(3)
     .describe('Exactly three distinct safety precaution options related to the food item (or a similar item), especially for seniors (in Thai). Each precaution should be a concise piece of advice.'),
@@ -52,10 +56,10 @@ Could you please tell me the following, formatted as a JSON object with the keys
     *   **Fallback for foodItem**: If you cannot identify the exact food item, try to identify the *closest similar food item* you recognize. In this case, the "foodItem" value should clearly indicate it's an approximation, for example: "คล้ายกับ [ชื่ออาหารที่คล้ายกัน]" or "อาจจะเป็น [ชื่ออาหารที่คล้ายกัน]".
     *   **Final Fallback for foodItem**: If you are completely unable to identify the exact food item OR any similar food item, set "foodItem" to "ไม่สามารถระบุชนิดอาหารได้" (Cannot identify food type).
 
-2.  **nutritionalInformation**: What is its nutritional information?
-    *   Provide detailed nutritional information in Thai for the identified food item (whether it's the exact item or a similar item as determined in step 1).
-    *   If providing information for a *similar* food item, you may optionally preface the information with a note like "ข้อมูลสำหรับอาหารที่คล้ายกัน:"
-    *   **Fallback for nutritionalInformation**: If you cannot determine nutritional information for either the exact or a reasonably similar food item, set "nutritionalInformation" to "ไม่สามารถระบุข้อมูลทางโภชนาการได้" (Cannot determine nutritional information).
+2.  **nutritionalInformation**: What is its nutritional information? This MUST be a JSON object with "summary" and "details" keys.
+    *   **summary**: Provide a single, introductory sentence in Thai about the information, for example: "ข้อมูลโภชนาการโดยประมาณต่อหนึ่งหน่วยบริโภค (ประมาณ 1 ถ้วย) อาจแตกต่างกันไป ขึ้นอยู่กับส่วนผสมและปริมาณที่ใช้:"
+    *   **details**: Provide an array of strings. Each string must be a specific nutritional fact in Thai, for example: "พลังงาน: 300-400 กิโลแคลอรี". Do NOT include asterisks or bullet points in the strings.
+    *   **Fallback for nutritionalInformation**: If you cannot determine nutritional information, you MUST still return the object structure. Set "summary" to "ไม่สามารถระบุข้อมูลทางโภชนาการได้" (Cannot determine nutritional information), and set "details" to an empty array \`[]\`.
 
 3.  **safetyPrecautions**: What are three safety precautions for seniors related to this food (or the identified similar food, if applicable)?
     *   This MUST be an array of exactly three distinct strings. Each string should be a concise safety precaution in Thai.
