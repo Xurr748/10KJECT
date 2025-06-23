@@ -963,18 +963,16 @@ export default function FSFAPage() {
                         <Separator />
                         <div>
                           <h4 className="font-semibold text-sm sm:text-base md:text-lg font-body text-foreground">ข้อมูลทางโภชนาการ:</h4>
-                          <ScrollArea className="max-h-24 sm:max-h-32 md:max-h-40 pr-1 sm:pr-2">
-                            <div className="text-xs sm:text-sm md:text-base font-body text-foreground/80 space-y-1">
-                              {imageAnalysisResult.nutritionalInformation.summary && (
-                                <p className="mb-1">{imageAnalysisResult.nutritionalInformation.summary}</p>
-                              )}
-                              <ul className="list-disc pl-4 sm:pl-5 space-y-1">
-                                {imageAnalysisResult.nutritionalInformation.details.map((detail, index) => (
-                                  <li key={index}>{detail}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          </ScrollArea>
+                          <div className="mt-1 text-xs sm:text-sm md:text-base font-body text-foreground/80 space-y-1">
+                            {imageAnalysisResult.nutritionalInformation.summary && (
+                              <p className="mb-1">{imageAnalysisResult.nutritionalInformation.summary}</p>
+                            )}
+                            <ul className="list-disc pl-4 sm:pl-5 space-y-1">
+                              {imageAnalysisResult.nutritionalInformation.details.map((detail, index) => (
+                                <li key={index}>{detail}</li>
+                              ))}
+                            </ul>
+                          </div>
                         </div>
                       </>
                     )}
@@ -986,13 +984,11 @@ export default function FSFAPage() {
                           <h4 className="font-semibold text-sm sm:text-base md:text-lg font-body text-foreground flex items-center">
                             <MessageSquareWarning className="w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5 mr-1 sm:mr-2 text-orange-500"/>คำแนะนำด้านความปลอดภัย:
                           </h4>
-                          <ScrollArea className="max-h-24 sm:max-h-32 md:max-h-40 mt-1 sm:mt-2 pr-1 sm:pr-2">
-                              <ul className="list-disc pl-3 sm:pl-4 md:pl-5 space-y-1 text-xs sm:text-sm md:text-base font-body text-foreground/80">
-                                {imageAnalysisResult.safetyPrecautions.map((precaution, index) => (
-                                  precaution !== GENERIC_SAFETY_UNAVAILABLE ? <li key={index}>{precaution}</li> : null
-                                )).filter(Boolean)}
-                              </ul>
-                          </ScrollArea>
+                          <ul className="list-disc pl-3 sm:pl-4 md:pl-5 space-y-1 text-xs sm:text-sm md:text-base font-body text-foreground/80 mt-1 sm:mt-2">
+                            {imageAnalysisResult.safetyPrecautions.map((precaution, index) => (
+                              precaution !== GENERIC_SAFETY_UNAVAILABLE ? <li key={index}>{precaution}</li> : null
+                            )).filter(Boolean)}
+                          </ul>
                         </div>
                       </>
                     )}
@@ -1180,6 +1176,7 @@ export default function FSFAPage() {
     
 
     
+
 
 
 
