@@ -35,7 +35,7 @@ const prompt = ai.definePrompt({
   name: 'postScanChatPrompt',
   input: {schema: ChatInputSchema},
   output: {schema: ChatOutputSchema},
-  prompt: `You are a friendly and helpful chatbot assistant for the FSFA (Food Security For All) application.
+  prompt: `You are a friendly and helpful chatbot assistant for the MOMU SCAN application.
 Your primary goal is to assist users with their queries, especially related to food, nutrition, and healthy eating.
 Be concise and helpful in your responses.
 

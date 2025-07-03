@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { LogIn, UserPlus, Utensils } from 'lucide-react';
+import { LogIn, UserPlus, ScanLine } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { auth } from '@/lib/firebase'; // Import Firebase auth
 import { signInWithEmailAndPassword } from 'firebase/auth';
@@ -52,8 +52,8 @@ export default function LoginPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4 font-body">
       <Link href="/" className="mb-8">
         <div className="flex items-center text-primary hover:text-primary/80 transition-colors">
-          <Utensils className="w-10 h-10 mr-3" />
-          <span className="text-3xl font-headline font-bold">FSFA</span>
+          <ScanLine className="w-10 h-10 mr-3" />
+          <span className="text-3xl font-headline font-bold">MOMU SCAN</span>
         </div>
       </Link>
       <Card className="w-full max-w-md shadow-xl">
@@ -116,4 +116,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

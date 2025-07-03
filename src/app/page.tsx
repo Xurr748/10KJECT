@@ -65,11 +65,11 @@ import { Textarea } from '@/components/ui/textarea';
 
 
 // Lucide Icons
-import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2, Heart, ChefHat, Settings, MessageSquareWarning, Send, MessageCircle, Trash2 } from 'lucide-react';
+import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2, Heart, ChefHat, Settings, MessageSquareWarning, Send, MessageCircle, Trash2, ScanLine } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 const GENERIC_SAFETY_UNAVAILABLE = "ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้";
-const LOCAL_STORAGE_LIKED_MEALS_KEY = 'fsfa-likedMealNames';
+const LOCAL_STORAGE_LIKED_MEALS_KEY = 'momuscan-likedMealNames';
 
 const PageSection: React.FC<{title: string; icon: React.ReactNode; children: React.ReactNode; id: string; className?: string; titleBgColor?: string; titleTextColor?: string;}> = ({ title, icon, children, id, className, titleBgColor = "bg-primary", titleTextColor = "text-primary-foreground" }) => (
   <section id={id} className={`py-6 sm:py-8 md:py-12 ${className || ''}`}>
@@ -817,14 +817,14 @@ export default function FSFAPage() {
       <header className="py-4 sm:py-6 md:py-8 text-center bg-gradient-to-r from-primary/10 via-secondary/20 to-primary/10 rounded-lg shadow-md mb-6 sm:mb-8 md:mb-12">
         <div className="container mx-auto px-2 sm:px-4 flex justify-between items-center">
           <div className="flex-1 text-left md:text-center">
-             <Link href="/" className="inline-block">
+            <Link href="/" className="inline-block">
               <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-headline font-bold text-primary flex items-center justify-start md:justify-center">
-                <Utensils className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 mr-1 sm:mr-2 md:mr-4" />
-                FSFA <span className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-normal ml-1 sm:ml-2 text-foreground/90">(Food Security For All 🍉🥗)</span>
+                <ScanLine className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 mr-1 sm:mr-2 md:mr-4" />
+                MOMU SCAN
               </h1>
             </Link>
             <p className="mt-1 text-xs sm:text-sm md:text-base lg:text-lg text-foreground/80 font-body text-left md:text-center">
-              สร้างความมั่นคงทางอาหารและสุขภาวะทางโภชนาการที่ดีสำหรับทุกคน
+              สแกนอาหารของคุณ เพื่อสุขภาพที่ดีกว่า
             </p>
           </div>
           <div className="flex items-center space-x-1 sm:space-x-2 md:space-x-3 ml-1 sm:ml-2 md:ml-4">
@@ -1176,6 +1176,7 @@ export default function FSFAPage() {
     
 
     
+
 
 
 
