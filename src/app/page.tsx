@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-// Removed: import { useRouter } from 'next/navigation'; 
+import { useRouter } from 'next/navigation'; 
 import { 
   scanFoodImage, 
   type ScanFoodImageInput, 
@@ -100,6 +100,7 @@ interface UserProfile {
 
 export default function FSFAPage() {
   const { toast } = useToast();
+  const router = useRouter();
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
@@ -683,17 +684,17 @@ export default function FSFAPage() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="height">ส่วนสูง (ซม.)</Label>
-                  <Input id="height" type="number" placeholder="เช่น 165" value={height} onChange={(e) => setHeight(e.target.value)} disabled={!currentUser} />
+                  <Input id="height" type="number" placeholder="เช่น 165" value={height} onChange={(e) => setHeight(e.target.value)} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="weight">น้ำหนัก (กก.)</Label>
-                  <Input id="weight" type="number" placeholder="เช่น 55" value={weight} onChange={(e) => setWeight(e.target.value)} disabled={!currentUser}/>
+                  <Input id="weight" type="number" placeholder="เช่น 55" value={weight} onChange={(e) => setWeight(e.target.value)} />
                 </div>
-                 <Button onClick={handleCalculateBmi} disabled={isCalculatingBmi || !currentUser} className="w-full">
+                 <Button onClick={handleCalculateBmi} disabled={isCalculatingBmi} className="w-full">
                    {isCalculatingBmi ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Calculator className="mr-2 h-4 w-4" />}
                    คำนวณ BMI และแคลอรี
                  </Button>
-                 {!currentUser && <p className="text-center text-xs text-muted-foreground">กรุณาเข้าสู่ระบบเพื่อบันทึกข้อมูล</p>}
+                 {!currentUser && <p className="text-center text-xs text-muted-foreground pt-2">กรุณาเข้าสู่ระบบเพื่อบันทึกข้อมูล</p>}
               </CardContent>
               {userProfile.bmi && (
                 <CardFooter className="flex flex-col items-start space-y-3 pt-4 border-t">
@@ -778,5 +779,7 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+    
 
     
