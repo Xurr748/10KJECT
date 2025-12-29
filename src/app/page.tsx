@@ -665,6 +665,12 @@ export default function FSFAPage() {
                       <h4 className="font-semibold text-foreground">BMI ของคุณ:</h4>
                       <p className={`text-2xl font-bold ${getBmiInterpretation(userProfile.bmi).color}`}>{userProfile.bmi} ({getBmiInterpretation(userProfile.bmi).text})</p>
                      </div>
+                     {userProfile.dailyCalorieGoal && (
+                        <div>
+                            <h4 className="font-semibold text-foreground">แคลอรีที่แนะนำต่อวัน:</h4>
+                            <p className="text-2xl font-bold text-primary">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
+                        </div>
+                     )}
                   </CardFooter>
                 )}
               </Card>
