@@ -42,7 +42,7 @@ export async function scanFoodImage(input: ScanFoodImageInput): Promise<ScanFood
 
 const prompt = ai.definePrompt({
   name: 'scanFoodImagePrompt',
-  model: 'googleai/gemini-pro-vision',
+  model: 'gemini-pro-vision',
   input: {schema: ScanFoodImageInputSchema},
   output: {schema: ScanFoodImageOutputSchema},
   prompt: `You are a nutrition and food safety expert, especially for seniors. You are also highly knowledgeable about global cuisines, with a special emphasis on Thai cuisine. Your responses MUST be in Thai.
