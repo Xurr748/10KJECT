@@ -151,14 +151,14 @@ export default function FSFAPage() {
         setDailyLogId(doc.id);
         console.log("[Log Fetch] Found today's log:", doc.id);
       } else {
-        console.log("[Log Fetch] No log for today. Creating a new one.");
-        const newLog: DailyLog = {
+        console.log("[Log Fetch] No log for today. A new one will be created on first log action.");
+        // Reset local state if no log is found for today.
+        setDailyLog({
           date: Timestamp.fromDate(startOfDay),
           consumedCalories: 0,
           meals: [],
-        };
-        setDailyLog(newLog);
-        setDailyLogId(null); // Will be set after first meal log
+        });
+        setDailyLogId(null); 
       }
     }, (error) => {
       console.error("[Log Fetch] Error fetching daily log:", error);
@@ -379,10 +379,13 @@ export default function FSFAPage() {
       toast({ title: "กรุณาเข้าสู่ระบบ", description: "คุณต้องเข้าสู่ระบบเพื่อบันทึกมื้ออาหาร", variant: "destructive" });
       return;
     }
-    if (!dailyLog) {
-      toast({ title: "เกิดข้อผิดพลาด", description: "ไม่พบข้อมูลบันทึกประจำวัน", variant: "destructive" });
-      return;
-    }
+    
+    // Use a default dailyLog object if it's null (for the very first log of the day)
+    const currentLog = dailyLog || {
+        date: Timestamp.fromDate(new Date(new Date().setHours(0, 0, 0, 0))),
+        consumedCalories: 0,
+        meals: [],
+    };
 
     setIsLoggingMeal(true);
 
@@ -392,26 +395,33 @@ export default function FSFAPage() {
       timestamp: Timestamp.now(),
     };
 
-    const newConsumedCalories = dailyLog.consumedCalories + mealCalories;
-    const newMeals = [...dailyLog.meals, newMeal];
+    const newConsumedCalories = currentLog.consumedCalories + mealCalories;
+    const newMeals = [...currentLog.meals, newMeal];
 
     try {
       const userLogsCollection = collection(db, 'users', currentUser.uid, 'dailyLogs');
       let docRef;
 
       if (dailyLogId) {
+        // If a log for today already exists, update it
         docRef = doc(userLogsCollection, dailyLogId);
         await setDoc(docRef, { consumedCalories: newConsumedCalories, meals: newMeals }, { merge: true });
       } else {
-        const newLogData = { ...dailyLog, consumedCalories: newConsumedCalories, meals: newMeals };
+        // If no log for today exists, create a new one
+        const newLogData = { ...currentLog, consumedCalories: newConsumedCalories, meals: newMeals };
         docRef = await addDoc(userLogsCollection, newLogData);
-        setDailyLogId(docRef.id);
+        setDailyLogId(docRef.id); // Set the new ID for subsequent updates today
       }
       
       toast({ title: "บันทึกมื้ออาหารสำเร็จ", description: `${mealName} (${mealCalories} kcal) ถูกเพิ่มในบันทึกของคุณ` });
       
+      // Check if calories exceed the goal and show a warning toast
       if(userProfile.dailyCalorieGoal && newConsumedCalories > userProfile.dailyCalorieGoal) {
-        toast({ title: "คำเตือน!", description: "คุณบริโภคเกินเป้าหมายแคลอรีสำหรับวันนี้แล้ว!", variant: "default" });
+        toast({ 
+          title: "คำเตือน: เกินเป้าหมายแคลอรี!", 
+          description: `วันนี้คุณบริโภคไปแล้ว ${newConsumedCalories} kcal ซึ่งเกินเป้าหมาย ${userProfile.dailyCalorieGoal} kcal ของคุณ`, 
+          variant: "destructive" 
+        });
       }
 
     } catch (error) {
@@ -713,7 +723,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-
-    
-
-    
