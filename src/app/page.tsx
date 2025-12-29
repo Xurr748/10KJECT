@@ -684,34 +684,50 @@ export default function FSFAPage() {
                   </CardFooter>
                 )}
               </Card>
-              <Card className="mt-4 shadow-lg rounded-lg overflow-hidden bg-card">
+
+              <Card className="shadow-lg rounded-lg overflow-hidden bg-card">
                 <CardHeader>
                   <CardTitle className="text-lg sm:text-xl font-headline text-primary">ภาพรวมแคลอรีวันนี้</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4 text-center">
-                  {currentUser ? (
-                    userProfile.dailyCalorieGoal ? (
-                      <>
-                        <div>
-                          <p className="text-sm text-muted-foreground">เป้าหมาย</p>
-                          <p className="text-2xl font-bold text-primary">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
-                        </div>
-                        <Separator/>
-                        <div>
-                          <p className="text-sm text-muted-foreground">ใช้ไปแล้ว</p>
-                          <p className={`text-3xl font-bold ${dailyLog && userProfile.dailyCalorieGoal && dailyLog.consumedCalories > userProfile.dailyCalorieGoal ? 'text-destructive' : 'text-green-500'}`}>
-                            {dailyLog?.consumedCalories.toLocaleString() ?? 0} <span className="text-base font-normal">kcal</span>
-                          </p>
-                        </div>
-                      </>
-                    ) : (
-                      <p className="text-muted-foreground text-sm">กรุณาคำนวณ BMI เพื่อตั้งค่าเป้าหมายแคลอรีของคุณ</p>
-                    )
+                <CardContent className="space-y-4 p-4">
+                  {!currentUser ? (
+                    <p className="text-muted-foreground text-sm text-center p-4">กรุณาเข้าสู่ระบบเพื่อดูและบันทึกแคลอรี</p>
+                  ) : !userProfile.dailyCalorieGoal ? (
+                    <p className="text-muted-foreground text-sm text-center p-4">กรุณาคำนวณ BMI เพื่อตั้งค่าเป้าหมายแคลอรีของคุณ</p>
                   ) : (
-                    <p className="text-muted-foreground text-sm">กรุณาเข้าสู่ระบบเพื่อดูและบันทึกแคลอรี</p>
+                    <>
+                      <Card className="p-4 text-center bg-secondary/30">
+                        <CardTitle className="text-base font-semibold">แคลอรีที่แนะนำต่อวัน</CardTitle>
+                        <CardDescription>(จำนวนแคลทีมาหลังจากคำนวน BMI แล้ว)</CardDescription>
+                        <p className="text-2xl font-bold text-primary pt-2">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
+                      </Card>
+
+                      <Card className="p-4 bg-secondary/30">
+                        <CardTitle className="text-base font-semibold text-center">แคลอรีที่ใช้ไปแล้ว</CardTitle>
+                        <p className={`text-3xl font-bold text-center pt-2 ${dailyLog && userProfile.dailyCalorieGoal && dailyLog.consumedCalories > userProfile.dailyCalorieGoal ? 'text-destructive' : 'text-green-500'}`}>
+                          {dailyLog?.consumedCalories.toLocaleString() ?? 0} <span className="text-base font-normal">kcal</span>
+                        </p>
+                        <CardDescription className="text-center">(จำนวนแคลที่มาจากการบันทึก)</CardDescription>
+                        
+                        {dailyLog && dailyLog.meals.length > 0 && (
+                          <>
+                            <Separator className="my-3" />
+                            <div className="space-y-2 text-sm text-muted-foreground">
+                              {dailyLog.meals.map((meal, index) => (
+                                <div key={index} className="flex justify-between items-center">
+                                  <span className="truncate pr-2">{meal.name}</span>
+                                  <span className="font-medium whitespace-nowrap">{meal.calories.toLocaleString()} kcal</span>
+                                </div>
+                              ))}
+                            </div>
+                          </>
+                        )}
+                      </Card>
+                    </>
                   )}
                 </CardContent>
               </Card>
+
             </div>
           </PageSection>
         </div>
