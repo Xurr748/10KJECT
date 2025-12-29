@@ -665,12 +665,6 @@ export default function FSFAPage() {
                         {isFoodIdentified ? <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 mr-2 text-green-500" /> : <Info className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 mr-2 text-yellow-500" />}
                         ผลการวิเคราะห์
                         </CardTitle>
-                         {isFoodIdentified && currentUser && (
-                           <Button onClick={handleLogMeal} disabled={isLoggingMeal} size="sm" className="text-xs">
-                             {isLoggingMeal ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
-                             บันทึกมื้ออาหาร
-                           </Button>
-                         )}
                       </div>
                     </CardHeader>
                     <CardContent className="p-3 sm:p-4 md:p-6 space-y-2 sm:space-y-3 md:space-y-4">
@@ -692,7 +686,15 @@ export default function FSFAPage() {
                           <div>
                             <h4 className="font-semibold text-sm sm:text-base md:text-lg font-body text-foreground flex items-center"><Flame className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-orange-500" />แคลอรีโดยประมาณ:</h4>
                             <div className="mt-1 text-xs sm:text-sm md:text-base font-body text-foreground/80 space-y-1">
-                              <p className="text-lg sm:text-xl font-bold text-primary">{imageAnalysisResult.nutritionalInformation.estimatedCalories} กิโลแคลอรี</p>
+                               <div className="flex items-center justify-between">
+                                <p className="text-lg sm:text-xl font-bold text-primary">{imageAnalysisResult.nutritionalInformation.estimatedCalories} กิโลแคลอรี</p>
+                                {isFoodIdentified && currentUser && (
+                                  <Button onClick={handleLogMeal} disabled={isLoggingMeal} size="sm" className="text-xs">
+                                    {isLoggingMeal ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
+                                    บันทึก
+                                  </Button>
+                                )}
+                              </div>
                               <p className="text-xs text-muted-foreground">{imageAnalysisResult.nutritionalInformation.reasoning}</p>
                               
                               <p className="font-semibold pt-2">ส่วนผสมที่ใช้ประเมิน:</p>
@@ -812,3 +814,5 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+    
