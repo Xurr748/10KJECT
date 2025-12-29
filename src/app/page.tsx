@@ -16,11 +16,9 @@ import {
   type ChatOutput as AIChatOutput, 
   type ChatMessage
 } from '@/ai/flows/post-scan-chat';
-import { auth, db, serverTimestamp } from '@/lib/firebase'; 
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth'; // Added auth functions
-import { collection, addDoc, query, where, getDocs, orderBy, Timestamp as FirestoreTimestamp, doc, deleteDoc, writeBatch, setDoc, getDoc } from 'firebase/firestore';
-import { format, isToday, parseISO } from 'date-fns';
-import { th } from 'date-fns/locale';
+import { auth, db } from '@/lib/firebase'; 
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth'; 
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 
 
 // ShadCN UI Components
@@ -32,27 +30,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
-  DialogTrigger, // Added DialogTrigger
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -62,11 +39,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import { Progress } from '@/components/ui/progress';
 
 
 // Lucide Icons
-import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, Heart, MessageSquareWarning, Send, MessageCircle, Trash2, ScanLine, Flame, BookCheck, Calculator, Save } from 'lucide-react';
+import { UploadCloud, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, MessageSquareWarning, Send, MessageCircle, ScanLine, Flame, Calculator } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 const GENERIC_SAFETY_UNAVAILABLE = "ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้";
@@ -83,13 +59,6 @@ const PageSection: React.FC<{title: string; icon: React.ReactNode; children: Rea
   </section>
 );
 PageSection.displayName = 'PageSection';
-
-interface LoggedMeal {
-  id: string;
-  foodName: string;
-  calories: number;
-  loggedAt: FirestoreTimestamp | Date;
-}
 
 interface UserProfile {
   height?: number;
@@ -116,14 +85,6 @@ export default function FSFAPage() {
   const [height, setHeight] = useState<string>('');
   const [weight, setWeight] = useState<string>('');
   const [isCalculatingBmi, setIsCalculatingBmi] = useState(false);
-
-  // Daily Log State
-  const [isCalorieLogDialogOpen, setIsCalorieLogDialogOpen] = useState(false);
-  const [dailyLog, setDailyLog] = useState<LoggedMeal[]>([]);
-  const [isLoadingDailyLog, setIsLoadingDailyLog] = useState(false);
-  const [totalCaloriesToday, setTotalCaloriesToday] = useState(0);
-  const [isLoggingMeal, setIsLoggingMeal] = useState(false);
-
 
   const isFoodIdentified = imageAnalysisResult && imageAnalysisResult.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
 
@@ -155,48 +116,16 @@ export default function FSFAPage() {
     }
   };
   
-  const fetchDailyLog = async (user: User) => {
-    if (!db) return;
-    setIsLoadingDailyLog(true);
-    const logCollectionRef = collection(db, 'users', user.uid, 'calorieLog');
-    const q = query(logCollectionRef, orderBy('loggedAt', 'desc'));
-    
-    try {
-      const querySnapshot = await getDocs(q);
-      const today = new Date();
-      const todaysLogs = querySnapshot.docs
-        .map(doc => {
-          const data = doc.data();
-          const loggedAtDate = (data.loggedAt as FirestoreTimestamp).toDate();
-          return { id: doc.id, ...data, loggedAt: loggedAtDate } as LoggedMeal;
-        })
-        .filter(log => isToday(log.loggedAt));
-      
-      setDailyLog(todaysLogs);
-      const totalCals = todaysLogs.reduce((sum, meal) => sum + meal.calories, 0);
-      setTotalCaloriesToday(totalCals);
-      console.log(`[Daily Log] Fetched ${todaysLogs.length} logs for today. Total calories: ${totalCals}`);
-    } catch (error) {
-      console.error("Error fetching daily log:", error);
-      toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดบันทึกแคลอรีได้", variant: "destructive" });
-    } finally {
-      setIsLoadingDailyLog(false);
-    }
-  };
-  
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       if (user) {
         fetchUserProfile(user);
-        fetchDailyLog(user);
       } else {
         // Reset states for anonymous user
         setUserProfile({});
         setHeight('');
         setWeight('');
-        setDailyLog([]);
-        setTotalCaloriesToday(0);
       }
     });
     return () => unsubscribeAuth();
@@ -211,16 +140,6 @@ export default function FSFAPage() {
     }
   }, [chatMessages]);
 
-  const formatDate = (timestamp: FirestoreTimestamp | Date | undefined) => {
-    if (!timestamp) return 'ไม่ระบุวันที่';
-    const date = timestamp instanceof FirestoreTimestamp ? timestamp.toDate() : timestamp;
-    try {
-      return format(date, "d MMM yy HH:mm", { locale: th }); 
-    } catch (error) {
-      console.error("Error formatting date:", error, timestamp);
-      return 'วันที่ไม่ถูกต้อง';
-    }
-  };
   
   const handleLogout = async () => {
     if (!auth) {
@@ -403,72 +322,6 @@ export default function FSFAPage() {
     return { text: 'อ้วนระดับ 2 (อันตราย)', color: 'text-red-500' };
   };
 
-  const handleLogMeal = async () => {
-    if (!currentUser) {
-      toast({ title: "จำเป็นต้องเข้าสู่ระบบ", description: "กรุณาเข้าสู่ระบบเพื่อบันทึกมื้ออาหาร", variant: "destructive" });
-      return;
-    }
-    if (!db) {
-        toast({ title: "ข้อผิดพลาด", description: "ไม่สามารถเชื่อมต่อฐานข้อมูลได้", variant: "destructive" });
-        return;
-    }
-    if (!imageAnalysisResult || !isFoodIdentified) {
-      toast({ title: "ไม่มีข้อมูลอาหาร", description: "โปรดวิเคราะห์รูปภาพอาหารก่อนบันทึก", variant: "destructive" });
-      return;
-    }
-
-    setIsLoggingMeal(true);
-    const { foodItem, nutritionalInformation } = imageAnalysisResult;
-    const calories = nutritionalInformation.estimatedCalories;
-
-    const newLogEntry = {
-      foodName: foodItem,
-      calories: calories,
-      loggedAt: serverTimestamp(),
-    };
-
-    try {
-      const logCollectionRef = collection(db, 'users', currentUser.uid, 'calorieLog');
-      const docRef = await addDoc(logCollectionRef, newLogEntry);
-
-      // Optimistically update UI
-      const optimisticEntry: LoggedMeal = { ...newLogEntry, id: docRef.id, loggedAt: new Date() };
-      setDailyLog(prev => [optimisticEntry, ...prev].sort((a, b) => (b.loggedAt as Date).getTime() - (a.loggedAt as Date).getTime()));
-      setTotalCaloriesToday(prev => prev + calories);
-
-      toast({ title: "บันทึกมื้ออาหารสำเร็จ", description: `เพิ่ม ${foodItem} (${calories} kcal) ในบันทึกของคุณ` });
-    } catch (error) {
-      console.error("Error logging meal:", error);
-      toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกมื้ออาหารได้", variant: "destructive" });
-    } finally {
-      setIsLoggingMeal(false);
-    }
-  };
-
-  const handleDeleteLogEntry = async (logId: string, caloriesToSubtract: number) => {
-    if (!currentUser || !db) return;
-    
-    // Optimistically remove from UI
-    const originalLog = [...dailyLog];
-    setDailyLog(prev => prev.filter(log => log.id !== logId));
-    setTotalCaloriesToday(prev => prev - caloriesToSubtract);
-
-    try {
-      const logDocRef = doc(db, 'users', currentUser.uid, 'calorieLog', logId);
-      await deleteDoc(logDocRef);
-      toast({ description: "ลบรายการแล้ว" });
-    } catch (error) {
-      console.error("Error deleting log entry:", error);
-      // Revert UI changes on error
-      setDailyLog(originalLog);
-      setTotalCaloriesToday(prev => prev + caloriesToSubtract);
-      toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถลบรายการได้", variant: "destructive" });
-    }
-  };
-
-  const calorieProgress = userProfile.dailyCalorieGoal ? (totalCaloriesToday / userProfile.dailyCalorieGoal) * 100 : 0;
-  const hasExceededCalories = calorieProgress > 100;
-
   return (
     <div className="min-h-screen bg-background text-foreground font-body p-2 sm:p-4 md:p-8">
       <header className="py-4 sm:py-6 md:py-8 text-center bg-gradient-to-r from-primary/10 via-secondary/20 to-primary/10 rounded-lg shadow-md mb-6 sm:mb-8 md:mb-12">
@@ -485,104 +338,6 @@ export default function FSFAPage() {
             </p>
           </div>
           <div className="flex items-center space-x-1 sm:space-x-2 md:space-x-3 ml-1 sm:ml-2 md:ml-4">
-            <Dialog open={isCalorieLogDialogOpen} onOpenChange={setIsCalorieLogDialogOpen}>
-              <DialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="rounded-full w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 group"
-                  aria-label="บันทึกแคลอรีวันนี้"
-                  disabled={!currentUser}
-                >
-                  <BookCheck className="w-4 h-4 sm:w-5 sm:h-5 md:w-7 md:h-7 text-accent group-hover:text-primary" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-xs sm:max-w-sm md:max-w-md min-h-[70vh] sm:min-h-[60vh] flex flex-col p-3 sm:p-4 md:p-6"> 
-                <DialogHeader>
-                  <DialogTitle className="text-lg sm:text-xl md:text-2xl font-headline text-primary flex items-center">
-                    <BookCheck className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 mr-2" />
-                    บันทึกแคลอรีประจำวัน
-                  </DialogTitle>
-                   {currentUser ? (
-                      userProfile.dailyCalorieGoal ? (
-                        <div className="text-left pt-2 space-y-2">
-                           <div className="flex justify-between items-baseline">
-                             <div>
-                               <p className="text-sm text-muted-foreground">บริโภคแล้ว</p>
-                               <p className={`text-3xl font-bold ${hasExceededCalories ? 'text-destructive' : 'text-primary'}`}>
-                                 {totalCaloriesToday.toLocaleString()}
-                                 <span className="text-lg font-normal"> kcal</span>
-                               </p>
-                             </div>
-                             <div className="text-right">
-                               <p className="text-sm text-muted-foreground">เป้าหมาย</p>
-                               <p className="text-lg font-bold text-foreground/80">
-                                 {userProfile.dailyCalorieGoal.toLocaleString()}
-                                 <span className="text-base font-normal"> kcal</span>
-                               </p>
-                             </div>
-                           </div>
-                           <Progress value={calorieProgress} className={hasExceededCalories ? "[&>div]:bg-destructive" : ""} />
-                           {hasExceededCalories && (
-                             <p className="text-xs text-destructive text-center pt-1 flex items-center justify-center">
-                               <AlertCircle className="w-4 h-4 mr-1"/>
-                               คุณบริโภคแคลอรีเกินเป้าหมายแล้ว!
-                             </p>
-                           )}
-                        </div>
-                      ) : (
-                        <div className="text-center pt-4 text-muted-foreground text-sm p-4 bg-muted/50 rounded-lg">
-                          <p>กรุณาคำนวณ BMI และแคลอรีที่แนะนำต่อวันในหน้าหลักก่อน เพื่อตั้งเป้าหมายแคลอรีของคุณ</p>
-                        </div>
-                      )
-                   ) : (
-                    <div className="text-center pt-4 text-muted-foreground text-sm">
-                      <p>กรุณาเข้าสู่ระบบเพื่อใช้งาน</p>
-                    </div>
-                   )}
-                </DialogHeader>
-                <div className="flex-grow overflow-hidden py-1 sm:py-2 md:py-4">
-                  <ScrollArea className="h-full pr-1 sm:pr-2"> 
-                    {isLoadingDailyLog ? (
-                      <div className="space-y-1 sm:space-y-2 md:space-y-3 p-1">
-                        {[...Array(3)].map((_, index) => ( <Skeleton key={index} className="h-12 w-full rounded-md" /> ))}
-                      </div>
-                    ) : dailyLog.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center h-full text-center p-2 sm:p-4 md:p-6">
-                        <Info className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 text-primary mb-1 sm:mb-2 md:mb-3" /> 
-                        <p className="text-sm sm:text-base md:text-lg font-semibold text-foreground">ยังไม่มีรายการอาหารสำหรับวันนี้</p>
-                        <p className="text-xs sm:text-sm text-muted-foreground">
-                          สแกนอาหารและกด "บันทึกมื้ออาหาร" เพื่อเริ่มบันทึก
-                        </p>
-                      </div>
-                    ) : (
-                      <ul className="space-y-2 p-1">
-                        {dailyLog.map((log) => (
-                          <li key={log.id} className="p-2 sm:p-3 bg-card border rounded-lg shadow-sm text-foreground font-body text-xs sm:text-sm flex justify-between items-center">
-                            <div>
-                              <p className="font-semibold">{log.foodName}</p>
-                              <p className="text-primary">{log.calories} kcal</p>
-                              <span className="block text-xs text-muted-foreground mt-1">
-                                {formatDate(log.loggedAt)}
-                              </span>
-                            </div>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleDeleteLogEntry(log.id, log.calories)}>
-                              <Trash2 className="h-4 w-4 text-destructive" />
-                            </Button>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </ScrollArea>
-                </div>
-                <DialogFooter className="mt-auto pt-2 sm:pt-3 md:pt-4 border-t flex justify-end w-full">
-                  <DialogClose asChild>
-                    <Button variant="outline" size="sm" className="text-xs">ปิด</Button>
-                  </DialogClose>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon" className="rounded-full w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 group">
@@ -688,12 +443,6 @@ export default function FSFAPage() {
                             <div className="mt-1 text-xs sm:text-sm md:text-base font-body text-foreground/80 space-y-1">
                                <div className="flex items-center justify-between">
                                 <p className="text-lg sm:text-xl font-bold text-primary">{imageAnalysisResult.nutritionalInformation.estimatedCalories} กิโลแคลอรี</p>
-                                {isFoodIdentified && currentUser && (
-                                  <Button onClick={handleLogMeal} disabled={isLoggingMeal} size="sm" className="text-xs">
-                                    {isLoggingMeal ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
-                                    บันทึก
-                                  </Button>
-                                )}
                               </div>
                               <p className="text-xs text-muted-foreground">{imageAnalysisResult.nutritionalInformation.reasoning}</p>
                               
@@ -814,5 +563,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-
-    
