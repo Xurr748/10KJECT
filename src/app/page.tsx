@@ -185,12 +185,9 @@ export default function FSFAPage() {
         fetchUserProfile(user);
         fetchDailyLog(user).then(unsub => { unsubscribeLog = unsub; });
       } else {
-        // Reset states for anonymous user
-        setUserProfile({});
-        setHeight('');
-        setWeight('');
-        setDailyLog(null);
-        setDailyLogId(null);
+        // Reset states but keep local data for anonymous user
+        setCurrentUser(null);
+        // Do not reset userProfile or dailyLog here to allow anon usage
         if(unsubscribeLog) unsubscribeLog();
       }
     });
@@ -221,7 +218,13 @@ export default function FSFAPage() {
       toast({
         title: "ออกจากระบบสำเร็จ",
       });
-      console.log('[Logout] User logged out.');
+      // Reset local data upon logout to force a clean state
+      setUserProfile({});
+      setHeight('');
+      setWeight('');
+      setDailyLog(null);
+      setDailyLogId(null);
+      console.log('[Logout] User logged out and local data cleared.');
     } catch (error: unknown) {
       console.error("Logout error:", error);
       toast({
@@ -371,20 +374,19 @@ export default function FSFAPage() {
       try {
         const userDocRef = doc(db, 'users', currentUser.uid);
         await setDoc(userDocRef, newProfile, { merge: true });
-        toast({ title: "คำนวณและบันทึกข้อมูลสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
+        toast({ title: "คำนวณและบันทึกข้อมูลสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi} (ข้อมูลถูกบันทึกในบัญชีของคุณแล้ว)` });
       } catch (error) {
         console.error("Error saving profile to Firestore:", error);
-        toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อมูลโปรไฟล์ได้", variant: "destructive"});
+        toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อมูลโปรไฟล์ลงฐานข้อมูลได้", variant: "destructive"});
       }
+    } else {
+        toast({ title: "คำนวณ BMI สำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi} (ข้อมูลนี้จะหายไปเมื่อออกจากหน้าเว็บ)` });
     }
     setIsCalculatingBmi(false);
   };
 
   const handleLogMeal = async (mealName: string, mealCalories: number) => {
-    if (!currentUser || !db) {
-      toast({ title: "กรุณาเข้าสู่ระบบ", description: "คุณต้องเข้าสู่ระบบเพื่อบันทึกมื้ออาหาร", variant: "destructive" });
-      return;
-    }
+    setIsLoggingMeal(true);
     
     // Use a default dailyLog object if it's null (for the very first log of the day)
     const currentLog = dailyLog || {
@@ -393,49 +395,53 @@ export default function FSFAPage() {
         meals: [],
     };
 
-    setIsLoggingMeal(true);
-
     const newMeal = {
       name: mealName,
       calories: mealCalories,
       timestamp: Timestamp.now(),
     };
 
-    const newConsumedCalories = currentLog.consumedCalories + mealCalories;
-    const newMeals = [...currentLog.meals, newMeal];
+    const updatedLog = {
+      ...currentLog,
+      consumedCalories: currentLog.consumedCalories + mealCalories,
+      meals: [...currentLog.meals, newMeal],
+    };
 
-    try {
-      const userLogsCollection = collection(db, 'users', currentUser.uid, 'dailyLogs');
-      let docRef;
+    setDailyLog(updatedLog);
 
-      if (dailyLogId) {
-        // If a log for today already exists, update it
-        docRef = doc(userLogsCollection, dailyLogId);
-        await setDoc(docRef, { consumedCalories: newConsumedCalories, meals: newMeals }, { merge: true });
-      } else {
-        // If no log for today exists, create a new one
-        const newLogData = { ...currentLog, consumedCalories: newConsumedCalories, meals: newMeals };
-        docRef = await addDoc(userLogsCollection, newLogData);
-        setDailyLogId(docRef.id); // Set the new ID for subsequent updates today
-      }
-      
-      toast({ title: "บันทึกมื้ออาหารสำเร็จ", description: `${mealName} (${mealCalories} kcal) ถูกเพิ่มในบันทึกของคุณ` });
-      
-      // Check if calories exceed the goal and show a warning toast
-      if(userProfile.dailyCalorieGoal && newConsumedCalories > userProfile.dailyCalorieGoal) {
+    toast({ title: "บันทึกมื้ออาหารสำเร็จ", description: `${mealName} (${mealCalories} kcal) ถูกเพิ่มในบันทึกของคุณ` });
+
+    if(userProfile.dailyCalorieGoal && updatedLog.consumedCalories > userProfile.dailyCalorieGoal) {
         toast({ 
           title: "คำเตือน: เกินเป้าหมายแคลอรี!", 
-          description: `วันนี้คุณบริโภคไปแล้ว ${newConsumedCalories} kcal ซึ่งเกินเป้าหมาย ${userProfile.dailyCalorieGoal} kcal ของคุณ`, 
+          description: `วันนี้คุณบริโภคไปแล้ว ${updatedLog.consumedCalories} kcal ซึ่งเกินเป้าหมาย ${userProfile.dailyCalorieGoal} kcal ของคุณ`, 
           variant: "destructive" 
         });
-      }
-
-    } catch (error) {
-      console.error("[Log Meal] Error logging meal:", error);
-      toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกมื้ออาหารได้", variant: "destructive" });
-    } finally {
-      setIsLoggingMeal(false);
     }
+
+    // Save to Firestore only if user is logged in
+    if (currentUser && db) {
+      try {
+        const userLogsCollection = collection(db, 'users', currentUser.uid, 'dailyLogs');
+        let docRef;
+
+        if (dailyLogId) {
+          docRef = doc(userLogsCollection, dailyLogId);
+          await setDoc(docRef, { consumedCalories: updatedLog.consumedCalories, meals: updatedLog.meals }, { merge: true });
+        } else {
+          const newLogData = { ...updatedLog, date: Timestamp.fromDate(new Date(new Date().setHours(0, 0, 0, 0))) };
+          docRef = await addDoc(userLogsCollection, newLogData);
+          setDailyLogId(docRef.id);
+        }
+        console.log('[Log Meal] Meal logged to Firestore.');
+
+      } catch (error) {
+        console.error("[Log Meal] Error logging meal to Firestore:", error);
+        toast({ title: "เกิดข้อผิดพลาดในการบันทึกข้อมูล", description: "ไม่สามารถบันทึกมื้ออาหารลงฐานข้อมูลได้", variant: "destructive" });
+      }
+    }
+
+    setIsLoggingMeal(false);
   };
 
 
@@ -705,28 +711,19 @@ export default function FSFAPage() {
                     </DialogDescription>
                   </DialogHeader>
                   <div className="py-4">
-                    {!currentUser ? (
-                       <div className="flex flex-col items-center justify-center text-center h-48">
-                          <p className="text-muted-foreground mb-4">กรุณาเข้าสู่ระบบเพื่อดูและบันทึกแคลอรี</p>
-                          <Button onClick={() => router.push('/login')}>
-                            <LogIn className="mr-2 h-4 w-4" />
-                            เข้าสู่ระบบ
-                          </Button>
-                        </div>
-                    ) : !userProfile.dailyCalorieGoal ? (
-                      <div className="flex items-center justify-center h-24">
-                          <p className="text-muted-foreground text-sm text-center p-4">กรุณาคำนวณ BMI เพื่อตั้งค่าเป้าหมายแคลอรีของคุณ</p>
-                      </div>
-                    ) : (
                       <div className="space-y-4">
                         <Card className="p-4 text-center bg-secondary/30">
                           <CardTitle className="text-base font-semibold">แคลอรีที่แนะนำต่อวัน</CardTitle>
                           <CardDescription>(เป้าหมาย)</CardDescription>
-                          <p className="text-2xl font-bold text-primary pt-2">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
+                          {userProfile.dailyCalorieGoal ? (
+                            <p className="text-2xl font-bold text-primary pt-2">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
+                           ) : (
+                             <p className="text-sm text-muted-foreground pt-2">กรุณาคำนวณ BMI เพื่อตั้งค่าเป้าหมาย</p>
+                           )}
                         </Card>
 
                         <Card className="p-4 bg-secondary/30">
-                          <CardTitle className="text-base font-semibold text-center">แคลอรีที่ใช้ไปแล้ว</CardTitle>
+                          <CardTitle className="text-base font-semibold text-center">แคลอറിที่ใช้ไปแล้ว</CardTitle>
                           <p className={`text-3xl font-bold text-center pt-2 ${dailyLog && userProfile.dailyCalorieGoal && dailyLog.consumedCalories > userProfile.dailyCalorieGoal ? 'text-destructive' : 'text-green-500'}`}>
                             {dailyLog?.consumedCalories.toLocaleString() ?? 0} <span className="text-base font-normal">kcal</span>
                           </p>
@@ -748,8 +745,16 @@ export default function FSFAPage() {
                             </>
                           )}
                         </Card>
+                         {!currentUser && (
+                            <div className="text-center pt-4">
+                                <p className="text-sm text-muted-foreground mb-2">เข้าสู่ระบบเพื่อบันทึกข้อมูลของคุณ</p>
+                                <Button size="sm" variant="ghost" onClick={() => router.push('/login')}>
+                                    <LogIn className="mr-2 h-4 w-4" />
+                                    เข้าสู่ระบบ
+                                </Button>
+                            </div>
+                        )}
                       </div>
-                    )}
                   </div>
                 </DialogContent>
               </Dialog>
@@ -765,7 +770,5 @@ export default function FSFAPage() {
     </div>
   );
 }
-
-    
 
     
