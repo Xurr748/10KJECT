@@ -18,6 +18,4 @@ export const ai = genkit({
       apiKey: googleApiKey, // Use the checked variable
     }),
   ],
-  model: 'googleai/gemini-pro-vision',
 });
-
