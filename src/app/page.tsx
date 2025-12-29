@@ -691,9 +691,13 @@ export default function FSFAPage() {
                 </CardHeader>
                 <CardContent className="space-y-4 p-4">
                   {!currentUser ? (
-                    <p className="text-muted-foreground text-sm text-center p-4">กรุณาเข้าสู่ระบบเพื่อดูและบันทึกแคลอรี</p>
+                    <div className="flex items-center justify-center h-24">
+                        <p className="text-muted-foreground text-center">กรุณาเข้าสู่ระบบเพื่อดูและบันทึกแคลอรี</p>
+                    </div>
                   ) : !userProfile.dailyCalorieGoal ? (
-                    <p className="text-muted-foreground text-sm text-center p-4">กรุณาคำนวณ BMI เพื่อตั้งค่าเป้าหมายแคลอรีของคุณ</p>
+                    <div className="flex items-center justify-center h-24">
+                        <p className="text-muted-foreground text-sm text-center p-4">กรุณาคำนวณ BMI เพื่อตั้งค่าเป้าหมายแคลอรีของคุณ</p>
+                    </div>
                   ) : (
                     <>
                       <Card className="p-4 text-center bg-secondary/30">
@@ -713,6 +717,7 @@ export default function FSFAPage() {
                           <>
                             <Separator className="my-3" />
                             <div className="space-y-2 text-sm text-muted-foreground">
+                              <h4 className="font-semibold text-foreground text-center">มื้อที่บันทึกแล้ว</h4>
                               {dailyLog.meals.map((meal, index) => (
                                 <div key={index} className="flex justify-between items-center">
                                   <span className="truncate pr-2">{meal.name}</span>
@@ -739,3 +744,5 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+    
