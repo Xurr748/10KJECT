@@ -185,15 +185,15 @@ export default function FSFAPage() {
         fetchUserProfile(user);
         fetchDailyLog(user).then(unsub => { unsubscribeLog = unsub; });
       } else {
-        // Reset states but keep local data for anonymous user
         setCurrentUser(null);
-        // Do not reset userProfile or dailyLog here to allow anon usage
-        if(unsubscribeLog) unsubscribeLog();
+        // If user logs out, keep profile and log data for anonymous use
+        if (unsubscribeLog) unsubscribeLog();
       }
     });
+  
     return () => {
       unsubscribeAuth();
-      if(unsubscribeLog) unsubscribeLog();
+      if (unsubscribeLog) unsubscribeLog();
     };
   }, []);
 
@@ -218,7 +218,7 @@ export default function FSFAPage() {
       toast({
         title: "ออกจากระบบสำเร็จ",
       });
-      // Reset local data upon logout to force a clean state
+      // Reset all user-specific data to initial state for a clean non-logged-in experience
       setUserProfile({});
       setHeight('');
       setWeight('');
@@ -357,7 +357,6 @@ export default function FSFAPage() {
     setIsCalculatingBmi(true);
     const bmi = w / ((h / 100) * (h / 100));
     // Simple BMR calculation (Mifflin-St Jeor, assuming age 30, sedentary)
-    // This is a placeholder. A real app would ask for age, gender, activity level.
     const calorieGoal = (10 * w) + (6.25 * h) - (5 * 30) + 5; // Male example
     const roundedCalorieGoal = Math.round(calorieGoal * 1.2); // Sedentary
 
@@ -370,17 +369,17 @@ export default function FSFAPage() {
     
     setUserProfile(newProfile);
 
+    toast({ title: "คำนวณ BMI สำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
+
     if (currentUser && db) {
       try {
         const userDocRef = doc(db, 'users', currentUser.uid);
         await setDoc(userDocRef, newProfile, { merge: true });
-        toast({ title: "คำนวณและบันทึกข้อมูลสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi} (ข้อมูลถูกบันทึกในบัญชีของคุณแล้ว)` });
+        toast({ title: "บันทึกข้อมูลสำเร็จ", description: `ข้อมูลโปรไฟล์ของคุณถูกบันทึกในบัญชีเรียบร้อยแล้ว` });
       } catch (error) {
         console.error("Error saving profile to Firestore:", error);
         toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อมูลโปรไฟล์ลงฐานข้อมูลได้", variant: "destructive"});
       }
-    } else {
-        toast({ title: "คำนวณ BMI สำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi} (ข้อมูลนี้จะหายไปเมื่อออกจากหน้าเว็บ)` });
     }
     setIsCalculatingBmi(false);
   };
@@ -388,7 +387,6 @@ export default function FSFAPage() {
   const handleLogMeal = async (mealName: string, mealCalories: number) => {
     setIsLoggingMeal(true);
     
-    // Use a default dailyLog object if it's null (for the very first log of the day)
     const currentLog = dailyLog || {
         date: Timestamp.fromDate(new Date(new Date().setHours(0, 0, 0, 0))),
         consumedCalories: 0,
@@ -419,7 +417,6 @@ export default function FSFAPage() {
         });
     }
 
-    // Save to Firestore only if user is logged in
     if (currentUser && db) {
       try {
         const userLogsCollection = collection(db, 'users', currentUser.uid, 'dailyLogs');
@@ -723,7 +720,7 @@ export default function FSFAPage() {
                         </Card>
 
                         <Card className="p-4 bg-secondary/30">
-                          <CardTitle className="text-base font-semibold text-center">แคลอറിที่ใช้ไปแล้ว</CardTitle>
+                          <CardTitle className="text-base font-semibold text-center">แคลอรี่ที่ใช้ไปแล้ว</CardTitle>
                           <p className={`text-3xl font-bold text-center pt-2 ${dailyLog && userProfile.dailyCalorieGoal && dailyLog.consumedCalories > userProfile.dailyCalorieGoal ? 'text-destructive' : 'text-green-500'}`}>
                             {dailyLog?.consumedCalories.toLocaleString() ?? 0} <span className="text-base font-normal">kcal</span>
                           </p>
@@ -747,7 +744,7 @@ export default function FSFAPage() {
                         </Card>
                          {!currentUser && (
                             <div className="text-center pt-4">
-                                <p className="text-sm text-muted-foreground mb-2">เข้าสู่ระบบเพื่อบันทึกข้อมูลของคุณ</p>
+                                <p className="text-sm text-muted-foreground mb-2">เข้าสู่ระบบเพื่อบันทึกข้อมูลของคุณอย่างถาวร</p>
                                 <Button size="sm" variant="ghost" onClick={() => router.push('/login')}>
                                     <LogIn className="mr-2 h-4 w-4" />
                                     เข้าสู่ระบบ
@@ -770,5 +767,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-
-    
