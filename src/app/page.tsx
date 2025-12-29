@@ -18,7 +18,7 @@ import {
 } from '@/ai/flows/post-scan-chat';
 import { auth, db } from '@/lib/firebase'; 
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth'; 
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 
 
 // ShadCN UI Components
@@ -42,7 +42,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 
 // Lucide Icons
-import { UploadCloud, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, MessageSquareWarning, Send, MessageCircle, ScanLine, Flame, Calculator } from 'lucide-react';
+import { UploadCloud, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, MessageSquareWarning, Send, MessageCircle, ScanLine, Flame, Calculator, PlusCircle } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 const GENERIC_SAFETY_UNAVAILABLE = "ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้";
@@ -67,6 +67,15 @@ interface UserProfile {
   dailyCalorieGoal?: number;
 }
 
+interface DailyLog {
+  date: Timestamp;
+  consumedCalories: number;
+  meals: {
+    name: string;
+    calories: number;
+    timestamp: Timestamp;
+  }[];
+}
 
 export default function FSFAPage() {
   const { toast } = useToast();
@@ -85,6 +94,11 @@ export default function FSFAPage() {
   const [height, setHeight] = useState<string>('');
   const [weight, setWeight] = useState<string>('');
   const [isCalculatingBmi, setIsCalculatingBmi] = useState(false);
+
+  // Calorie Log State
+  const [dailyLog, setDailyLog] = useState<DailyLog | null>(null);
+  const [dailyLogId, setDailyLogId] = useState<string | null>(null);
+  const [isLoggingMeal, setIsLoggingMeal] = useState(false);
 
   const isFoodIdentified = imageAnalysisResult && imageAnalysisResult.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
 
@@ -116,19 +130,66 @@ export default function FSFAPage() {
     }
   };
   
+  // Fetch or create daily log for the user
+  const fetchDailyLog = async (user: User) => {
+    if (!db) return;
+    const today = new Date();
+    const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+
+    const logsCollection = collection(db, 'users', user.uid, 'dailyLogs');
+    const q = query(
+      logsCollection,
+      where('date', '>=', Timestamp.fromDate(startOfDay)),
+      where('date', '<', Timestamp.fromDate(endOfDay))
+    );
+
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+      if (!querySnapshot.empty) {
+        const doc = querySnapshot.docs[0];
+        setDailyLog(doc.data() as DailyLog);
+        setDailyLogId(doc.id);
+        console.log("[Log Fetch] Found today's log:", doc.id);
+      } else {
+        console.log("[Log Fetch] No log for today. Creating a new one.");
+        const newLog: DailyLog = {
+          date: Timestamp.fromDate(startOfDay),
+          consumedCalories: 0,
+          meals: [],
+        };
+        setDailyLog(newLog);
+        setDailyLogId(null); // Will be set after first meal log
+      }
+    }, (error) => {
+      console.error("[Log Fetch] Error fetching daily log:", error);
+      toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดข้อมูลบันทึกแคลอรีได้", variant: "destructive"});
+    });
+
+    return unsubscribe;
+  };
+
+
   useEffect(() => {
+    let unsubscribeLog: (() => void) | undefined;
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       if (user) {
         fetchUserProfile(user);
+        fetchDailyLog(user).then(unsub => { unsubscribeLog = unsub; });
       } else {
         // Reset states for anonymous user
         setUserProfile({});
         setHeight('');
         setWeight('');
+        setDailyLog(null);
+        setDailyLogId(null);
+        if(unsubscribeLog) unsubscribeLog();
       }
     });
-    return () => unsubscribeAuth();
+    return () => {
+      unsubscribeAuth();
+      if(unsubscribeLog) unsubscribeLog();
+    };
   }, []);
 
   useEffect(() => {
@@ -313,6 +374,55 @@ export default function FSFAPage() {
     setIsCalculatingBmi(false);
   };
 
+  const handleLogMeal = async (mealName: string, mealCalories: number) => {
+    if (!currentUser || !db) {
+      toast({ title: "กรุณาเข้าสู่ระบบ", description: "คุณต้องเข้าสู่ระบบเพื่อบันทึกมื้ออาหาร", variant: "destructive" });
+      return;
+    }
+    if (!dailyLog) {
+      toast({ title: "เกิดข้อผิดพลาด", description: "ไม่พบข้อมูลบันทึกประจำวัน", variant: "destructive" });
+      return;
+    }
+
+    setIsLoggingMeal(true);
+
+    const newMeal = {
+      name: mealName,
+      calories: mealCalories,
+      timestamp: Timestamp.now(),
+    };
+
+    const newConsumedCalories = dailyLog.consumedCalories + mealCalories;
+    const newMeals = [...dailyLog.meals, newMeal];
+
+    try {
+      const userLogsCollection = collection(db, 'users', currentUser.uid, 'dailyLogs');
+      let docRef;
+
+      if (dailyLogId) {
+        docRef = doc(userLogsCollection, dailyLogId);
+        await setDoc(docRef, { consumedCalories: newConsumedCalories, meals: newMeals }, { merge: true });
+      } else {
+        const newLogData = { ...dailyLog, consumedCalories: newConsumedCalories, meals: newMeals };
+        docRef = await addDoc(userLogsCollection, newLogData);
+        setDailyLogId(docRef.id);
+      }
+      
+      toast({ title: "บันทึกมื้ออาหารสำเร็จ", description: `${mealName} (${mealCalories} kcal) ถูกเพิ่มในบันทึกของคุณ` });
+      
+      if(userProfile.dailyCalorieGoal && newConsumedCalories > userProfile.dailyCalorieGoal) {
+        toast({ title: "คำเตือน!", description: "คุณบริโภคเกินเป้าหมายแคลอรีสำหรับวันนี้แล้ว!", variant: "default" });
+      }
+
+    } catch (error) {
+      console.error("[Log Meal] Error logging meal:", error);
+      toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกมื้ออาหารได้", variant: "destructive" });
+    } finally {
+      setIsLoggingMeal(false);
+    }
+  };
+
+
   const getBmiInterpretation = (bmi: number | undefined): {text: string, color: string} => {
     if (bmi === undefined) return {text: 'N/A', color: 'text-foreground'};
     if (bmi < 18.5) return { text: 'ผอม', color: 'text-blue-500' };
@@ -443,6 +553,15 @@ export default function FSFAPage() {
                             <div className="mt-1 text-xs sm:text-sm md:text-base font-body text-foreground/80 space-y-1">
                                <div className="flex items-center justify-between">
                                 <p className="text-lg sm:text-xl font-bold text-primary">{imageAnalysisResult.nutritionalInformation.estimatedCalories} กิโลแคลอรี</p>
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleLogMeal(imageAnalysisResult.foodItem, imageAnalysisResult.nutritionalInformation.estimatedCalories)}
+                                  disabled={isLoggingMeal || !currentUser}
+                                  className="bg-accent text-accent-foreground hover:bg-accent/90"
+                                >
+                                  {isLoggingMeal ? <Loader2 className="animate-spin mr-2" /> : <PlusCircle className="mr-2"/>}
+                                  เพิ่มในบันทึก
+                                </Button>
                               </div>
                               <p className="text-xs text-muted-foreground">{imageAnalysisResult.nutritionalInformation.reasoning}</p>
                               
@@ -519,40 +638,65 @@ export default function FSFAPage() {
 
         <div className="lg:col-span-1 space-y-6 sm:space-y-8 md:space-y-10 lg:space-y-16">
           <PageSection title="โปรไฟล์และ BMI ของคุณ" icon={<Calculator />} id="bmi-calculator" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-primary" titleTextColor="text-primary-foreground">
-            <Card className="shadow-lg rounded-lg overflow-hidden bg-card">
-              <CardHeader>
-                <CardTitle className="text-lg sm:text-xl font-headline text-primary">คำนวณ BMI และแคลอรี</CardTitle>
-                <CardDescription className="text-xs sm:text-sm">กรอกข้อมูลเพื่อคำนวณดัชนีมวลกายและแคลอรีที่แนะนำต่อวัน</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="height">ส่วนสูง (ซม.)</Label>
-                  <Input id="height" type="number" placeholder="เช่น 165" value={height} onChange={(e) => setHeight(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="weight">น้ำหนัก (กก.)</Label>
-                  <Input id="weight" type="number" placeholder="เช่น 55" value={weight} onChange={(e) => setWeight(e.target.value)} />
-                </div>
-                 <Button onClick={handleCalculateBmi} disabled={isCalculatingBmi} className="w-full">
-                   {isCalculatingBmi ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Calculator className="mr-2 h-4 w-4" />}
-                   คำนวณ BMI และแคลอรี
-                 </Button>
-                 {!currentUser && <p className="text-center text-xs text-muted-foreground pt-2">กรุณาเข้าสู่ระบบเพื่อบันทึกข้อมูล</p>}
-              </CardContent>
-              {userProfile.bmi && (
-                <CardFooter className="flex flex-col items-start space-y-3 pt-4 border-t">
-                   <div>
-                    <h4 className="font-semibold text-foreground">BMI ของคุณ:</h4>
-                    <p className={`text-2xl font-bold ${getBmiInterpretation(userProfile.bmi).color}`}>{userProfile.bmi} ({getBmiInterpretation(userProfile.bmi).text})</p>
-                   </div>
-                   <div>
-                    <h4 className="font-semibold text-foreground">แคลอรีที่แนะนำต่อวัน:</h4>
-                    <p className="text-xl font-bold text-primary">{userProfile.dailyCalorieGoal?.toLocaleString() ?? 'N/A'} kcal</p>
-                    <p className="text-xs text-muted-foreground">(สำหรับกิจกรรมระดับนั่งกับที่)</p>
-                   </div>
-                </CardFooter>
-              )}
-            </Card>
+            <div className="space-y-4">
+              <Card className="shadow-lg rounded-lg overflow-hidden bg-card">
+                <CardHeader>
+                  <CardTitle className="text-lg sm:text-xl font-headline text-primary">คำนวณ BMI และแคลอรี</CardTitle>
+                  <CardDescription className="text-xs sm:text-sm">กรอกข้อมูลเพื่อคำนวณดัชนีมวลกายและแคลอรีที่แนะนำต่อวัน</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="height">ส่วนสูง (ซม.)</Label>
+                    <Input id="height" type="number" placeholder="เช่น 165" value={height} onChange={(e) => setHeight(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="weight">น้ำหนัก (กก.)</Label>
+                    <Input id="weight" type="number" placeholder="เช่น 55" value={weight} onChange={(e) => setWeight(e.target.value)} />
+                  </div>
+                   <Button onClick={handleCalculateBmi} disabled={isCalculatingBmi} className="w-full">
+                     {isCalculatingBmi ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Calculator className="mr-2 h-4 w-4" />}
+                     คำนวณ BMI และแคลอรี
+                   </Button>
+                   {!currentUser && <p className="text-center text-xs text-muted-foreground pt-2">กรุณาเข้าสู่ระบบเพื่อบันทึกข้อมูล</p>}
+                </CardContent>
+                {userProfile.bmi && (
+                  <CardFooter className="flex flex-col items-start space-y-3 pt-4 border-t">
+                     <div>
+                      <h4 className="font-semibold text-foreground">BMI ของคุณ:</h4>
+                      <p className={`text-2xl font-bold ${getBmiInterpretation(userProfile.bmi).color}`}>{userProfile.bmi} ({getBmiInterpretation(userProfile.bmi).text})</p>
+                     </div>
+                  </CardFooter>
+                )}
+              </Card>
+              <Card className="mt-4 shadow-lg rounded-lg overflow-hidden bg-card">
+                <CardHeader>
+                  <CardTitle className="text-lg sm:text-xl font-headline text-primary">ภาพรวมแคลอรีวันนี้</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 text-center">
+                  {currentUser ? (
+                    userProfile.dailyCalorieGoal ? (
+                      <>
+                        <div>
+                          <p className="text-sm text-muted-foreground">เป้าหมาย</p>
+                          <p className="text-2xl font-bold text-primary">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
+                        </div>
+                        <Separator/>
+                        <div>
+                          <p className="text-sm text-muted-foreground">ใช้ไปแล้ว</p>
+                          <p className={`text-3xl font-bold ${dailyLog && userProfile.dailyCalorieGoal && dailyLog.consumedCalories > userProfile.dailyCalorieGoal ? 'text-destructive' : 'text-green-500'}`}>
+                            {dailyLog?.consumedCalories.toLocaleString() ?? 0} <span className="text-base font-normal">kcal</span>
+                          </p>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-muted-foreground text-sm">กรุณาคำนวณ BMI เพื่อตั้งค่าเป้าหมายแคลอรีของคุณ</p>
+                    )
+                  ) : (
+                    <p className="text-muted-foreground text-sm">กรุณาเข้าสู่ระบบเพื่อดูและบันทึกแคลอรี</p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </PageSection>
         </div>
       </main>
@@ -563,3 +707,5 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+    
