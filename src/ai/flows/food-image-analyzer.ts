@@ -44,6 +44,7 @@ const prompt = ai.definePrompt({
   name: 'scanFoodImagePrompt',
   input: {schema: ScanFoodImageInputSchema},
   output: {schema: ScanFoodImageOutputSchema},
+  model: 'gemini-pro-vision',
   prompt: `You are a nutrition and food safety expert, especially for seniors. You are also highly knowledgeable about global cuisines, with a special emphasis on Thai cuisine. Your responses MUST be in Thai.
 
 Regarding the food image provided ({{media url=foodImage}}):
