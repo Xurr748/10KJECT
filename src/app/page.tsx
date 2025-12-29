@@ -62,6 +62,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import { Progress } from '@/components/ui/progress';
 
 
 // Lucide Icons
@@ -388,7 +389,7 @@ export default function FSFAPage() {
         toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อมูลโปรไฟล์ได้", variant: "destructive"});
       }
     } else {
-      toast({ title: "คำวณสำเร็จ", description: "ข้อมูลนี้จะถูกบันทึกเมื่อคุณเข้าสู่ระบบ", variant: "default" });
+      toast({ title: "คำนวณสำเร็จ", description: "ข้อมูลนี้จะถูกบันทึกเมื่อคุณเข้าสู่ระบบ", variant: "default" });
     }
     setIsCalculatingBmi(false);
   };
@@ -404,7 +405,7 @@ export default function FSFAPage() {
 
   const handleLogMeal = async () => {
     if (!currentUser) {
-      toast({ title: "จำเป็นต้องเข้าสู่ระบบ", description: "กรุณาเข้าสู่ระบบเพื่อบันทึกแคลอรี", variant: "destructive" });
+      toast({ title: "จำเป็นต้องเข้าสู่ระบบ", description: "กรุณาเข้าสู่ระบบเพื่อบันทึกมื้ออาหาร", variant: "destructive" });
       return;
     }
     if (!db) {
@@ -432,10 +433,10 @@ export default function FSFAPage() {
 
       // Optimistically update UI
       const optimisticEntry: LoggedMeal = { ...newLogEntry, id: docRef.id, loggedAt: new Date() };
-      setDailyLog(prev => [optimisticEntry, ...prev]);
+      setDailyLog(prev => [optimisticEntry, ...prev].sort((a, b) => (b.loggedAt as Date).getTime() - (a.loggedAt as Date).getTime()));
       setTotalCaloriesToday(prev => prev + calories);
 
-      toast({ title: "บันทึกสำเร็จ", description: `เพิ่ม ${foodItem} (${calories} kcal) ในบันทึกของคุณ` });
+      toast({ title: "บันทึกมื้ออาหารสำเร็จ", description: `เพิ่ม ${foodItem} (${calories} kcal) ในบันทึกของคุณ` });
     } catch (error) {
       console.error("Error logging meal:", error);
       toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกมื้ออาหารได้", variant: "destructive" });
@@ -465,6 +466,9 @@ export default function FSFAPage() {
     }
   };
 
+  const calorieProgress = userProfile.dailyCalorieGoal ? (totalCaloriesToday / userProfile.dailyCalorieGoal) * 100 : 0;
+  const hasExceededCalories = calorieProgress > 100;
+
   return (
     <div className="min-h-screen bg-background text-foreground font-body p-2 sm:p-4 md:p-8">
       <header className="py-4 sm:py-6 md:py-8 text-center bg-gradient-to-r from-primary/10 via-secondary/20 to-primary/10 rounded-lg shadow-md mb-6 sm:mb-8 md:mb-12">
@@ -481,16 +485,104 @@ export default function FSFAPage() {
             </p>
           </div>
           <div className="flex items-center space-x-1 sm:space-x-2 md:space-x-3 ml-1 sm:ml-2 md:ml-4">
-            <Button
-              variant="outline"
-              size="icon"
-              className="rounded-full w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 group"
-              onClick={() => setIsCalorieLogDialogOpen(true)}
-              aria-label="บันทึกแคลอรีวันนี้"
-              disabled={!currentUser}
-            >
-              <BookCheck className="w-4 h-4 sm:w-5 sm:h-5 md:w-7 md:h-7 text-accent group-hover:text-primary" />
-            </Button>
+            <Dialog open={isCalorieLogDialogOpen} onOpenChange={setIsCalorieLogDialogOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="rounded-full w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 group"
+                  aria-label="บันทึกแคลอรีวันนี้"
+                  disabled={!currentUser}
+                >
+                  <BookCheck className="w-4 h-4 sm:w-5 sm:h-5 md:w-7 md:h-7 text-accent group-hover:text-primary" />
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-xs sm:max-w-sm md:max-w-md min-h-[70vh] sm:min-h-[60vh] flex flex-col p-3 sm:p-4 md:p-6"> 
+                <DialogHeader>
+                  <DialogTitle className="text-lg sm:text-xl md:text-2xl font-headline text-primary flex items-center">
+                    <BookCheck className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 mr-2" />
+                    บันทึกแคลอรีประจำวัน
+                  </DialogTitle>
+                   {currentUser ? (
+                      userProfile.dailyCalorieGoal ? (
+                        <div className="text-left pt-2 space-y-2">
+                           <div className="flex justify-between items-baseline">
+                             <div>
+                               <p className="text-sm text-muted-foreground">บริโภคแล้ว</p>
+                               <p className={`text-3xl font-bold ${hasExceededCalories ? 'text-destructive' : 'text-primary'}`}>
+                                 {totalCaloriesToday.toLocaleString()}
+                                 <span className="text-lg font-normal"> kcal</span>
+                               </p>
+                             </div>
+                             <div className="text-right">
+                               <p className="text-sm text-muted-foreground">เป้าหมาย</p>
+                               <p className="text-lg font-bold text-foreground/80">
+                                 {userProfile.dailyCalorieGoal.toLocaleString()}
+                                 <span className="text-base font-normal"> kcal</span>
+                               </p>
+                             </div>
+                           </div>
+                           <Progress value={calorieProgress} className={hasExceededCalories ? "[&>div]:bg-destructive" : ""} />
+                           {hasExceededCalories && (
+                             <p className="text-xs text-destructive text-center pt-1 flex items-center justify-center">
+                               <AlertCircle className="w-4 h-4 mr-1"/>
+                               คุณบริโภคแคลอรีเกินเป้าหมายแล้ว!
+                             </p>
+                           )}
+                        </div>
+                      ) : (
+                        <div className="text-center pt-4 text-muted-foreground text-sm p-4 bg-muted/50 rounded-lg">
+                          <p>กรุณาคำนวณ BMI และแคลอรีที่แนะนำต่อวันในหน้าหลักก่อน เพื่อตั้งเป้าหมายแคลอรีของคุณ</p>
+                        </div>
+                      )
+                   ) : (
+                    <div className="text-center pt-4 text-muted-foreground text-sm">
+                      <p>กรุณาเข้าสู่ระบบเพื่อใช้งาน</p>
+                    </div>
+                   )}
+                </DialogHeader>
+                <div className="flex-grow overflow-hidden py-1 sm:py-2 md:py-4">
+                  <ScrollArea className="h-full pr-1 sm:pr-2"> 
+                    {isLoadingDailyLog ? (
+                      <div className="space-y-1 sm:space-y-2 md:space-y-3 p-1">
+                        {[...Array(3)].map((_, index) => ( <Skeleton key={index} className="h-12 w-full rounded-md" /> ))}
+                      </div>
+                    ) : dailyLog.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-full text-center p-2 sm:p-4 md:p-6">
+                        <Info className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 text-primary mb-1 sm:mb-2 md:mb-3" /> 
+                        <p className="text-sm sm:text-base md:text-lg font-semibold text-foreground">ยังไม่มีรายการอาหารสำหรับวันนี้</p>
+                        <p className="text-xs sm:text-sm text-muted-foreground">
+                          สแกนอาหารและกด "บันทึกมื้ออาหาร" เพื่อเริ่มบันทึก
+                        </p>
+                      </div>
+                    ) : (
+                      <ul className="space-y-2 p-1">
+                        {dailyLog.map((log) => (
+                          <li key={log.id} className="p-2 sm:p-3 bg-card border rounded-lg shadow-sm text-foreground font-body text-xs sm:text-sm flex justify-between items-center">
+                            <div>
+                              <p className="font-semibold">{log.foodName}</p>
+                              <p className="text-primary">{log.calories} kcal</p>
+                              <span className="block text-xs text-muted-foreground mt-1">
+                                {formatDate(log.loggedAt)}
+                              </span>
+                            </div>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleDeleteLogEntry(log.id, log.calories)}>
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </ScrollArea>
+                </div>
+                <DialogFooter className="mt-auto pt-2 sm:pt-3 md:pt-4 border-t flex justify-end w-full">
+                  <DialogClose asChild>
+                    <Button variant="outline" size="sm" className="text-xs">ปิด</Button>
+                  </DialogClose>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon" className="rounded-full w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 group">
@@ -576,7 +668,7 @@ export default function FSFAPage() {
                          {isFoodIdentified && currentUser && (
                            <Button onClick={handleLogMeal} disabled={isLoggingMeal} size="sm" className="text-xs">
                              {isLoggingMeal ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Save className="mr-2 h-4 w-4" />}
-                             บันทึกแคลอรี
+                             บันทึกมื้ออาหาร
                            </Button>
                          )}
                       </div>
@@ -714,72 +806,9 @@ export default function FSFAPage() {
         </div>
       </main>
 
-      {/* Calorie Log Dialog */}
-      <Dialog open={isCalorieLogDialogOpen} onOpenChange={setIsCalorieLogDialogOpen}>
-        <DialogContent className="max-w-xs sm:max-w-sm md:max-w-md min-h-[70vh] sm:min-h-[60vh] flex flex-col p-3 sm:p-4 md:p-6"> 
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl md:text-2xl font-headline text-primary flex items-center">
-              <BookCheck className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 mr-2" />
-              บันทึกแคลอรีวันนี้
-            </DialogTitle>
-            <div className="text-left pt-2">
-              <p className="text-sm text-muted-foreground">รวมแคลอรีวันนี้</p>
-              <p className="text-3xl font-bold text-primary">{totalCaloriesToday.toLocaleString()} <span className="text-lg font-normal">kcal</span></p>
-              {userProfile.dailyCalorieGoal && (
-                 <p className="text-sm text-muted-foreground">เป้าหมาย: {userProfile.dailyCalorieGoal.toLocaleString()} kcal</p>
-              )}
-            </div>
-          </DialogHeader>
-          <div className="flex-grow overflow-hidden py-1 sm:py-2 md:py-4">
-            <ScrollArea className="h-full pr-1 sm:pr-2"> 
-              {isLoadingDailyLog ? (
-                <div className="space-y-1 sm:space-y-2 md:space-y-3 p-1">
-                  {[...Array(3)].map((_, index) => ( <Skeleton key={index} className="h-12 w-full rounded-md" /> ))}
-                </div>
-              ) : dailyLog.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-center p-2 sm:p-4 md:p-6">
-                  <Info className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 text-primary mb-1 sm:mb-2 md:mb-3" /> 
-                  <p className="text-sm sm:text-base md:text-lg font-semibold text-foreground">ยังไม่มีรายการอาหารสำหรับวันนี้</p>
-                  <p className="text-xs sm:text-sm text-muted-foreground">
-                    สแกนอาหารและกด "บันทึกแคลอรี" เพื่อเริ่มบันทึก
-                  </p>
-                </div>
-              ) : (
-                <ul className="space-y-2 p-1">
-                  {dailyLog.map((log) => (
-                    <li key={log.id} className="p-2 sm:p-3 bg-card border rounded-lg shadow-sm text-foreground font-body text-xs sm:text-sm flex justify-between items-center">
-                      <div>
-                        <p className="font-semibold">{log.foodName}</p>
-                        <p className="text-primary">{log.calories} kcal</p>
-                         <span className="block text-xs text-muted-foreground mt-1">
-                          {formatDate(log.loggedAt)}
-                        </span>
-                      </div>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleDeleteLogEntry(log.id, log.calories)}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </ScrollArea>
-          </div>
-          <DialogFooter className="mt-auto pt-2 sm:pt-3 md:pt-4 border-t flex justify-end w-full">
-            <DialogClose asChild>
-              <Button variant="outline" size="sm" className="text-xs">ปิด</Button>
-            </DialogClose>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-
       <footer className="text-center py-4 sm:py-6 md:py-8 mt-6 sm:mt-8 md:mt-12 lg:mt-16 border-t border-border/50">
         
       </footer>
     </div>
   );
 }
-
-    
-
-    
