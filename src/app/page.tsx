@@ -17,7 +17,7 @@ import {
   type ChatMessage
 } from '@/ai/flows/post-scan-chat';
 import { auth, db } from '@/lib/firebase'; 
-import { onAuthStateChanged, signOut, type User } from 'firebase/auth'; 
+import { onAuthStateChanged, signOut, type User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'; 
 import { doc, setDoc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 
 
@@ -36,6 +36,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
+  DialogClose
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -116,6 +118,14 @@ export default function FSFAPage() {
   const [isChatLoading, setIsChatLoading] = useState(false);
   const chatScrollAreaRef = useRef<HTMLDivElement>(null);
 
+  // Auth Dialog State
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [authDialogMode, setAuthDialogMode] = useState<'login' | 'register'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+
 
   const fetchUserProfile = async (user: User) => {
     if (!db) return;
@@ -129,8 +139,11 @@ export default function FSFAPage() {
         if (profileData.weight) setWeight(String(profileData.weight));
         console.log("[Profile Fetch] User profile loaded:", profileData);
       } else {
-        console.log("[Profile Fetch] No user profile found, starting with empty profile.");
-        setUserProfile({});
+        console.log("[Profile Fetch] No user profile found, syncing local to remote.");
+        // If profile exists locally but not remotely, save it.
+        if (userProfile.bmi) {
+            await setDoc(userDocRef, userProfile, { merge: true });
+        }
       }
     } catch (error) {
       console.error("[Profile Fetch] Error fetching user profile:", error);
@@ -143,34 +156,59 @@ export default function FSFAPage() {
     if (!db) return;
     const today = new Date();
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
 
     const logsCollection = collection(db, 'users', user.uid, 'dailyLogs');
     const q = query(
       logsCollection,
-      where('date', '>=', Timestamp.fromDate(startOfDay)),
-      where('date', '<', Timestamp.fromDate(endOfDay))
+      where('date', '>=', Timestamp.fromDate(startOfDay))
     );
 
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
       if (!querySnapshot.empty) {
-        const doc = querySnapshot.docs[0];
-        setDailyLog(doc.data() as DailyLog);
-        setDailyLogId(doc.id);
-        console.log("[Log Fetch] Found today's log:", doc.id);
+        const docSnap = querySnapshot.docs[0];
+        const remoteLog = docSnap.data() as DailyLog;
+
+        // Merge local anonymous log with remote log if it exists
+        if (dailyLog && dailyLog.meals.length > 0) {
+            const mergedMeals = [...remoteLog.meals];
+            const remoteMealNames = new Set(remoteLog.meals.map(m => m.name + m.timestamp.seconds));
+            
+            dailyLog.meals.forEach(localMeal => {
+                if (!remoteMealNames.has(localMeal.name + localMeal.timestamp.seconds)) {
+                    mergedMeals.push(localMeal);
+                }
+            });
+
+            const mergedLog = {
+                ...remoteLog,
+                meals: mergedMeals,
+                consumedCalories: mergedMeals.reduce((sum, meal) => sum + meal.calories, 0)
+            };
+
+            setDailyLog(mergedLog);
+            setDailyLogId(docSnap.id);
+            setDoc(doc(logsCollection, docSnap.id), mergedLog); // Update firestore with merged log
+            console.log("[Log Sync] Merged local anonymous log with remote log.");
+        } else {
+            setDailyLog(remoteLog);
+            setDailyLogId(docSnap.id);
+            console.log("[Log Fetch] Found today's log:", docSnap.id);
+        }
+
       } else {
-        console.log("[Log Fetch] No log for today. A new one will be created on first log action.");
-        // Reset local state if no log is found for today.
-        setDailyLog({
-          date: Timestamp.fromDate(startOfDay),
-          consumedCalories: 0,
-          meals: [],
-        });
-        setDailyLogId(null); 
+        console.log("[Log Fetch] No log for today remotely.");
+        // If there's a local log, create a new document in Firestore for it
+        if (dailyLog && dailyLog.meals.length > 0) {
+            const newLogData = { ...dailyLog, date: Timestamp.fromDate(startOfDay) };
+            addDoc(logsCollection, newLogData).then(docRef => {
+                setDailyLogId(docRef.id);
+                console.log("[Log Sync] Saved local anonymous log to new remote log:", docRef.id);
+            });
+        }
       }
     }, (error) => {
       console.error("[Log Fetch] Error fetching daily log:", error);
-      toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดข้อมูลบันทึกแคลอรีได้", variant: "destructive"});
+      toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดข้อมูลบันทึกแคลอรี่ได้", variant: "destructive"});
     });
 
     return unsubscribe;
@@ -182,11 +220,14 @@ export default function FSFAPage() {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
       if (user) {
+        // User is logged in
         fetchUserProfile(user);
         fetchDailyLog(user).then(unsub => { unsubscribeLog = unsub; });
       } else {
+        // User is logged out, clear remote-specific data but keep local data
         setCurrentUser(null);
-        // If user logs out, keep profile and log data for anonymous use
+        setDailyLogId(null); 
+        console.log('[Auth] User is logged out. Operating in anonymous mode.');
         if (unsubscribeLog) unsubscribeLog();
       }
     });
@@ -217,14 +258,15 @@ export default function FSFAPage() {
       await signOut(auth);
       toast({
         title: "ออกจากระบบสำเร็จ",
+        description: "ข้อมูลของคุณสำหรับเซสชันนี้จะยังคงอยู่",
       });
-      // Reset all user-specific data to initial state for a clean non-logged-in experience
-      setUserProfile({});
-      setHeight('');
-      setWeight('');
-      setDailyLog(null);
-      setDailyLogId(null);
-      console.log('[Logout] User logged out and local data cleared.');
+      // Don't reset local data on logout.
+      // setUserProfile({});
+      // setHeight('');
+      // setWeight('');
+      // setDailyLog(null);
+      // setDailyLogId(null);
+      console.log('[Logout] User logged out.');
     } catch (error: unknown) {
       console.error("Logout error:", error);
       toast({
@@ -385,6 +427,15 @@ export default function FSFAPage() {
   };
 
   const handleLogMeal = async (mealName: string, mealCalories: number) => {
+    if (!currentUser) {
+        toast({
+            title: "กรุณาเข้าสู่ระบบ",
+            description: "คุณต้องเข้าสู่ระบบเพื่อบันทึกมื้ออาหาร",
+            variant: "destructive"
+        });
+        return;
+    }
+    
     setIsLoggingMeal(true);
     
     const currentLog = dailyLog || {
@@ -451,6 +502,94 @@ export default function FSFAPage() {
     return { text: 'อ้วนระดับ 2 (อันตราย)', color: 'text-red-500' };
   };
 
+  const openAuthDialog = (mode: 'login' | 'register') => {
+    setAuthDialogMode(mode);
+    setAuthDialogOpen(true);
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setIsAuthLoading(false);
+  };
+
+  const handleLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsAuthLoading(true);
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      toast({
+        title: "เข้าสู่ระบบสำเร็จ",
+        description: "ยินดีต้อนรับกลับ!",
+      });
+      setAuthDialogOpen(false); // Close dialog on success
+    } catch (error: any) {
+      console.error('Login error:', error);
+      let errorMessage = "เกิดข้อผิดพลาดในการเข้าสู่ระบบ";
+      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        errorMessage = "อีเมลหรือรหัสผ่านไม่ถูกต้อง";
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = "รูปแบบอีเมลไม่ถูกต้อง";
+      }
+      toast({
+        title: "เข้าสู่ระบบไม่สำเร็จ",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  const handleRegister = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsAuthLoading(true);
+
+    if (password !== confirmPassword) {
+      toast({
+        title: "ลงทะเบียนไม่สำเร็จ",
+        description: "รหัสผ่านและการยืนยันรหัสผ่านไม่ตรงกัน",
+        variant: "destructive",
+      });
+      setIsAuthLoading(false);
+      return;
+    }
+
+    if (password.length < 6) {
+      toast({
+        title: "ลงทะเบียนไม่สำเร็จ",
+        description: "รหัสผ่านต้องมีความยาวอย่างน้อย 6 ตัวอักษร",
+        variant: "destructive",
+      });
+      setIsAuthLoading(false);
+      return;
+    }
+
+    try {
+      await createUserWithEmailAndPassword(auth, email, password);
+      toast({
+        title: "ลงทะเบียนสำเร็จ",
+        description: "บัญชีของคุณถูกสร้างเรียบร้อยแล้ว",
+      });
+      setAuthDialogOpen(false); // Close dialog on success
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      let errorMessage = "เกิดข้อผิดพลาดในการลงทะเบียน";
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = "อีเมลนี้ถูกใช้งานแล้ว";
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = "รูปแบบอีเมลไม่ถูกต้อง";
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = "รหัสผ่านไม่คาดเดาได้ง่าย โปรดใช้รหัสผ่านที่ซับซ้อนกว่านี้";
+      }
+      toast({
+        title: "ลงทะเบียนไม่สำเร็จ",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background text-foreground font-body p-2 sm:p-4 md:p-8">
       <header className="py-4 sm:py-6 md:py-8 text-center bg-gradient-to-r from-primary/10 via-secondary/20 to-primary/10 rounded-lg shadow-md mb-6 sm:mb-8 md:mb-12">
@@ -491,11 +630,11 @@ export default function FSFAPage() {
                   </>
                 ) : (
                   <>
-                    <DropdownMenuItem onSelect={() => router.push('/login')} className="cursor-pointer">
+                    <DropdownMenuItem onSelect={() => openAuthDialog('login')} className="cursor-pointer">
                         <LogIn className="mr-2 h-4 w-4" />
                         <span>เข้าสู่ระบบ</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem onSelect={() => router.push('/register')} className="cursor-pointer">
+                    <DropdownMenuItem onSelect={() => openAuthDialog('register')} className="cursor-pointer">
                         <UserPlus className="mr-2 h-4 w-4" />
                         <span>ลงทะเบียน</span>
                     </DropdownMenuItem>
@@ -506,6 +645,62 @@ export default function FSFAPage() {
           </div>
         </div>
       </header>
+
+       {/* Auth Dialog */}
+      <Dialog open={authDialogOpen} onOpenChange={setAuthDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-3xl font-headline text-primary text-center">
+              {authDialogMode === 'login' ? 'เข้าสู่ระบบ' : 'สร้างบัญชีใหม่'}
+            </DialogTitle>
+            <DialogDescription className="text-center">
+              {authDialogMode === 'login' ? 'ยินดีต้อนรับกลับ! กรอกข้อมูลเพื่อเข้าสู่ระบบ' : 'กรอกข้อมูลเพื่อลงทะเบียนใช้งาน'}
+            </DialogDescription>
+          </DialogHeader>
+          {authDialogMode === 'login' ? (
+            <form onSubmit={handleLogin} className="space-y-6 pt-4">
+              <div className="space-y-2">
+                <Label htmlFor="login-email">อีเมล</Label>
+                <Input id="login-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required className="text-lg p-3" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="login-password">รหัสผ่าน</Label>
+                <Input id="login-password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required className="text-lg p-3" />
+              </div>
+              <Button type="submit" className="w-full text-lg py-6" size="lg" disabled={isAuthLoading}>
+                {isAuthLoading ? <><Loader2 className="animate-spin mr-2"/>กำลังดำเนินการ...</> : <><LogIn className="mr-2 h-5 w-5" />เข้าสู่ระบบ</>}
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleRegister} className="space-y-6 pt-4">
+              <div className="space-y-2">
+                <Label htmlFor="register-email">อีเมล</Label>
+                <Input id="register-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required className="text-lg p-3" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="register-password">รหัสผ่าน (อย่างน้อย 6 ตัวอักษร)</Label>
+                <Input id="register-password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required className="text-lg p-3" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="register-confirmPassword">ยืนยันรหัสผ่าน</Label>
+                <Input id="register-confirmPassword" type="password" placeholder="••••••••" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="text-lg p-3" />
+              </div>
+              <Button type="submit" className="w-full text-lg py-6" size="lg" disabled={isAuthLoading}>
+                {isAuthLoading ? <><Loader2 className="animate-spin mr-2"/>กำลังดำเนินการ...</> : <><UserPlus className="mr-2 h-5 w-5" />สร้างบัญชี</>}
+              </Button>
+            </form>
+          )}
+          <DialogFooter className="pt-4">
+            <p className="text-sm text-muted-foreground text-center w-full">
+              {authDialogMode === 'login' ? 'ยังไม่มีบัญชี?' : 'มีบัญชีอยู่แล้ว?'}
+              <Button variant="link" onClick={() => setAuthDialogMode(authDialogMode === 'login' ? 'register' : 'login')} className="p-1">
+                {authDialogMode === 'login' ? 'ลงทะเบียนที่นี่' : 'เข้าสู่ระบบที่นี่'}
+              </Button>
+            </p>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
 
       <main className="container mx-auto px-1 sm:px-2 md:px-4 grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 md:gap-10 lg:gap-16">
 
@@ -700,59 +895,60 @@ export default function FSFAPage() {
                     ภาพรวมแคลอรีวันนี้
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-[425px]">
+                <DialogContent className="sm:max-w-md">
                   <DialogHeader>
                     <DialogTitle>ภาพรวมแคลอรีวันนี้</DialogTitle>
                     <DialogDescription>
                       ตรวจสอบเป้าหมายและบันทึกแคลอรีของคุณสำหรับวันนี้
                     </DialogDescription>
                   </DialogHeader>
-                  <div className="py-4">
-                      <div className="space-y-4">
-                        <Card className="p-4 text-center bg-secondary/30">
-                          <CardTitle className="text-base font-semibold">แคลอรีที่แนะนำต่อวัน</CardTitle>
-                          <CardDescription>(เป้าหมาย)</CardDescription>
-                          {userProfile.dailyCalorieGoal ? (
-                            <p className="text-2xl font-bold text-primary pt-2">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
-                           ) : (
-                             <p className="text-sm text-muted-foreground pt-2">กรุณาคำนวณ BMI เพื่อตั้งค่าเป้าหมาย</p>
-                           )}
-                        </Card>
+                  {!currentUser ? (
+                    <div className="py-4 text-center">
+                        <p className="text-sm text-muted-foreground mb-4">กรุณาเข้าสู่ระบบเพื่อดูและบันทึกแคลอรี</p>
+                        <Button onClick={() => openAuthDialog('login')}>
+                            <LogIn className="mr-2 h-4 w-4" />
+                            เข้าสู่ระบบ
+                        </Button>
+                    </div>
+                  ) : (
+                    <div className="py-4">
+                        <div className="space-y-4">
+                          <Card className="p-4 text-center bg-secondary/30">
+                            <CardTitle className="text-base font-semibold">แคลอรีที่แนะนำต่อวัน</CardTitle>
+                            <CardDescription>(เป้าหมาย)</CardDescription>
+                            {userProfile.dailyCalorieGoal ? (
+                              <p className="text-2xl font-bold text-primary pt-2">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
+                             ) : (
+                               <p className="text-sm text-muted-foreground pt-2">กรุณาคำนวณ BMI เพื่อตั้งค่าเป้าหมาย</p>
+                             )}
+                          </Card>
 
-                        <Card className="p-4 bg-secondary/30">
-                          <CardTitle className="text-base font-semibold text-center">แคลอรี่ที่ใช้ไปแล้ว</CardTitle>
-                          <p className={`text-3xl font-bold text-center pt-2 ${dailyLog && userProfile.dailyCalorieGoal && dailyLog.consumedCalories > userProfile.dailyCalorieGoal ? 'text-destructive' : 'text-green-500'}`}>
-                            {dailyLog?.consumedCalories.toLocaleString() ?? 0} <span className="text-base font-normal">kcal</span>
-                          </p>
-                          
-                          {dailyLog && dailyLog.meals.length > 0 && (
-                            <>
-                              <Separator className="my-3" />
-                              <div className="space-y-2 text-sm text-muted-foreground">
-                                <h4 className="font-semibold text-foreground text-center">มื้อที่บันทึกแล้ว</h4>
-                                <ScrollArea className="h-24">
-                                  {dailyLog.meals.map((meal, index) => (
-                                    <div key={index} className="flex justify-between items-center py-1">
-                                      <span className="truncate pr-2">{meal.name}</span>
-                                      <span className="font-medium whitespace-nowrap">{meal.calories.toLocaleString()} kcal</span>
-                                    </div>
-                                  ))}
-                                </ScrollArea>
-                              </div>
-                            </>
-                          )}
-                        </Card>
-                         {!currentUser && (
-                            <div className="text-center pt-4">
-                                <p className="text-sm text-muted-foreground mb-2">เข้าสู่ระบบเพื่อบันทึกข้อมูลของคุณอย่างถาวร</p>
-                                <Button size="sm" variant="ghost" onClick={() => router.push('/login')}>
-                                    <LogIn className="mr-2 h-4 w-4" />
-                                    เข้าสู่ระบบ
-                                </Button>
-                            </div>
-                        )}
-                      </div>
-                  </div>
+                          <Card className="p-4 bg-secondary/30">
+                            <CardTitle className="text-base font-semibold text-center">แคลอรี่ที่ใช้ไปแล้ว</CardTitle>
+                            <p className={`text-3xl font-bold text-center pt-2 ${dailyLog && userProfile.dailyCalorieGoal && dailyLog.consumedCalories > userProfile.dailyCalorieGoal ? 'text-destructive' : 'text-green-500'}`}>
+                              {dailyLog?.consumedCalories.toLocaleString() ?? 0} <span className="text-base font-normal">kcal</span>
+                            </p>
+                            
+                            {dailyLog && dailyLog.meals.length > 0 && (
+                              <>
+                                <Separator className="my-3" />
+                                <div className="space-y-2 text-sm text-muted-foreground">
+                                  <h4 className="font-semibold text-foreground text-center">มื้อที่บันทึกแล้ว</h4>
+                                  <ScrollArea className="h-24">
+                                    {dailyLog.meals.map((meal, index) => (
+                                      <div key={index} className="flex justify-between items-center py-1">
+                                        <span className="truncate pr-2">{meal.name}</span>
+                                        <span className="font-medium whitespace-nowrap">{meal.calories.toLocaleString()} kcal</span>
+                                      </div>
+                                    ))}
+                                  </ScrollArea>
+                                </div>
+                              </>
+                            )}
+                          </Card>
+                        </div>
+                    </div>
+                  )}
                 </DialogContent>
               </Dialog>
 
@@ -767,3 +963,5 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+    
