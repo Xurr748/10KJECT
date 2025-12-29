@@ -572,7 +572,7 @@ export default function FSFAPage() {
                                 <Button
                                   size="sm"
                                   onClick={() => handleLogMeal(imageAnalysisResult.foodItem, imageAnalysisResult.nutritionalInformation.estimatedCalories)}
-                                  disabled={isLoggingMeal || !currentUser}
+                                  disabled={isLoggingMeal}
                                   className="bg-accent text-accent-foreground hover:bg-accent/90"
                                 >
                                   {isLoggingMeal ? <Loader2 className="animate-spin mr-2" /> : <PlusCircle className="mr-2"/>}
