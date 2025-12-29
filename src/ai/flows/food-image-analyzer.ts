@@ -22,13 +22,14 @@ const ScanFoodImageInputSchema = z.object({
 export type ScanFoodImageInput = z.infer<typeof ScanFoodImageInputSchema>;
 
 const NutritionalInfoObjectSchema = z.object({
-  summary: z.string().describe("A brief, one-sentence summary about the nutritional information, e.g., 'ข้อมูลโภชนาการโดยประมาณต่อหนึ่งหน่วยบริโภค...' (in Thai)."),
-  details: z.array(z.string()).describe("An array of strings, each representing a single nutritional fact, e.g., 'พลังงาน: 300-400 กิโลแคลอรี' (in Thai)."),
+  estimatedCalories: z.number().describe('The estimated total calories for the dish (in kilocalories).'),
+  visibleIngredients: z.array(z.string()).describe("An array of strings, each identifying a primary visible ingredient used for calorie estimation, e.g., 'ไข่ดาว 2 ฟอง' (in Thai)."),
+  reasoning: z.string().describe("A brief summary explaining the basis for the calorie estimation, e.g., 'ประเมินจากส่วนผสมหลัก...' (in Thai).")
 });
 
 const ScanFoodImageOutputSchema = z.object({
   foodItem: z.string().describe('The identified food item (in Thai). This may indicate if the food is similar to what was identified.'),
-  nutritionalInformation: NutritionalInfoObjectSchema.describe('Structured nutritional information about the food item (in Thai). This may be for a similar food item.'),
+  nutritionalInformation: NutritionalInfoObjectSchema.describe('Structured nutritional information about the food item, focusing on calorie estimation (in Thai).'),
   safetyPrecautions: z.array(z.string())
     .length(3)
     .describe('Exactly three distinct safety precaution options related to the food item (or a similar item), especially for seniors (in Thai). Each precaution should be a concise piece of advice.'),
@@ -49,24 +50,22 @@ Regarding the food image provided ({{media url=foodImage}}):
 Could you please tell me the following, formatted as a JSON object with the keys "foodItem", "nutritionalInformation", and "safetyPrecautions"?
 
 1.  **foodItem**: What is the name of this food item?
-    *   First, try to identify the *exact* food item in the image.
-    *   If you recognize it as a specific Thai dish, please name it in Thai.
-    *   If you are unsure of the specific Thai dish name but it appears to be Thai food, you can state "อาหารไทย" (Thai food) and briefly describe its main components.
-    *   If the food is not Thai, identify it as accurately as possible in Thai.
-    *   **Fallback for foodItem**: If you cannot identify the exact food item, try to identify the *closest similar food item* you recognize. In this case, the "foodItem" value should clearly indicate it's an approximation, for example: "คล้ายกับ [ชื่ออาหารที่คล้ายกัน]" or "อาจจะเป็น [ชื่ออาหารที่คล้ายกัน]".
-    *   **Final Fallback for foodItem**: If you are completely unable to identify the exact food item OR any similar food item, set "foodItem" to "ไม่สามารถระบุชนิดอาหารได้" (Cannot identify food type).
+    *   Identify the dish as accurately as possible. If it's a specific Thai dish, name it in Thai.
+    *   **Fallback**: If you cannot identify the exact food item, try to identify the *closest similar food item*. In this case, the "foodItem" value should clearly indicate it's an approximation, like "คล้ายกับ [ชื่ออาหารที่คล้ายกัน]".
+    *   **Final Fallback**: If completely unable to identify, set "foodItem" to "ไม่สามารถระบุชนิดอาหารได้".
 
-2.  **nutritionalInformation**: What is its nutritional information? This MUST be a JSON object with "summary" and "details" keys.
-    *   **summary**: Provide a single, introductory sentence in Thai about the information, for example: "ข้อมูลโภชนาการโดยประมาณต่อหนึ่งหน่วยบริโภค (ประมาณ 1 ถ้วย) อาจแตกต่างกันไป ขึ้นอยู่กับส่วนผสมและปริมาณที่ใช้:"
-    *   **details**: Provide an array of strings. Each string must be a specific nutritional fact in Thai, for example: "พลังงาน: 300-400 กิโลแคลอรี". Do NOT include asterisks or bullet points in the strings.
-    *   **Fallback for nutritionalInformation**: If you cannot determine nutritional information, you MUST still return the object structure. Set "summary" to "ไม่สามารถระบุข้อมูลทางโภชนาการได้" (Cannot determine nutritional information), and set "details" to an empty array \`[]\`.
+2.  **nutritionalInformation**: Analyze the ingredients to estimate the calories. This MUST be a JSON object with "estimatedCalories", "visibleIngredients", and "reasoning" keys.
+    *   **Step 1: Identify Visible Ingredients:** First, analyze the image to identify the main visible components and their approximate quantity (e.g., "ไข่ดาว 2 ฟอง", "เนื้อหมูประมาณ 100 กรัม", "ข้าวสวย 1 ถ้วย"). Populate the \`visibleIngredients\` array with these findings (as strings in Thai).
+    *   **Step 2: Estimate Calories:** Based on the identified dish ('foodItem') and the \`visibleIngredients\`, calculate an estimated total calorie count for the entire dish. Populate the \`estimatedCalories\` field with this number.
+    *   **Step 3: Provide Reasoning:** Briefly explain the basis of your estimation in the \`reasoning\` field. For example: "ประเมินจากส่วนผสมหลักคือไข่ดาวและปริมาณข้าวสวย" (in Thai).
+    *   **Fallback**: If you cannot determine the ingredients or calories (e.g., if the food item itself was not identified), you MUST still return the object structure. Set \`estimatedCalories\` to 0, \`visibleIngredients\` to an empty array \`[]\`, and \`reasoning\` to "ไม่สามารถประเมินแคลอรีได้" (Cannot estimate calories).
 
-3.  **safetyPrecautions**: What are three safety precautions for seniors related to this food (or the identified similar food, if applicable)?
+3.  **safetyPrecautions**: What are three safety precautions for seniors related to this food?
     *   This MUST be an array of exactly three distinct strings. Each string should be a concise safety precaution in Thai.
-    *   If there's no specific safety advice or it's not applicable for any of the three precaution slots, "safetyPrecautions" MUST still be an array of three strings, with each string being "ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้". If some precautions can be given but not all three, fill the remaining slots with this placeholder message.
+    *   If no specific advice is applicable, fill each of the three slots with "ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้".
 
 Your entire response, including all text within the JSON structure, MUST be in Thai.
-Even if you cannot identify parts of the information (exact or similar), you MUST still return the complete JSON structure with appropriate placeholder messages in Thai for the undetermined fields, ensuring "safetyPrecautions" is always an array of three strings.
+Even if you cannot identify parts of the information, you MUST still return the complete JSON structure with appropriate placeholder messages in Thai for the undetermined fields, ensuring "safetyPrecautions" is always an array of three strings and "nutritionalInformation" follows its required structure.
   `,
 });
 

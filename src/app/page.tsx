@@ -65,7 +65,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 
 // Lucide Icons
-import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2, Heart, ChefHat, Settings, MessageSquareWarning, Send, MessageCircle, Trash2, ScanLine } from 'lucide-react';
+import { UploadCloud, Brain, Utensils, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, ListChecks, Loader2, Heart, ChefHat, Settings, MessageSquareWarning, Send, MessageCircle, Trash2, ScanLine, Flame } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 const GENERIC_SAFETY_UNAVAILABLE = "ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้";
@@ -221,7 +221,23 @@ export default function FSFAPage() {
   };
 
   useEffect(() => {
-    loadUserLikedMealNames();
+    if (currentUser) {
+      loadUserLikedMealNames();
+    } else {
+      // Handle anonymous user case if necessary
+      const localData = localStorage.getItem(LOCAL_STORAGE_LIKED_MEALS_KEY);
+      if (localData) {
+        try {
+          const names: string[] = JSON.parse(localData);
+          setLikedMealsList(names.map(name => ({ name })));
+        } catch (e) {
+          console.error("Error parsing local liked meals:", e);
+          setLikedMealsList([]);
+        }
+      } else {
+        setLikedMealsList([]);
+      }
+    }
   }, [currentUser]);
   
 
@@ -958,18 +974,19 @@ export default function FSFAPage() {
                       </p>
                     </div>
                     
-                    {isFoodIdentified && imageAnalysisResult.nutritionalInformation && imageAnalysisResult.nutritionalInformation.details.length > 0 && (
+                    {isFoodIdentified && imageAnalysisResult.nutritionalInformation && imageAnalysisResult.nutritionalInformation.estimatedCalories > 0 && (
                       <>
                         <Separator />
                         <div>
-                          <h4 className="font-semibold text-sm sm:text-base md:text-lg font-body text-foreground">ข้อมูลทางโภชนาการ:</h4>
+                          <h4 className="font-semibold text-sm sm:text-base md:text-lg font-body text-foreground flex items-center"><Flame className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-orange-500" />แคลอรีโดยประมาณ:</h4>
                           <div className="mt-1 text-xs sm:text-sm md:text-base font-body text-foreground/80 space-y-1">
-                            {imageAnalysisResult.nutritionalInformation.summary && (
-                              <p className="mb-1">{imageAnalysisResult.nutritionalInformation.summary}</p>
-                            )}
+                            <p className="text-lg sm:text-xl font-bold text-primary">{imageAnalysisResult.nutritionalInformation.estimatedCalories} กิโลแคลอรี</p>
+                            <p className="text-xs text-muted-foreground">{imageAnalysisResult.nutritionalInformation.reasoning}</p>
+                            
+                            <p className="font-semibold pt-2">ส่วนผสมที่ใช้ประเมิน:</p>
                             <ul className="list-disc pl-4 sm:pl-5 space-y-1">
-                              {imageAnalysisResult.nutritionalInformation.details.map((detail, index) => (
-                                <li key={index}>{detail}</li>
+                              {imageAnalysisResult.nutritionalInformation.visibleIngredients.map((ingredient, index) => (
+                                <li key={index}>{ingredient}</li>
                               ))}
                             </ul>
                           </div>
@@ -1176,6 +1193,7 @@ export default function FSFAPage() {
     
 
     
+
 
 
 
