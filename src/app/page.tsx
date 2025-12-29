@@ -689,7 +689,7 @@ export default function FSFAPage() {
                 <CardHeader>
                   <CardTitle className="text-lg sm:text-xl font-headline text-primary">ภาพรวมแคลอรีวันนี้</CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4 p-4">
+                <CardContent className="p-4">
                   {!currentUser ? (
                     <div className="flex items-center justify-center h-24">
                         <p className="text-muted-foreground text-center">กรุณาเข้าสู่ระบบเพื่อดูและบันทึกแคลอรี</p>
@@ -699,7 +699,7 @@ export default function FSFAPage() {
                         <p className="text-muted-foreground text-sm text-center p-4">กรุณาคำนวณ BMI เพื่อตั้งค่าเป้าหมายแคลอรีของคุณ</p>
                     </div>
                   ) : (
-                    <>
+                    <div className="space-y-4">
                       <Card className="p-4 text-center bg-secondary/30">
                         <CardTitle className="text-base font-semibold">แคลอรีที่แนะนำต่อวัน</CardTitle>
                         <CardDescription>(จำนวนแคลทีมาหลังจากคำนวน BMI แล้ว)</CardDescription>
@@ -728,7 +728,7 @@ export default function FSFAPage() {
                           </>
                         )}
                       </Card>
-                    </>
+                    </div>
                   )}
                 </CardContent>
               </Card>
@@ -744,5 +744,7 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+    
 
     
