@@ -667,7 +667,6 @@ export default function FSFAPage() {
                      {isCalculatingBmi ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Calculator className="mr-2 h-4 w-4" />}
                      คำนวณ BMI และแคลอรี
                    </Button>
-                   {!currentUser && <p className="text-center text-xs text-muted-foreground pt-2">กรุณาเข้าสู่ระบบเพื่อบันทึกข้อมูล</p>}
                 </CardContent>
                 {userProfile.bmi && (
                   <CardFooter className="flex flex-col items-start space-y-3 pt-4 border-t">
@@ -692,7 +691,7 @@ export default function FSFAPage() {
                 <CardContent className="p-4">
                   {!currentUser ? (
                     <div className="flex items-center justify-center h-24">
-                        <p className="text-muted-foreground text-center">กรุณาเข้าสู่ระบบเพื่อดูและบันทึกแคลอรี</p>
+                        
                     </div>
                   ) : !userProfile.dailyCalorieGoal ? (
                     <div className="flex items-center justify-center h-24">
@@ -744,6 +743,8 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+    
 
     
 
