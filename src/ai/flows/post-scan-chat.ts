@@ -35,6 +35,7 @@ const prompt = ai.definePrompt({
   name: 'postScanChatPrompt',
   input: {schema: ChatInputSchema},
   output: {schema: ChatOutputSchema},
+  model: 'googleai/gemini-2.5-flash',
   prompt: `You are a friendly and helpful chatbot assistant for the MOMU SCAN application.
 Your primary goal is to assist users with their queries, especially related to food, nutrition, and healthy eating.
 Be concise and helpful in your responses.
