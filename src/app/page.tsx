@@ -185,23 +185,57 @@ export default function FSFAPage() {
     if (previewUrl) localStorage.setItem('previewUrl', previewUrl);
     else localStorage.removeItem('previewUrl');
   }, [previewUrl]);
-
-  // 3. Save ANONYMOUS user data to localStorage
+  
+  // 3. EFFECT FOR SAVING DATA (Profile & Log)
   useEffect(() => {
-    if (!currentUser) {
+    // This effect handles SAVING data to the correct location (Firestore or LocalStorage)
+    const { auth, db } = getFirebase();
+    const user = auth?.currentUser;
+
+    if (user && db) {
+      // LOGGED-IN USER: Save to Firestore
+      if (Object.keys(userProfile).length > 0) {
+        const userDocRef = doc(db, 'users', user.uid);
+        setDoc(userDocRef, userProfile, { merge: true }).catch(error => {
+          console.error("[Firestore Save Error] Could not save user profile:", error);
+        });
+      }
+
+      const userLogsCollection = collection(db, 'users', user.uid, 'dailyLogs');
+      if (dailyLog && dailyLog.meals.length > 0) {
+        if (dailyLogId) {
+          const logDocRef = doc(userLogsCollection, dailyLogId);
+          setDoc(logDocRef, dailyLog, { merge: true }).catch(error => {
+             console.error("[Firestore Save Error] Could not update daily log:", error);
+          });
+        } else {
+           // This case should be rare, but handles if a log is created before an ID is set
+           const startOfToday = new Date();
+           startOfToday.setHours(0, 0, 0, 0);
+           const firestoreLog = { ...dailyLog, date: Timestamp.fromDate(startOfToday) };
+           addDoc(userLogsCollection, firestoreLog).then(newDocRef => {
+              setDailyLogId(newDocRef.id);
+           }).catch(error => {
+              console.error("[Firestore Save Error] Could not create new daily log:", error);
+           });
+        }
+      }
+    } else {
+      // ANONYMOUS USER: Save to LocalStorage
       if (Object.keys(userProfile).length > 0) {
         localStorage.setItem('anonymousUserProfile', JSON.stringify(userProfile));
+      } else {
+        localStorage.removeItem('anonymousUserProfile');
+      }
+
+      if (dailyLog && dailyLog.meals.length > 0) {
+        localStorage.setItem('anonymousDailyLog', JSON.stringify(dailyLog));
+      } else {
+        localStorage.removeItem('anonymousDailyLog');
       }
     }
-  }, [userProfile, currentUser]);
+  }, [userProfile, dailyLog, dailyLogId]); // This now correctly depends on the data states
 
-  useEffect(() => {
-    if (!currentUser) {
-        if(dailyLog) {
-            localStorage.setItem('anonymousDailyLog', JSON.stringify(dailyLog));
-        }
-    }
-  }, [dailyLog, currentUser]);
 
   // 4. Main AUTH and USER-DATA loading logic
   useEffect(() => {
@@ -216,7 +250,10 @@ export default function FSFAPage() {
     const fetchUserProfile = async (user: User) => {
       const { db } = getFirebase();
       if (!db) return;
+      
       const userDocRef = doc(db, 'users', user.uid);
+      const anonymousProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
+      
       try {
         const docSnap = await getDoc(userDocRef);
         if (docSnap.exists()) {
@@ -224,24 +261,24 @@ export default function FSFAPage() {
           setUserProfile(profileData);
           if (profileData.height) setHeight(String(profileData.height));
           if (profileData.weight) setWeight(String(profileData.weight));
+        } else if (anonymousProfile && Object.keys(anonymousProfile).length > 0) {
+            // New user with local data -> Migrate it
+            console.log("[Auth] Migrating anonymous profile to Firestore.");
+            await setDoc(userDocRef, anonymousProfile, { merge: true });
+            setUserProfile(anonymousProfile); // Set state from migrated data
+            if (anonymousProfile.height) setHeight(String(anonymousProfile.height));
+            if (anonymousProfile.weight) setWeight(String(anonymousProfile.weight));
         } else {
-           const anonymousProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
-           if (anonymousProfile && Object.keys(anonymousProfile).length > 0) {
-              console.log("[Auth] Migrating anonymous profile to Firestore.");
-              await setDoc(userDocRef, anonymousProfile, { merge: true });
-              setUserProfile(anonymousProfile);
-              if (anonymousProfile.height) setHeight(String(anonymousProfile.height));
-              if (anonymousProfile.weight) setWeight(String(anonymousProfile.weight));
-              localStorage.removeItem('anonymousUserProfile');
-           } else {
-              // Reset profile for a new logged-in user with no local data
-              setUserProfile({});
-              setHeight('');
-              setWeight('');
-           }
+          // New user with no local data
+          setUserProfile({});
+          setHeight('');
+          setWeight('');
         }
       } catch (error) {
         console.error("[Profile Fetch] Error fetching user profile:", error);
+      } finally {
+        // Clean up local storage after migration attempt
+        localStorage.removeItem('anonymousUserProfile');
       }
     };
     
@@ -253,21 +290,22 @@ export default function FSFAPage() {
         const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         const logsCollection = collection(db, 'users', user.uid, 'dailyLogs');
         const q = query(logsCollection, where('date', '>=', Timestamp.fromDate(startOfDay)));
+        
+        const anonymousLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
 
         return onSnapshot(q, async (querySnapshot) => {
-            const localLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
-            
+            let remoteLogMerged = false;
             if (!querySnapshot.empty) {
                 const docSnap = querySnapshot.docs[0];
                 const remoteLog = docSnap.data() as DailyLog;
                 setDailyLogId(docSnap.id);
 
-                if (localLog && localLog.meals.length > 0) {
+                if (anonymousLog && anonymousLog.meals.length > 0) {
                     console.log("[Auth] Merging local log with remote log.");
                     const mergedMeals = [...remoteLog.meals];
                     const remoteMealTimestamps = new Set(remoteLog.meals.map(m => m.timestamp.seconds));
                     
-                    localLog.meals.forEach((localMeal: Meal) => {
+                    anonymousLog.meals.forEach((localMeal: Meal) => {
                         if (!remoteMealTimestamps.has(localMeal.timestamp.seconds)) {
                             mergedMeals.push(localMeal);
                         }
@@ -277,27 +315,29 @@ export default function FSFAPage() {
                     const consumedCalories = mergedMeals.reduce((sum, meal) => sum + meal.calories, 0);
                     const mergedLog = { ...remoteLog, meals: mergedMeals, consumedCalories };
 
-                    await setDoc(doc(logsCollection, docSnap.id), mergedLog, { merge: true });
-                    setDailyLog(mergedLog); // Update state after successful merge
-                    localStorage.removeItem('anonymousDailyLog');
+                    // This write will be handled by the main save effect
+                    setDailyLog(mergedLog); 
+                    remoteLogMerged = true;
                 } else {
                     setDailyLog(remoteLog);
                 }
+            } else if (anonymousLog && anonymousLog.meals.length > 0) {
+                 console.log("[Auth] Migrating anonymous log to Firestore.");
+                 const newLogData = { 
+                     ...anonymousLog, 
+                     date: Timestamp.fromDate(startOfDay),
+                 };
+                 // This write will be handled by the main save effect
+                 setDailyLog(newLogData);
+                 setDailyLogId(null); // Ensure a new doc is created
+                 remoteLogMerged = true;
             } else {
-                if (localLog && localLog.meals.length > 0) {
-                    console.log("[Auth] Migrating anonymous log to Firestore.");
-                    const newLogData = { 
-                        ...localLog, 
-                        date: Timestamp.fromDate(startOfDay),
-                    };
-                    const docRef = await addDoc(logsCollection, newLogData);
-                    setDailyLogId(docRef.id);
-                    setDailyLog(newLogData);
-                    localStorage.removeItem('anonymousDailyLog');
-                } else {
-                   setDailyLog(null);
-                   setDailyLogId(null);
-                }
+               setDailyLog(null);
+               setDailyLogId(null);
+            }
+             // Clean up local storage after migration attempt
+            if (remoteLogMerged) {
+                localStorage.removeItem('anonymousDailyLog');
             }
         }, (error) => {
           console.error("[Log Fetch] Error fetching daily log:", error);
@@ -321,7 +361,7 @@ export default function FSFAPage() {
       } else {
         // --- User is LOGGED OUT or ANONYMOUS ---
         console.log("[Auth] User is anonymous.");
-        // Clear user-specific data
+        // Clear user-specific data from previous session
         setDailyLogId(null); 
         
         // Load anonymous data from localStorage
@@ -516,27 +556,14 @@ export default function FSFAPage() {
             dailyCalorieGoal: roundedCalorieGoal,
         };
 
-        const { auth, db } = getFirebase();
-        const user = auth?.currentUser;
+        // This will trigger the save effect
+        setUserProfile(newProfile); 
 
-        if (user && db) {
-            // Logged-in user: Save to Firestore and wait for it to complete.
-            const userDocRef = doc(db, 'users', user.uid);
-            await setDoc(userDocRef, newProfile, { merge: true });
-            console.log("[BMI Calc] Profile saved to Firestore successfully for user:", user.uid);
-            
-            // AFTER successful save, update the local state.
-            setUserProfile(newProfile);
-            toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi} และบันทึกข้อมูลในบัญชีของคุณแล้ว` });
-        } else {
-            // Anonymous user: Just update the local state. The useEffect will save to localStorage.
-            setUserProfile(newProfile);
-            toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
-        }
+        toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
         
     } catch (error) {
-        console.error("Error during BMI calculation or saving:", error);
-        toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถคำนวณหรือบันทึก BMI ได้", variant: "destructive"});
+        console.error("Error during BMI calculation:", error);
+        toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถคำนวณ BMI ได้", variant: "destructive"});
     } finally {
         setIsCalculatingBmi(false);
     }
@@ -552,58 +579,29 @@ export default function FSFAPage() {
         timestamp: Timestamp.now(),
     };
 
-    // Optimistically update the local state
-    const newDailyLog = {
-        date: dailyLog?.date || Timestamp.now(),
-        consumedCalories: (dailyLog?.consumedCalories || 0) + newMeal.calories,
-        meals: [...(dailyLog?.meals || []), newMeal],
-    };
-    setDailyLog(newDailyLog);
-    
-    // Check for calorie goal
-    if (userProfile.dailyCalorieGoal && newDailyLog.consumedCalories > userProfile.dailyCalorieGoal) {
-        toast({
-            title: "คำเตือน: เกินเป้าหมายแคลอรี่!",
-            description: `วันนี้คุณบริโภคไปแล้ว ${newDailyLog.consumedCalories} kcal ซึ่งเกินเป้าหมาย ${userProfile.dailyCalorieGoal} kcal ของคุณ`,
-            variant: "destructive"
-        });
-    }
-
     try {
-        const { db, auth } = getFirebase();
-        const user = auth?.currentUser;
+        // Create new log state based on current state
+        const newDailyLog = {
+            date: dailyLog?.date || Timestamp.fromDate(new Date()),
+            consumedCalories: (dailyLog?.consumedCalories || 0) + newMeal.calories,
+            meals: [...(dailyLog?.meals || []), newMeal],
+        };
 
-        // If user is logged in, save to Firestore
-        if (user && db) {
-            console.log("[Log Meal] Saving meal to Firestore for user:", user.uid);
-            const userLogsCollection = collection(db, 'users', user.uid, 'dailyLogs');
-            
-            // If there's an existing log for today, update it. Otherwise, create a new one.
-            if (dailyLogId) {
-                const docRef = doc(userLogsCollection, dailyLogId);
-                // We use the newDailyLog state which was optimistically updated
-                await setDoc(docRef, newDailyLog, { merge: true });
-                console.log("[Log Meal] Meal log updated in Firestore.");
-            } else {
-                const startOfToday = new Date();
-                startOfToday.setHours(0, 0, 0, 0);
-                const firestoreLog = { ...newDailyLog, date: Timestamp.fromDate(startOfToday) };
-                const newDocRef = await addDoc(userLogsCollection, firestoreLog);
-                setDailyLogId(newDocRef.id); // Save new log ID for subsequent updates
-                console.log("[Log Meal] New meal log created in Firestore.");
-            }
+        // This state update will trigger the save effect
+        setDailyLog(newDailyLog);
+        
+        if (userProfile.dailyCalorieGoal && newDailyLog.consumedCalories > userProfile.dailyCalorieGoal) {
+            toast({
+                title: "คำเตือน: เกินเป้าหมายแคลอรี่!",
+                description: `วันนี้คุณบริโภคไปแล้ว ${newDailyLog.consumedCalories} kcal ซึ่งเกินเป้าหมาย ${userProfile.dailyCalorieGoal} kcal ของคุณ`,
+                variant: "destructive"
+            });
         }
-        // For anonymous users, the useEffect for dailyLog will handle saving to localStorage.
         
         toast({ title: "บันทึกมื้ออาหารสำเร็จ", description: `${mealName} (${mealCalories} kcal) ถูกเพิ่มในบันทึกของคุณ` });
     } catch (error) {
-        console.error("[Log Meal] Error logging meal:", error);
-        toast({ title: "เกิดข้อผิดพลาดในการบันทึก", description: "ไม่สามารถบันทึกข้อมูลมื้ออาหารได้", variant: "destructive" });
-        
-        // Revert optimistic update on error
-        const revertedMeals = dailyLog?.meals.slice(0, -1) || [];
-        const revertedCalories = revertedMeals.reduce((sum, meal) => sum + meal.calories, 0);
-        setDailyLog(dailyLog ? { ...dailyLog, meals: revertedMeals, consumedCalories: revertedCalories } : null);
+        console.error("[Log Meal] Error preparing meal log:", error);
+        toast({ title: "เกิดข้อผิดพลาดในการบันทึก", description: "ไม่สามารถเตรียมข้อมูลมื้ออาหารได้", variant: "destructive" });
     } finally {
         setIsLoggingMeal(false);
     }
