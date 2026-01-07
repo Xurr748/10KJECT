@@ -1,27 +1,21 @@
 /**
  * Core Philosophy:
- * This ruleset enforces a public, read-only access model for all data collections.
- * The primary goal is to serve informational content (articles, food items, Q&A)
- * to any user, authenticated or not, while strictly prohibiting any client-side
- * data modification. All content is presumed to be managed by trusted backend
- * processes or administrators via the Firebase Console.
+ * This ruleset uses a "user-centric" security model. Authenticated users are granted
+ * full control over their own data within the `/users/{userId}` path, but have no
+ * access to other users' data. Public collections are read-only for everyone.
  *
  * Data Structure:
- * The data is organized into three distinct, top-level collections:
- * - /articles: Contains articles on nutrition and food safety.
- * - /food_items: Stores data about food items identified by an AI scanner.
- * - /question_answers: Holds a knowledge base of questions and answers.
- * This flat structure avoids complex relational rules and improves query performance.
+ * - /users/{userId}: Private data for each user, identified by their Firebase Auth UID.
+ *   - /users/{userId}/dailyLogs/{logId}: Sub-collection for user-specific daily meal logs.
+ * - /articles, /food_items, /question_answers: Public, read-only collections.
  *
  * Key Security Decisions:
- * - Public Read Access: All collections are publicly readable (`get`, `list`) to
- *   ensure that the app's core content is available to all users without requiring
- *   authentication.
- * - Client-Side Writes Disabled: All write operations (`create`, `update`, `delete`)
- *   are explicitly denied for all collections. This is a critical security measure
- *   to protect the integrity of the shared, public data.
- * - No User-Specific Data: The data model does not contain any user-specific
- *   or private information, eliminating the need for ownership-based rules.
+ * - Ownership-Based Writes: Users can only write (`create`, `update`, `delete`) to
+ *   documents where the `{userId}` in the path matches their own `request.auth.uid`.
+ *   This is the cornerstone of the security model, ensuring data privacy.
+ * - Public Read-Only Content: Informational collections are publicly readable but
+ *   client-side writes are strictly forbidden to maintain data integrity. All content
+ *   is managed by trusted backend processes.
  *
  * A Note on the 'auth/configuration-not-found' Error:
  * The error you are experiencing is related to Firebase Authentication setup, not
@@ -37,10 +31,41 @@ service cloud.firestore {
     // ----------------------------------------------------------------------
     // Helper Functions
     // ----------------------------------------------------------------------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
 
     // ----------------------------------------------------------------------
     // Collection Rules
     // ----------------------------------------------------------------------
+
+    /**
+     * @description Allows a user to read and write their own profile document.
+     *   They cannot see or edit other users' profiles.
+     * @path /users/{userId}
+     * @allow A user updates their own BMI: (update) /users/my-uid
+     * @deny A user tries to read another user's profile: (get) /users/another-uid
+     * @principle Enforces data privacy by restricting access to the data owner.
+     */
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+
+      /**
+       * @description Allows a user to manage their own daily meal logs.
+       * @path /users/{userId}/dailyLogs/{logId}
+       * @allow A user creates a new meal log for today: (create) /users/my-uid/dailyLogs/2024-07-29
+       * @deny A user tries to delete another user's meal log: (delete) /users/another-uid/dailyLogs/2024-07-29
+       * @principle Extends data ownership to sub-collections.
+       */
+      match /dailyLogs/{logId} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+
 
     /**
      * @description Allows any user, signed-in or anonymous, to read articles.
