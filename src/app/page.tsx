@@ -149,6 +149,9 @@ export default function FSFAPage() {
     const savedChatMessages = safeJsonParse(localStorage.getItem('chatMessages'));
     if (savedChatMessages) setChatMessages(savedChatMessages);
 
+    const savedPreviewUrl = localStorage.getItem('previewUrl');
+    if (savedPreviewUrl) setPreviewUrl(savedPreviewUrl);
+
     // Only load anonymous profile/log data. Logged-in user data comes from Firestore.
     const { auth } = getFirebase();
     if (!auth?.currentUser) {
@@ -174,6 +177,12 @@ export default function FSFAPage() {
   useEffect(() => {
     localStorage.setItem('chatMessages', JSON.stringify(chatMessages));
   }, [chatMessages]);
+
+  useEffect(() => {
+    if (previewUrl) {
+      localStorage.setItem('previewUrl', previewUrl);
+    }
+  }, [previewUrl]);
 
   useEffect(() => {
     if (!currentUser) {
@@ -307,7 +316,15 @@ export default function FSFAPage() {
         console.log('[Auth] User is logged out. Operating in anonymous mode.');
         // Load local data if available
         const savedUserProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
-        if (savedUserProfile) setUserProfile(savedUserProfile);
+        if (savedUserProfile) {
+            setUserProfile(savedUserProfile);
+            if (savedUserProfile.height) setHeight(String(savedUserProfile.height));
+            if (savedUserProfile.weight) setWeight(String(savedUserProfile.weight));
+        } else {
+            setUserProfile({});
+            setHeight('');
+            setWeight('');
+        }
         const savedDailyLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
         if (savedDailyLog) setDailyLog(savedDailyLog);
         
@@ -364,6 +381,7 @@ export default function FSFAPage() {
     setImageAnalysisResult(null);
     setImageError(null);
     localStorage.removeItem('imageAnalysisResult');
+    localStorage.removeItem('previewUrl');
     console.log('[State Reset] Image related states reset.');
   };
 
@@ -604,6 +622,8 @@ export default function FSFAPage() {
       setAuthDialogOpen(false); // Close dialog on success
       localStorage.removeItem('anonymousUserProfile');
       localStorage.removeItem('anonymousDailyLog');
+      localStorage.removeItem('previewUrl');
+      localStorage.removeItem('imageAnalysisResult');
     } catch (error: any) {
       console.error('Login error:', error);
       let errorMessage = "เกิดข้อผิดพลาดในการเข้าสู่ระบบ";
@@ -816,13 +836,21 @@ export default function FSFAPage() {
 
                 {imageError && <p className="text-destructive text-xs sm:text-sm font-body flex items-center"><AlertCircle className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />{imageError}</p>}
 
-                <Button onClick={handleImageAnalysis} disabled={isLoadingImageAnalysis || !selectedFile} className="w-full text-sm sm:text-base md:text-lg py-2 sm:py-3 md:py-4" size="default">
+                <Button onClick={handleImageAnalysis} disabled={isLoadingImageAnalysis || !previewUrl} className="w-full text-sm sm:text-base md:text-lg py-2 sm:py-3 md:py-4" size="default">
                   {isLoadingImageAnalysis ? (
                     <><Loader2 className="animate-spin -ml-1 mr-2 sm:mr-3 h-4 w-4 sm:h-5 sm:h-5" />กำลังวิเคราะห์...</>
                   ) : (
                     <> <UploadCloud className="mr-2 h-4 w-4 sm:h-5 sm:h-5 md:h-6 md:w-6" /> วิเคราะห์รูปภาพ </>
                   )}
                 </Button>
+
+                {isLoadingImageAnalysis && (
+                  <div className="space-y-4 mt-4">
+                    <Skeleton className="h-8 w-3/4 mx-auto" />
+                    <Skeleton className="h-24 w-full" />
+                    <Skeleton className="h-16 w-full" />
+                  </div>
+                )}
 
                 {imageAnalysisResult && (
                   <Card className="mt-4 sm:mt-6 md:mt-8 shadow-md rounded-lg overflow-hidden bg-card border border-primary/30">
@@ -1056,5 +1084,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-
-    
