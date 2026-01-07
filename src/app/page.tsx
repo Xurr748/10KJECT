@@ -141,32 +141,6 @@ export default function FSFAPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isAuthLoading, setIsAuthLoading] = useState(false);
 
-  // Load state from localStorage on initial render
-  useEffect(() => {
-    const savedAnalysisResult = safeJsonParse(localStorage.getItem('imageAnalysisResult'));
-    if (savedAnalysisResult) setImageAnalysisResult(savedAnalysisResult);
-    
-    const savedChatMessages = safeJsonParse(localStorage.getItem('chatMessages'));
-    if (savedChatMessages) setChatMessages(savedChatMessages);
-
-    const savedPreviewUrl = localStorage.getItem('previewUrl');
-    if (savedPreviewUrl) setPreviewUrl(savedPreviewUrl);
-
-    // Only load anonymous profile/log data. Logged-in user data comes from Firestore.
-    const { auth } = getFirebase();
-    if (!auth?.currentUser) {
-        const savedUserProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
-        if (savedUserProfile) {
-          setUserProfile(savedUserProfile);
-          if (savedUserProfile.height) setHeight(String(savedUserProfile.height));
-          if (savedUserProfile.weight) setWeight(String(savedUserProfile.weight));
-        }
-
-        const savedDailyLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
-        if (savedDailyLog) setDailyLog(savedDailyLog);
-    }
-  }, []);
-
   // Save state to localStorage whenever it changes
   useEffect(() => {
     if (imageAnalysisResult) {
@@ -298,12 +272,35 @@ export default function FSFAPage() {
   };
 
 
+  // Load data from localStorage ONCE on initial render
+  // and set up Firebase auth listener
   useEffect(() => {
+    // Load non-user-specific data
+    const savedAnalysisResult = safeJsonParse(localStorage.getItem('imageAnalysisResult'));
+    if (savedAnalysisResult) setImageAnalysisResult(savedAnalysisResult);
+    
+    const savedChatMessages = safeJsonParse(localStorage.getItem('chatMessages'));
+    if (savedChatMessages) setChatMessages(savedChatMessages);
+
+    const savedPreviewUrl = localStorage.getItem('previewUrl');
+    if (savedPreviewUrl) setPreviewUrl(savedPreviewUrl);
+
+    // Set up Firebase listener
     const { auth } = getFirebase();
     if (!auth) {
       console.error("[Auth] Firebase Auth is not available.");
+      // Load anonymous data if auth is not available
+      const savedUserProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
+      if (savedUserProfile) {
+          setUserProfile(savedUserProfile);
+          if (savedUserProfile.height) setHeight(String(savedUserProfile.height));
+          if (savedUserProfile.weight) setWeight(String(savedUserProfile.weight));
+      }
+      const savedDailyLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
+      if (savedDailyLog) setDailyLog(savedDailyLog);
       return;
     }
+    
     let unsubscribeLog: (() => void) | undefined;
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -312,11 +309,12 @@ export default function FSFAPage() {
         fetchUserProfile(user);
         fetchDailyLog(user).then(unsub => { unsubscribeLog = unsub; });
       } else {
-        // User is logged out, clear remote-specific data
+        // User is logged out
         setCurrentUser(null);
         setDailyLogId(null); 
         console.log('[Auth] User is logged out. Operating in anonymous mode.');
-        // Load local data if available
+        
+        // Load local anonymous data
         const savedUserProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
         if (savedUserProfile) {
             setUserProfile(savedUserProfile);
@@ -334,6 +332,7 @@ export default function FSFAPage() {
             setDailyLog(null);
         }
         
+        // Unsubscribe from Firestore listeners if they exist
         if (unsubscribeLog) unsubscribeLog();
       }
     });
@@ -342,7 +341,7 @@ export default function FSFAPage() {
       unsubscribeAuth();
       if (unsubscribeLog) unsubscribeLog();
     };
-  }, []);
+  }, []); // Empty dependency array ensures this runs only once on mount
 
   useEffect(() => {
     if (chatScrollAreaRef.current) {
@@ -367,11 +366,7 @@ export default function FSFAPage() {
         title: "ออกจากระบบสำเร็จ",
         description: "ข้อมูลของคุณสำหรับเซสชันนี้จะยังคงอยู่",
       });
-      // Clear remote-specific data but keep local data
-      setUserProfile(safeJsonParse(localStorage.getItem('anonymousUserProfile')) || {});
-      setDailyLog(safeJsonParse(localStorage.getItem('anonymousDailyLog')) || null);
-      setDailyLogId(null);
-      console.log('[Logout] User logged out.');
+      // State will be reset by onAuthStateChanged listener
     } catch (error: unknown) {
       console.error("Logout error:", error);
       toast({
