@@ -167,6 +167,8 @@ export default function FSFAPage() {
     setWeight('');
     setDailyLog(null);
     setDailyLogId(null);
+    localStorage.removeItem('anonymousUserProfile');
+    localStorage.removeItem('anonymousDailyLog');
   }, []);
 
   // --- NON-USER-SPECIFIC LOCALSTORAGE DATA ---
@@ -188,6 +190,12 @@ export default function FSFAPage() {
         return;
     }
 
+    // Helper to get the start of the current day in UTC
+    const getStartOfUTCDay = () => {
+        const now = new Date();
+        return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    };
+
     let unsubscribeLog: (() => void) | undefined;
 
     const handleUserLoggedIn = async (user: User) => {
@@ -201,13 +209,8 @@ export default function FSFAPage() {
             profileToSet = docSnap.data() as UserProfile;
         } else if (localProfileData && Object.keys(localProfileData).length > 0) {
             profileToSet = localProfileData;
-            
-            // Use non-blocking write
             setDocumentNonBlocking(userDocRef, profileToSet, { merge: true });
-            
             toast({ title: "ข้อมูลถูกย้ายแล้ว", description: "ข้อมูลจากเซสชันที่ไม่ระบุตัวตนของคุณถูกบันทึกไปยังบัญชีใหม่ของคุณแล้ว" });
-
-            // Clear local data after migration
             localStorage.removeItem('anonymousUserProfile');
             localStorage.removeItem('anonymousDailyLog');
         }
@@ -215,11 +218,10 @@ export default function FSFAPage() {
         setUserProfile(profileToSet);
         setHeight(String(profileToSet.height || ''));
         setWeight(String(profileToSet.weight || ''));
-
-        const today = new Date();
-        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        
+        const startOfTodayUTC = getStartOfUTCDay();
         const logsCollection = collection(db, 'users', user.uid, 'dailyLogs');
-        const q = query(logsCollection, where('date', '>=', Timestamp.fromDate(startOfDay)));
+        const q = query(logsCollection, where('date', '>=', Timestamp.fromDate(startOfTodayUTC)));
         
         unsubscribeLog = onSnapshot(q, (querySnapshot) => {
             if (!querySnapshot.empty) {
@@ -235,27 +237,44 @@ export default function FSFAPage() {
           toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดบันทึกแคลอรี่ได้", variant: "destructive" });
         });
     };
-    
-    if (currentUser) {
-        handleUserLoggedIn(currentUser);
-    } else {
+
+    const handleAnonymousUser = () => {
         if (unsubscribeLog) {
           unsubscribeLog();
           unsubscribeLog = undefined;
         }
         resetLocalData();
+
         const localProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile')) || {};
         setUserProfile(localProfile);
         setHeight(String(localProfile.height || ''));
         setWeight(String(localProfile.weight || ''));
-        setDailyLog(safeJsonParse(localStorage.getItem('anonymousDailyLog')) || null);
+
+        let localLog = safeJsonParse(localStorage.getItem('anonymousDailyLog')) || null;
+
+        // Check if the anonymous log is from a previous day (based on UTC)
+        if (localLog) {
+          const logDate = localLog.date.toDate();
+          const startOfTodayUTC = getStartOfUTCDay();
+          
+          if (logDate < startOfTodayUTC) {
+            localLog = null; // Reset if it's from a previous day
+            localStorage.removeItem('anonymousDailyLog'); // Clear from storage
+          }
+        }
+        setDailyLog(localLog);
+    };
+    
+    if (currentUser) {
+        handleUserLoggedIn(currentUser);
+    } else {
+        handleAnonymousUser();
     }
   
     return () => {
       if (unsubscribeLog) unsubscribeLog();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentUser, isAuthLoading, db]);
+  }, [currentUser, isAuthLoading, db, toast, resetLocalData]);
 
 
   // --- DATA SAVING (Anonymous User) ---
@@ -450,25 +469,21 @@ export default function FSFAPage() {
     try {
       if (currentUser) {
         if (!db) throw new Error("Firebase not initialized");
-  
-        const today = new Date();
-        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
-        const logQuery = query(logsCollectionRef, where('date', '>=', Timestamp.fromDate(startOfDay)));
         
-        // Use getDocs to check for existing log once, avoiding listeners during write
+        const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+        const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
+        const logQuery = query(logsCollectionRef, where('date', '>=', Timestamp.fromDate(startOfTodayUTC)));
+        
         const logSnapshot = await getDocs(logQuery);
         
         if (logSnapshot.empty) {
-          // If no log for today, create a new one
           const newLogData: DailyLog = {
-            date: Timestamp.fromDate(startOfDay),
+            date: Timestamp.fromDate(startOfTodayUTC),
             consumedCalories: newMeal.calories,
             meals: [newMeal],
           };
           addDocumentNonBlocking(logsCollectionRef, newLogData);
         } else {
-          // If a log exists, update it
           const logDocRef = logSnapshot.docs[0].ref;
           const currentLogData = logSnapshot.docs[0].data() as DailyLog;
           const updatedMeals = [...currentLogData.meals, newMeal];
@@ -482,11 +497,18 @@ export default function FSFAPage() {
         toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
   
       } else {
-        // Handle anonymous user logging
+        const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+        let currentLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
+
+        // Check if the log is from a previous day and reset if necessary
+        if (currentLog && currentLog.date.toDate() < startOfTodayUTC) {
+            currentLog = null;
+        }
+
         const updatedLog: DailyLog = {
-            date: dailyLog?.date || Timestamp.now(),
-            consumedCalories: (dailyLog?.consumedCalories || 0) + newMeal.calories,
-            meals: [...(dailyLog?.meals || []), newMeal],
+            date: currentLog?.date || Timestamp.fromDate(startOfTodayUTC),
+            consumedCalories: (currentLog?.consumedCalories || 0) + newMeal.calories,
+            meals: [...(currentLog?.meals || []), newMeal],
         };
         setDailyLog(updatedLog);
         localStorage.setItem('anonymousDailyLog', JSON.stringify(updatedLog));
@@ -971,3 +993,5 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+    
