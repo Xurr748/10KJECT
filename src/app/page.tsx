@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -17,14 +16,17 @@ import {
   type ChatMessage
 } from '@/ai/flows/post-scan-chat';
 import { useAuth, useFirestore, useUser } from '@/firebase'; 
-import { onAuthStateChanged, signOut, type User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'; 
-import { doc, setDoc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, updateDoc } from 'firebase/firestore';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth'; 
+import { doc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, updateDoc } from 'firebase/firestore';
 import {
   setDocumentNonBlocking,
   addDocumentNonBlocking,
   updateDocumentNonBlocking,
-  deleteDocumentNonBlocking,
 } from '@/firebase/non-blocking-updates';
+import {
+  initiateEmailSignIn,
+  initiateEmailSignUp,
+} from '@/firebase/non-blocking-login';
 
 
 // ShadCN UI Components
@@ -418,9 +420,8 @@ export default function FSFAPage() {
     
     if (currentUser && db) {
         const userDocRef = doc(db, 'users', currentUser.uid);
-        // Use non-blocking write for better UI responsiveness and error handling
         setDocumentNonBlocking(userDocRef, newProfile, { merge: true });
-        setUserProfile(newProfile); // Optimistic UI update
+        setUserProfile(newProfile);
         toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
         setIsCalculatingBmi(false);
     } else {
@@ -456,7 +457,6 @@ export default function FSFAPage() {
         const logSnapshot = await getDocs(logQuery);
         
         if (logSnapshot.empty) {
-          // No log for today, create a new one using non-blocking add
           const newLogRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
           const newLogData: DailyLog = {
             date: Timestamp.fromDate(startOfDay),
@@ -465,7 +465,6 @@ export default function FSFAPage() {
           };
           addDocumentNonBlocking(newLogRef, newLogData);
         } else {
-          // Log for today exists, update it using non-blocking update
           const logDocRef = logSnapshot.docs[0].ref;
           const currentLogData = logSnapshot.docs[0].data() as DailyLog;
           const updatedMeals = [...currentLogData.meals, newMeal];
@@ -479,7 +478,6 @@ export default function FSFAPage() {
         toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
   
       } else {
-        // Anonymous user
         const updatedLog: DailyLog = {
             date: dailyLog?.date || Timestamp.now(),
             consumedCalories: (dailyLog?.consumedCalories || 0) + newMeal.calories,
@@ -516,55 +514,67 @@ export default function FSFAPage() {
     setIsAuthOpLoading(false);
   };
 
-  const handleLogin = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setIsAuthOpLoading(true);
-    try {
-      await signInWithEmailAndPassword(auth, email, password);
-      toast({ title: "เข้าสู่ระบบสำเร็จ", description: "ยินดีต้อนรับกลับ!" });
-      setAuthDialogOpen(false);
-    } catch (error: any) {
-      console.error('Login error:', error);
-      let errorMessage = "เกิดข้อผิดพลาด";
-      if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+  const handleAuthError = (error: any) => {
+    console.error('Authentication error:', error);
+    let errorMessage = "เกิดข้อผิดพลาดที่ไม่รู้จัก";
+    switch (error.code) {
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+      case 'auth/invalid-credential':
         errorMessage = "อีเมลหรือรหัสผ่านไม่ถูกต้อง";
-      }
-      toast({ title: "เข้าสู่ระบบไม่สำเร็จ", description: errorMessage, variant: "destructive" });
-    } finally {
-      setIsAuthOpLoading(false);
+        break;
+      case 'auth/email-already-in-use':
+        errorMessage = "อีเมลนี้ถูกใช้งานแล้ว";
+        break;
+      case 'auth/weak-password':
+        errorMessage = "รหัสผ่านต้องมี 6 ตัวอักษรขึ้นไป";
+        break;
+      default:
+        errorMessage = "การยืนยันตัวตนล้มเหลว โปรดลองอีกครั้ง";
     }
+    toast({
+      title: authDialogMode === 'login' ? "เข้าสู่ระบบไม่สำเร็จ" : "ลงทะเบียนไม่สำเร็จ",
+      description: errorMessage,
+      variant: "destructive"
+    });
   };
 
-  const handleRegister = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setIsAuthOpLoading(true);
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setIsAuthOpLoading(false);
+      if (user) {
+        toast({ title: "การยืนยันตัวตนสำเร็จ", description: "ยินดีต้อนรับ!" });
+        setAuthDialogOpen(false);
+      }
+    }, (error) => {
+      setIsAuthOpLoading(false);
+      handleAuthError(error);
+    });
+    return () => unsubscribe();
+  }, [auth, toast, authDialogMode]);
 
+  const handleLogin = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!email || !password) {
+      toast({ title: "ข้อมูลไม่ครบถ้วน", description: "โปรดกรอกอีเมลและรหัสผ่าน", variant: "destructive" });
+      return;
+    }
+    setIsAuthOpLoading(true);
+    initiateEmailSignIn(auth, email, password);
+  };
+
+  const handleRegister = (event: React.FormEvent) => {
+    event.preventDefault();
     if (password !== confirmPassword) {
       toast({ title: "ลงทะเบียนไม่สำเร็จ", description: "รหัสผ่านไม่ตรงกัน", variant: "destructive" });
-      setIsAuthOpLoading(false);
       return;
     }
-
     if (password.length < 6) {
       toast({ title: "ลงทะเบียนไม่สำเร็จ", description: "รหัสผ่านต้องมี 6 ตัวอักษรขึ้นไป", variant: "destructive" });
-      setIsAuthOpLoading(false);
       return;
     }
-
-    try {
-      await createUserWithEmailAndPassword(auth, email, password);
-      toast({ title: "ลงทะเบียนสำเร็จ", description: "บัญชีของคุณถูกสร้างเรียบร้อยแล้ว" });
-      setAuthDialogOpen(false);
-    } catch (error: any) {
-      console.error('Registration error:', error);
-      let errorMessage = "เกิดข้อผิดพลาด";
-      if (error.code === 'auth/email-already-in-use') {
-        errorMessage = "อีเมลนี้ถูกใช้งานแล้ว";
-      }
-      toast({ title: "ลงทะเบียนไม่สำเร็จ", description: errorMessage, variant: "destructive" });
-    } finally {
-      setIsAuthOpLoading(false);
-    }
+    setIsAuthOpLoading(true);
+    initiateEmailSignUp(auth, email, password);
   };
 
   return (
@@ -956,6 +966,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-
-
-    
