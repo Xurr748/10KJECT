@@ -183,14 +183,12 @@ export default function FSFAPage() {
     let unsubscribeLog: (() => void) | undefined;
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      // Cleanup previous listener if it exists
       if (unsubscribeLog) {
         unsubscribeLog();
         unsubscribeLog = undefined;
       }
       
       if (user) {
-        // --- USER IS LOGGED IN ---
         setCurrentUser(user);
         
         const localProfileData = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
@@ -213,7 +211,6 @@ export default function FSFAPage() {
         setHeight(String(profileToSet.height || ''));
         setWeight(String(profileToSet.weight || ''));
 
-        // Setup daily log listener for today
         const today = new Date();
         const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         const logsCollection = collection(db, 'users', user.uid, 'dailyLogs');
@@ -234,7 +231,6 @@ export default function FSFAPage() {
         });
 
       } else {
-        // --- USER IS LOGGED OUT / ANONYMOUS ---
         setCurrentUser(null);
         resetLocalData();
         const localProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile')) || {};
@@ -250,7 +246,8 @@ export default function FSFAPage() {
       unsubscribeAuth();
       if (unsubscribeLog) unsubscribeLog();
     };
-  }, [resetLocalData, toast]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
 
   // --- DATA SAVING (Anonymous User) ---
