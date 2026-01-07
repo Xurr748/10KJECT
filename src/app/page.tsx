@@ -16,7 +16,7 @@ import {
   type ChatOutput as AIChatOutput, 
   type ChatMessage
 } from '@/ai/flows/post-scan-chat';
-import { auth, db } from '@/lib/firebase'; 
+import { getFirebase } from '@/lib/firebase'; 
 import { onAuthStateChanged, signOut, type User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'; 
 import { doc, setDoc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 
@@ -128,6 +128,7 @@ export default function FSFAPage() {
 
 
   const fetchUserProfile = async (user: User) => {
+    const { db } = getFirebase();
     if (!db) return;
     const userDocRef = doc(db, 'users', user.uid);
     try {
@@ -153,6 +154,7 @@ export default function FSFAPage() {
   
   // Fetch or create daily log for the user
   const fetchDailyLog = async (user: User) => {
+    const { db } = getFirebase();
     if (!db) return;
     const today = new Date();
     const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -216,6 +218,11 @@ export default function FSFAPage() {
 
 
   useEffect(() => {
+    const { auth } = getFirebase();
+    if (!auth) {
+      console.error("[Auth] Firebase Auth is not available.");
+      return;
+    }
     let unsubscribeLog: (() => void) | undefined;
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
@@ -249,6 +256,7 @@ export default function FSFAPage() {
 
   
   const handleLogout = async () => {
+    const { auth } = getFirebase();
     if (!auth) {
       console.error("Logout error: Firebase Auth not initialized.");
       toast({ title: "เกิดข้อผิดพลาด", description: "การตั้งค่า Firebase ไม่สมบูรณ์", variant: "destructive" });
@@ -412,7 +420,8 @@ export default function FSFAPage() {
     setUserProfile(newProfile);
 
     toast({ title: "คำนวณ BMI สำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
-
+    
+    const { db } = getFirebase();
     if (currentUser && db) {
       try {
         const userDocRef = doc(db, 'users', currentUser.uid);
@@ -426,7 +435,7 @@ export default function FSFAPage() {
     setIsCalculatingBmi(false);
   };
 
-  const handleLogMeal = async (mealName: string, mealCalories: number) => {
+const handleLogMeal = async (mealName: string, mealCalories: number) => {
     setIsLoggingMeal(true);
 
     const currentLog = dailyLog || {
@@ -458,7 +467,8 @@ export default function FSFAPage() {
             variant: "destructive"
         });
     }
-
+    
+    const { db } = getFirebase();
     if (currentUser && db) {
         try {
             const userLogsCollection = collection(db, 'users', currentUser.uid, 'dailyLogs');
@@ -504,6 +514,11 @@ export default function FSFAPage() {
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
+    const { auth } = getFirebase();
+    if (!auth) {
+        toast({ title: "ข้อผิดพลาดในการตรวจสอบสิทธิ์", description: "บริการ Firebase Authentication ไม่พร้อมใช้งาน", variant: "destructive" });
+        return;
+    }
     setIsAuthLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
@@ -532,6 +547,11 @@ export default function FSFAPage() {
 
   const handleRegister = async (event: React.FormEvent) => {
     event.preventDefault();
+    const { auth } = getFirebase();
+    if (!auth) {
+        toast({ title: "ข้อผิดพลาดในการตรวจสอบสิทธิ์", description: "บริการ Firebase Authentication ไม่พร้อมใช้งาน", variant: "destructive" });
+        return;
+    }
     setIsAuthLoading(true);
 
     if (password !== confirmPassword) {
@@ -952,8 +972,12 @@ export default function FSFAPage() {
       </main>
 
       <footer className="text-center py-4 sm:py-6 md:py-8 mt-6 sm:mt-8 md:mt-12 lg:mt-16 border-t border-border/50">
-        
+        <Link href="/datastore-summary" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+          สรุปฐานข้อมูล
+        </Link>
       </footer>
     </div>
   );
 }
+
+    
