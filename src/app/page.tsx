@@ -119,6 +119,7 @@ export default function FSFAPage() {
   const { toast } = useToast();
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -148,13 +149,16 @@ export default function FSFAPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [isAuthLoading, setIsAuthLoading] = useState(false);
+  const [isAuthOpLoading, setIsAuthOpLoading] = useState(false);
 
 
   // --- AUTH & DATA LOADING ---
   useEffect(() => {
     const { auth } = getFirebase();
-    if (!auth) return;
+    if (!auth) {
+        setIsAuthLoading(false);
+        return;
+    };
 
     let unsubscribeLog: (() => void) | undefined;
 
@@ -165,73 +169,50 @@ export default function FSFAPage() {
       }
       
       setCurrentUser(user);
+      setIsAuthLoading(false);
 
       if (user) {
         // --- USER IS LOGGED IN ---
         console.log("[Auth] User logged in:", user.uid);
+        localStorage.removeItem('anonymousUserProfile'); // IMPORTANT: Clean up local data
+        localStorage.removeItem('anonymousDailyLog');
+        
         const { db } = getFirebase();
         if (!db) return;
 
-        // 1. Handle Data Migration & Profile Loading
+        // 1. Load User Profile
         const userDocRef = doc(db, 'users', user.uid);
-        const anonymousProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
-        
-        try {
-          const docSnap = await getDoc(userDocRef);
-          let profileToSet: UserProfile = {};
-
-          if (docSnap.exists()) {
-            profileToSet = docSnap.data() as UserProfile;
-            console.log("[Auth] Fetched existing profile from Firestore.");
-          } else if (anonymousProfile && Object.keys(anonymousProfile).length > 0) {
-            console.log("[Auth] No Firestore profile, migrating anonymous profile.");
-            profileToSet = anonymousProfile;
-            await setDoc(userDocRef, profileToSet, { merge: true }); // Save migrated data
-          }
-          
-          setUserProfile(profileToSet);
-          setHeight(String(profileToSet.height || ''));
-          setWeight(String(profileToSet.weight || ''));
-
-        } catch (error) {
-          console.error("[Profile Fetch/Migrate] Error:", error);
-        } finally {
-          localStorage.removeItem('anonymousUserProfile'); // Clean up local data after login
+        const docSnap = await getDoc(userDocRef);
+        if (docSnap.exists()) {
+          const profileData = docSnap.data() as UserProfile;
+          setUserProfile(profileData);
+          setHeight(String(profileData.height || ''));
+          setWeight(String(profileData.weight || ''));
+          console.log("[Auth] Fetched existing profile from Firestore.");
+        } else {
+            // If no profile exists, reset the state
+            setUserProfile({});
+            setHeight('');
+            setWeight('');
         }
 
-        // 2. Setup Daily Log Listener & Migration
+        // 2. Setup Daily Log Listener
         const today = new Date();
         const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
         const logsCollection = collection(db, 'users', user.uid, 'dailyLogs');
         const q = query(logsCollection, where('date', '>=', Timestamp.fromDate(startOfDay)));
         
-        const anonymousLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
-
-        unsubscribeLog = onSnapshot(q, async (querySnapshot) => {
+        unsubscribeLog = onSnapshot(q, (querySnapshot) => {
             if (!querySnapshot.empty) {
                 const docSnap = querySnapshot.docs[0];
                 const remoteLog = docSnap.data() as DailyLog;
                 console.log("[Log] Fetched existing log from Firestore for today.");
                 setDailyLog(remoteLog);
                 setDailyLogId(docSnap.id);
-            } else if (anonymousLog) {
-                 console.log("[Log] No Firestore log, migrating anonymous log.");
-                 const newLogData = { ...anonymousLog, date: Timestamp.fromDate(startOfDay) };
-                 try {
-                     const newDocRef = await addDoc(logsCollection, newLogData);
-                     setDailyLog(newLogData);
-                     setDailyLogId(newDocRef.id);
-                 } catch (error) {
-                     console.error("[Log Migrate] Error creating new log:", error);
-                 } finally {
-                    localStorage.removeItem('anonymousDailyLog');
-                 }
             } else {
                setDailyLog(null);
                setDailyLogId(null);
             }
-             // Always clean up after attempting migration
-            localStorage.removeItem('anonymousDailyLog');
         }, (error) => {
           console.error("[Log] Error listening to daily log:", error);
         });
@@ -239,10 +220,11 @@ export default function FSFAPage() {
       } else {
         // --- USER IS LOGGED OUT / ANONYMOUS ---
         console.log("[Auth] User is anonymous.");
-        setUserProfile(safeJsonParse(localStorage.getItem('anonymousUserProfile')) || {});
+        const localProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile')) || {};
+        setUserProfile(localProfile);
+        setHeight(String(localProfile.height || ''));
+        setWeight(String(localProfile.weight || ''));
         setDailyLog(safeJsonParse(localStorage.getItem('anonymousDailyLog')) || null);
-        setHeight(String(safeJsonParse(localStorage.getItem('anonymousUserProfile'))?.height || ''));
-        setWeight(String(safeJsonParse(localStorage.getItem('anonymousUserProfile'))?.weight || ''));
         setDailyLogId(null);
       }
     });
@@ -257,11 +239,13 @@ export default function FSFAPage() {
 
   // --- DATA SAVING ---
   useEffect(() => {
-    // This effect handles SAVING data to the correct location
+    if (isAuthLoading) return; // Don't save anything until auth state is confirmed
+
     if (currentUser) {
       // Logged-in user: save to Firestore
+      if (!userProfile || Object.keys(userProfile).length === 0) return;
       const { db } = getFirebase();
-      if (!db || !userProfile || Object.keys(userProfile).length === 0) return;
+      if (!db) return;
 
       const userDocRef = doc(db, 'users', currentUser.uid);
       setDoc(userDocRef, userProfile, { merge: true }).catch(error => {
@@ -273,38 +257,27 @@ export default function FSFAPage() {
       // Anonymous user: save to LocalStorage
       if (userProfile && Object.keys(userProfile).length > 0) {
         localStorage.setItem('anonymousUserProfile', JSON.stringify(userProfile));
-      } else {
-        localStorage.removeItem('anonymousUserProfile');
       }
     }
-  }, [userProfile, currentUser, toast]);
+  }, [userProfile, currentUser, isAuthLoading, toast]);
 
   useEffect(() => {
+     if (isAuthLoading) return; // Don't save anything until auth state is confirmed
     if (currentUser) {
-        const { db } = getFirebase();
-        if (!db || !dailyLog) return;
-
-        if (dailyLogId) {
-            const logDocRef = doc(db, 'users', currentUser.uid, 'dailyLogs', dailyLogId);
-            setDoc(logDocRef, dailyLog, { merge: true }).catch(error => {
-                console.error("[Firestore Save] Error updating daily log:", error);
-                toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถอัปเดตบันทึกแคลอรี่ของคุณได้", variant: "destructive"});
-            });
-        }
-        // Creation of new daily log is handled in the onSnapshot listener to avoid race conditions
+        // Firestore saving for daily log is handled via setDoc/addDoc in handleLogMeal
     } else {
+        // Anonymous user: save daily log to LocalStorage
         if (dailyLog) {
             localStorage.setItem('anonymousDailyLog', JSON.stringify(dailyLog));
         } else {
             localStorage.removeItem('anonymousDailyLog');
         }
     }
-  }, [dailyLog, dailyLogId, currentUser, toast]);
+  }, [dailyLog, currentUser, isAuthLoading]);
 
 
   // --- NON-USER-SPECIFIC LOCALSTORAGE DATA ---
   useEffect(() => {
-    // This loads data that is not tied to a user, like the last scan result
     const savedAnalysisResult = safeJsonParse(localStorage.getItem('imageAnalysisResult'));
     if (savedAnalysisResult) setImageAnalysisResult(savedAnalysisResult);
     
@@ -447,7 +420,7 @@ export default function FSFAPage() {
     }
   };
 
-  const handleCalculateBmi = () => {
+  const handleCalculateBmi = async () => {
     const h = parseFloat(height);
     const w = parseFloat(weight);
 
@@ -470,7 +443,7 @@ export default function FSFAPage() {
             dailyCalorieGoal: roundedCalorieGoal,
         };
         
-        // This state update will trigger the data saving useEffect
+        // This will trigger the useEffect for saving data.
         setUserProfile(newProfile); 
 
         toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
@@ -483,9 +456,12 @@ export default function FSFAPage() {
     }
   };
 
-  const handleLogMeal = (mealName: string, mealCalories: number) => {
-    if (isLoggingMeal) return;
+  const handleLogMeal = async () => {
+    if (isLoggingMeal || !imageAnalysisResult || !imageAnalysisResult.nutritionalInformation) return;
     setIsLoggingMeal(true);
+
+    const mealName = imageAnalysisResult.foodItem;
+    const mealCalories = imageAnalysisResult.nutritionalInformation.estimatedCalories;
 
     const newMeal: Meal = {
         name: mealName,
@@ -494,31 +470,64 @@ export default function FSFAPage() {
     };
 
     try {
+      if (currentUser) {
+        const { db } = getFirebase();
+        if (!db) throw new Error("Firebase not initialized");
+
+        let currentLog = dailyLog;
+        let currentLogId = dailyLogId;
+
+        // If no log exists for today, create one
+        if (!currentLog) {
+            const today = new Date();
+            const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            const newLogData = {
+                date: Timestamp.fromDate(startOfDay),
+                consumedCalories: 0,
+                meals: [],
+            };
+            const logRef = await addDoc(collection(db, 'users', currentUser.uid, 'dailyLogs'), newLogData);
+            currentLog = newLogData;
+            currentLogId = logRef.id;
+            setDailyLogId(currentLogId); // Update state
+        }
+        
+        // Add the new meal to the log
+        const updatedMeals = [...(currentLog?.meals || []), newMeal];
+        const updatedCalories = (currentLog?.consumedCalories || 0) + newMeal.calories;
+
         const updatedLog = {
-            date: dailyLog?.date || Timestamp.fromDate(new Date()),
+          ...currentLog,
+          consumedCalories: updatedCalories,
+          meals: updatedMeals,
+        };
+        
+        if (currentLogId) {
+          const logDocRef = doc(db, 'users', currentUser.uid, 'dailyLogs', currentLogId);
+          await setDoc(logDocRef, updatedLog, { merge: true });
+        }
+        
+        setDailyLog(updatedLog); // Update local state to reflect change immediately
+        toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
+
+      } else {
+        // Anonymous user
+        const updatedLog = {
+            date: dailyLog?.date || Timestamp.now(),
             consumedCalories: (dailyLog?.consumedCalories || 0) + newMeal.calories,
             meals: [...(dailyLog?.meals || []), newMeal],
         };
-
-        // This state update triggers the saving useEffect
-        setDailyLog(updatedLog);
-        
-        if (userProfile.dailyCalorieGoal && updatedLog.consumedCalories > userProfile.dailyCalorieGoal) {
-            toast({
-                title: "คำเตือน: เกินเป้าหมายแคลอรี่!",
-                description: `วันนี้คุณบริโภคไปแล้ว ${updatedLog.consumedCalories} kcal`,
-                variant: "destructive"
-            });
-        }
-        
-        toast({ title: "บันทึกมื้ออาหารสำเร็จ", description: `${mealName} (${mealCalories} kcal) ถูกเพิ่มในบันทึกของคุณ` });
+        setDailyLog(updatedLog); // This will trigger the useEffect to save to localStorage
+        toast({ title: "บันทึกมื้ออาหารสำเร็จ" });
+      }
     } catch (error) {
-        console.error("[Log Meal] Error preparing meal log:", error);
+        console.error("[Log Meal] Error:", error);
         toast({ title: "เกิดข้อผิดพลาดในการบันทึก", variant: "destructive" });
     } finally {
         setIsLoggingMeal(false);
     }
   };
+
 
   const getBmiInterpretation = (bmi: number | undefined): {text: string, color: string} => {
     if (bmi === undefined) return {text: 'N/A', color: 'text-foreground'};
@@ -535,7 +544,7 @@ export default function FSFAPage() {
     setEmail('');
     setPassword('');
     setConfirmPassword('');
-    setIsAuthLoading(false);
+    setIsAuthOpLoading(false);
   };
 
   const handleLogin = async (event: React.FormEvent) => {
@@ -545,7 +554,7 @@ export default function FSFAPage() {
         toast({ title: "ข้อผิดพลาดในการตรวจสอบสิทธิ์", variant: "destructive" });
         return;
     }
-    setIsAuthLoading(true);
+    setIsAuthOpLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
       toast({ title: "เข้าสู่ระบบสำเร็จ", description: "ยินดีต้อนรับกลับ!" });
@@ -558,7 +567,7 @@ export default function FSFAPage() {
       }
       toast({ title: "เข้าสู่ระบบไม่สำเร็จ", description: errorMessage, variant: "destructive" });
     } finally {
-      setIsAuthLoading(false);
+      setIsAuthOpLoading(false);
     }
   };
 
@@ -569,17 +578,17 @@ export default function FSFAPage() {
         toast({ title: "ข้อผิดพลาดในการตรวจสอบสิทธิ์", variant: "destructive" });
         return;
     }
-    setIsAuthLoading(true);
+    setIsAuthOpLoading(true);
 
     if (password !== confirmPassword) {
       toast({ title: "ลงทะเบียนไม่สำเร็จ", description: "รหัสผ่านไม่ตรงกัน", variant: "destructive" });
-      setIsAuthLoading(false);
+      setIsAuthOpLoading(false);
       return;
     }
 
     if (password.length < 6) {
       toast({ title: "ลงทะเบียนไม่สำเร็จ", description: "รหัสผ่านต้องมี 6 ตัวอักษรขึ้นไป", variant: "destructive" });
-      setIsAuthLoading(false);
+      setIsAuthOpLoading(false);
       return;
     }
 
@@ -595,7 +604,7 @@ export default function FSFAPage() {
       }
       toast({ title: "ลงทะเบียนไม่สำเร็จ", description: errorMessage, variant: "destructive" });
     } finally {
-      setIsAuthLoading(false);
+      setIsAuthOpLoading(false);
     }
   };
 
@@ -676,8 +685,8 @@ export default function FSFAPage() {
                 <Label htmlFor="login-password">รหัสผ่าน</Label>
                 <Input id="login-password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required className="text-lg p-3" />
               </div>
-              <Button type="submit" className="w-full text-lg py-6" size="lg" disabled={isAuthLoading}>
-                {isAuthLoading ? <><Loader2 className="animate-spin mr-2"/>กำลังดำเนินการ...</> : <><LogIn className="mr-2 h-5 w-5" />เข้าสู่ระบบ</>}
+              <Button type="submit" className="w-full text-lg py-6" size="lg" disabled={isAuthOpLoading}>
+                {isAuthOpLoading ? <><Loader2 className="animate-spin mr-2"/>กำลังดำเนินการ...</> : <><LogIn className="mr-2 h-5 w-5" />เข้าสู่ระบบ</>}
               </Button>
             </form>
           ) : (
@@ -694,8 +703,8 @@ export default function FSFAPage() {
                 <Label htmlFor="register-confirmPassword">ยืนยันรหัสผ่าน</Label>
                 <Input id="register-confirmPassword" type="password" placeholder="••••••••" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="text-lg p-3" />
               </div>
-              <Button type="submit" className="w-full text-lg py-6" size="lg" disabled={isAuthLoading}>
-                {isAuthLoading ? <><Loader2 className="animate-spin mr-2"/>กำลังดำเนินการ...</> : <><UserPlus className="mr-2 h-5 w-5" />สร้างบัญชี</>}
+              <Button type="submit" className="w-full text-lg py-6" size="lg" disabled={isAuthOpLoading}>
+                {isAuthOpLoading ? <><Loader2 className="animate-spin mr-2"/>กำลังดำเนินการ...</> : <><UserPlus className="mr-2 h-5 w-5" />สร้างบัญชี</>}
               </Button>
             </form>
           )}
@@ -786,7 +795,7 @@ export default function FSFAPage() {
                                 <p className="text-lg sm:text-xl font-bold text-primary">{imageAnalysisResult.nutritionalInformation.estimatedCalories} กิโลแคลอรี่</p>
                                 <Button
                                   size="sm"
-                                  onClick={() => handleLogMeal(imageAnalysisResult.foodItem, imageAnalysisResult.nutritionalInformation.estimatedCalories)}
+                                  onClick={handleLogMeal}
                                   disabled={isLoggingMeal}
                                   className="bg-accent text-accent-foreground hover:bg-accent/90"
                                 >
@@ -986,5 +995,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-
-    
