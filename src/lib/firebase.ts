@@ -1,4 +1,3 @@
-
 // src/lib/firebase.ts
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
@@ -32,12 +31,13 @@ interface FirebaseServices {
 let firebaseServices: FirebaseServices | null = null;
 
 function initializeFirebase(): FirebaseServices | null {
+  // Return memoized services if already initialized
   if (firebaseServices) {
     return firebaseServices;
   }
 
-  // Check for essential config keys
-  if (!firebaseConfig.apiKey || !firebaseConfig.authDomain || !firebaseConfig.projectId) {
+  // Check for essential config keys on the client side
+  if (typeof window !== 'undefined' && (!firebaseConfig.apiKey || !firebaseConfig.authDomain || !firebaseConfig.projectId)) {
     console.error("🔴 CRITICAL: Missing essential Firebase configuration (apiKey, authDomain, projectId). Please check your .env file and restart the server.");
     return null;
   }
@@ -52,6 +52,8 @@ function initializeFirebase(): FirebaseServices | null {
       isSupported().then(supported => {
         if (supported && firebaseConfig.measurementId) {
           analytics = getAnalytics(app);
+          // We need to re-assign to the memoized object for it to be available later
+          if(firebaseServices) firebaseServices.analytics = analytics; 
           console.log('[Firebase Init] Firebase Analytics initialized.');
         }
       }).catch(err => {
@@ -83,5 +85,3 @@ export function getFirebase() {
 
 // Also exporting serverTimestamp for convenience
 export { serverTimestamp };
-
-    
