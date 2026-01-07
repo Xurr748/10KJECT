@@ -1,0 +1,161 @@
+{
+  "entities": {
+    "Article": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Article",
+      "type": "object",
+      "description": "Represents an article on senior nutrition and food safety.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Article entity."
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of the article."
+        },
+        "content": {
+          "type": "string",
+          "description": "Content of the article."
+        },
+        "publicationDate": {
+          "type": "string",
+          "description": "Date and time the article was published.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "content",
+        "publicationDate"
+      ]
+    },
+    "FoodItem": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "FoodItem",
+      "type": "object",
+      "description": "Represents a food item identified by the AI image scanner.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the FoodItem entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "Name of the food item."
+        },
+        "nutritionalInformation": {
+          "type": "string",
+          "description": "Detailed nutritional information about the food item."
+        },
+        "safetyAdvice": {
+          "type": "string",
+          "description": "Safety advice related to the consumption of the food item."
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "URL of the food item image.",
+          "format": "uri"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "nutritionalInformation",
+        "safetyAdvice",
+        "imageUrl"
+      ]
+    },
+    "QuestionAnswer": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "QuestionAnswer",
+      "type": "object",
+      "description": "Represents a question asked by the user and the AI's answer.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the QuestionAnswer entity."
+        },
+        "question": {
+          "type": "string",
+          "description": "The question asked by the user."
+        },
+        "answer": {
+          "type": "string",
+          "description": "The AI's answer to the question."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "Timestamp of when the question was asked.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "question",
+        "answer",
+        "timestamp"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/articles/{articleId}",
+        "definition": {
+          "entityName": "Article",
+          "schema": {
+            "$ref": "#/backend/entities/Article"
+          },
+          "description": "Collection for storing articles on senior nutrition and food safety.",
+          "params": [
+            {
+              "name": "articleId",
+              "description": "Unique identifier for the article."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/food_items/{foodItemId}",
+        "definition": {
+          "entityName": "FoodItem",
+          "schema": {
+            "$ref": "#/backend/entities/FoodItem"
+          },
+          "description": "Collection for storing food items identified by the AI image scanner.",
+          "params": [
+            {
+              "name": "foodItemId",
+              "description": "Unique identifier for the food item."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/question_answers/{questionAnswerId}",
+        "definition": {
+          "entityName": "QuestionAnswer",
+          "schema": {
+            "$ref": "#/backend/entities/QuestionAnswer"
+          },
+          "description": "Collection for storing question and answer pairs from the interactive Q&A feature.",
+          "params": [
+            {
+              "name": "questionAnswerId",
+              "description": "Unique identifier for the question and answer pair."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The Firestore structure for SeniorSafe is designed to address the application's requirements for managing articles, food items identified by the AI image scanner, and question/answer pairs. The structure emphasizes clarity, security, and scalability, adhering to the core design principles outlined. Each entity is stored in its own top-level collection to simplify security rules and querying.\n\nAuthorization Independence is achieved by avoiding hierarchical dependencies. There are no user specific security requirements so no denormalization is needed.\n\nThe structure supports QAPs by segregating data into distinct collections based on their purpose. All items in the collections can be retreived via `list` operations."
+  }
+}

@@ -1,20 +1,93 @@
-
+/**
+ * Core Philosophy:
+ * This ruleset enforces a public, read-only access model for all data collections.
+ * The primary goal is to serve informational content (articles, food items, Q&A)
+ * to any user, authenticated or not, while strictly prohibiting any client-side
+ * data modification. All content is presumed to be managed by trusted backend
+ * processes or administrators via the Firebase Console.
+ *
+ * Data Structure:
+ * The data is organized into three distinct, top-level collections:
+ * - /articles: Contains articles on nutrition and food safety.
+ * - /food_items: Stores data about food items identified by an AI scanner.
+ * - /question_answers: Holds a knowledge base of questions and answers.
+ * This flat structure avoids complex relational rules and improves query performance.
+ *
+ * Key Security Decisions:
+ * - Public Read Access: All collections are publicly readable (`get`, `list`) to
+ *   ensure that the app's core content is available to all users without requiring
+ *   authentication.
+ * - Client-Side Writes Disabled: All write operations (`create`, `update`, `delete`)
+ *   are explicitly denied for all collections. This is a critical security measure
+ *   to protect the integrity of the shared, public data.
+ * - No User-Specific Data: The data model does not contain any user-specific
+ *   or private information, eliminating the need for ownership-based rules.
+ *
+ * A Note on the 'auth/configuration-not-found' Error:
+ * The error you are experiencing is related to Firebase Authentication setup, not
+ * Firestore Security Rules. It means the "Email/Password" sign-in provider has not
+ * been enabled in your Firebase project console. Please go to the Firebase Console ->
+ * Authentication -> Sign-in method tab and enable the "Email/Password" provider.
+ * These rules are designed to work correctly once your authentication is configured.
+ */
 rules_version = '2';
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Allow logged-in users to read, write, and update their own user profile document.
-    // The document ID must match the user's UID.
-    // No one can read or write to other users' documents.
-    match /users/{userId} {
-      allow read, update, write: if request.auth != null && request.auth.uid == userId;
+    // ----------------------------------------------------------------------
+    // Helper Functions
+    // ----------------------------------------------------------------------
+
+    // ----------------------------------------------------------------------
+    // Collection Rules
+    // ----------------------------------------------------------------------
+
+    /**
+     * @description Allows any user, signed-in or anonymous, to read articles.
+     *   All write operations are disabled to protect content integrity.
+     * @path /articles/{articleId}
+     * @allow A logged-out user reads an article: (get) /articles/healthy-eating-guide
+     * @deny Any user tries to create a new article: (create) /articles/new-article-draft
+     * @principle Provides public, read-only access to informational content. Data is managed by backend processes, not clients.
+     */
+    match /articles/{articleId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
 
-    // Allow logged-in users to manage their own daily logs.
-    // They can create, read, update, and delete logs associated with their user ID.
-    match /users/{userId}/dailyLogs/{logId} {
-      allow read, list, create, update, delete: if request.auth != null && request.auth.uid == userId;
+    /**
+     * @description Allows any user, signed-in or anonymous, to read food item data.
+     *   All write operations are disabled.
+     * @path /food_items/{foodItemId}
+     * @allow An anonymous user lists all available food items: (list) /food_items
+     * @deny A signed-in user tries to delete a food item: (delete) /food_items/apple-data
+     * @principle Provides public, read-only access to a shared dataset. Data is managed by backend processes, not clients.
+     */
+    match /food_items/{foodItemId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    /**
+     * @description Allows any user, signed-in or anonymous, to read the Q&A knowledge base.
+     *   All write operations are disabled.
+     * @path /question_answers/{questionAnswerId}
+     * @allow Any user reads a specific Q&A pair: (get) /question_answers/what-is-listeria
+     * @deny Any user tries to update an existing answer: (update) /question_answers/what-is-listeria
+     * @principle Provides public, read-only access to a shared knowledge base. Data is managed by backend processes, not clients.
+     */
+    match /question_answers/{questionAnswerId} {
+      allow get: if true;
+      allow list: if true;
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
     }
   }
 }
