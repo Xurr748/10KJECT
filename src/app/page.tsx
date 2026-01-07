@@ -443,8 +443,9 @@ setImageAnalysisResult(null);
             setIsCalculatingBmi(false);
         }
     } else {
-        // Anonymous user, just update state
+        // Anonymous user, just update state and save to localStorage
         setUserProfile(newProfile);
+        localStorage.setItem('anonymousUserProfile', JSON.stringify(newProfile));
         setIsCalculatingBmi(false);
         toast({ title: "คำนวณสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
     }
@@ -469,36 +470,30 @@ setImageAnalysisResult(null);
         const { db } = getFirebase();
         if (!db) throw new Error("Firebase not initialized");
 
-        let currentLog = dailyLog;
-        let currentLogId = dailyLogId;
+        const today = new Date();
+        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const logQuery = query(collection(db, 'users', currentUser.uid, 'dailyLogs'), where('date', '>=', Timestamp.fromDate(startOfDay)));
+        const logSnapshot = await getDocs(logQuery);
 
-        // Start a batch write
-        const batch = writeBatch(db);
-
-        if (!currentLogId) {
-            const today = new Date();
-            const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-            const newLogData: DailyLog = {
-                date: Timestamp.fromDate(startOfDay),
-                consumedCalories: newMeal.calories,
-                meals: [newMeal],
-            };
-            // Use set on a new doc ref for batch
-            const newLogRef = doc(collection(db, 'users', currentUser.uid, 'dailyLogs'));
-            batch.set(newLogRef, newLogData);
+        if (logSnapshot.empty) {
+          // No log for today, create a new one
+          const newLogData: DailyLog = {
+            date: Timestamp.fromDate(startOfDay),
+            consumedCalories: newMeal.calories,
+            meals: [newMeal],
+          };
+          await addDoc(collection(db, 'users', currentUser.uid, 'dailyLogs'), newLogData);
         } else {
-           const updatedMeals = [...(currentLog?.meals || []), newMeal];
-           const updatedCalories = (currentLog?.consumedCalories || 0) + newMeal.calories;
-
-           const logDocRef = doc(db, 'users', currentUser.uid, 'dailyLogs', currentLogId);
-           // Use update for batch
-           batch.update(logDocRef, {
-             consumedCalories: updatedCalories,
-             meals: updatedMeals
-           });
+          // Log for today exists, update it
+          const logDocRef = logSnapshot.docs[0].ref;
+          const currentLogData = logSnapshot.docs[0].data() as DailyLog;
+          const updatedMeals = [...currentLogData.meals, newMeal];
+          const updatedCalories = currentLogData.consumedCalories + newMeal.calories;
+          await updateDoc(logDocRef, {
+            meals: updatedMeals,
+            consumedCalories: updatedCalories
+          });
         }
-        
-        await batch.commit(); // Commit the batch
         toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
 
       } else {
@@ -509,11 +504,12 @@ setImageAnalysisResult(null);
             meals: [...(dailyLog?.meals || []), newMeal],
         };
         setDailyLog(updatedLog);
+        localStorage.setItem('anonymousDailyLog', JSON.stringify(updatedLog));
         toast({ title: "บันทึกมื้ออาหารสำเร็จ" });
       }
-    } catch (error) {
-        console.error("[Log Meal] Error:", error);
-        toast({ title: "เกิดข้อผิดพลาดในการบันทึก", variant: "destructive" });
+    } catch (error: any) {
+        console.error("[Log Meal] Error:", error.message);
+        toast({ title: "เกิดข้อผิดพลาดในการบันทึก", description: error.message, variant: "destructive" });
     } finally {
         setIsLoggingMeal(false);
     }
