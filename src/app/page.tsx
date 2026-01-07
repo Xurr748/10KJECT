@@ -155,7 +155,6 @@ export default function FSFAPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isAuthLoading, setIsAuthLoading] = useState(false);
-  const profileSaveTimeout = useRef<NodeJS.Timeout | null>(null);
 
 
   // --- DATA PERSISTENCE HOOKS ---
@@ -203,39 +202,6 @@ export default function FSFAPage() {
         }
     }
   }, [dailyLog, currentUser]);
-
-  // NEW: useEffect to save userProfile to Firestore for logged-in users with debounce
-  useEffect(() => {
-    if (profileSaveTimeout.current) {
-        clearTimeout(profileSaveTimeout.current);
-    }
-    
-    profileSaveTimeout.current = setTimeout(async () => {
-        if (currentUser && Object.keys(userProfile).length > 0) {
-            const { db } = getFirebase();
-            if (!db) {
-                console.error("[Profile Save] Firestore DB not available.");
-                return;
-            }
-            console.log("[Profile Save] Debounced save for profile to Firestore for user:", currentUser.uid, userProfile);
-            const userDocRef = doc(db, 'users', currentUser.uid);
-            try {
-                await setDoc(userDocRef, userProfile, { merge: true });
-                console.log("[Profile Save] Profile saved to Firestore successfully.");
-            } catch (error) {
-                console.error("Error saving profile to Firestore:", error);
-                toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อมูลโปรไฟล์ของคุณได้", variant: "destructive"});
-            }
-        }
-    }, 1000); // Wait 1 second after last change
-
-    return () => {
-        if (profileSaveTimeout.current) {
-            clearTimeout(profileSaveTimeout.current);
-        }
-    };
-}, [userProfile, currentUser, toast]);
-  
 
   // 4. Main AUTH and USER-DATA loading logic
   useEffect(() => {
@@ -537,6 +503,7 @@ export default function FSFAPage() {
     }
     
     setIsCalculatingBmi(true);
+    
     try {
         const bmi = w / ((h / 100) * (h / 100));
         const calorieGoal = (10 * w) + (6.25 * h) - (5 * 30) + 5; 
@@ -548,14 +515,28 @@ export default function FSFAPage() {
             bmi: parseFloat(bmi.toFixed(2)),
             dailyCalorieGoal: roundedCalorieGoal,
         };
-        
-        setUserProfile(newProfile); // This will trigger the useEffect to save data
-        
-        toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
+
+        const { auth, db } = getFirebase();
+        const user = auth?.currentUser;
+
+        if (user && db) {
+            // Logged-in user: Save to Firestore and wait for it to complete.
+            const userDocRef = doc(db, 'users', user.uid);
+            await setDoc(userDocRef, newProfile, { merge: true });
+            console.log("[BMI Calc] Profile saved to Firestore successfully for user:", user.uid);
+            
+            // AFTER successful save, update the local state.
+            setUserProfile(newProfile);
+            toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi} และบันทึกข้อมูลในบัญชีของคุณแล้ว` });
+        } else {
+            // Anonymous user: Just update the local state. The useEffect will save to localStorage.
+            setUserProfile(newProfile);
+            toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
+        }
         
     } catch (error) {
-        console.error("Error during BMI calculation:", error);
-        toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถคำนวณ BMI ได้", variant: "destructive"});
+        console.error("Error during BMI calculation or saving:", error);
+        toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถคำนวณหรือบันทึก BMI ได้", variant: "destructive"});
     } finally {
         setIsCalculatingBmi(false);
     }
