@@ -156,6 +156,8 @@ export default function FSFAPage() {
     if (previewUrl) localStorage.setItem('previewUrl', previewUrl);
   }, [previewUrl]);
 
+  // This is the crucial effect that was missing/incorrect.
+  // It ensures the latest anonymous profile is always saved.
   useEffect(() => {
     // Only save profile and log to localStorage if user is NOT logged in
     if (!currentUser) {
@@ -490,10 +492,9 @@ export default function FSFAPage() {
         console.error("Error saving profile to Firestore:", error);
         toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อมูลโปรไฟล์ลงฐานข้อมูลได้", variant: "destructive"});
       }
-    } else if (!auth?.currentUser) {
-        // Explicitly save to localStorage if not logged in
-        localStorage.setItem('anonymousUserProfile', JSON.stringify(newProfile));
     }
+    // No need for an else block to save to localStorage here, 
+    // the dedicated useEffect for [userProfile, currentUser] will handle it.
     setIsCalculatingBmi(false);
   };
 
@@ -550,8 +551,6 @@ export default function FSFAPage() {
             console.error("[Log Meal] Error logging meal to Firestore:", error);
             toast({ title: "เกิดข้อผิดพลาดในการบันทึกข้อมูล", description: "ไม่สามารถบันทึกมื้ออาหารลงฐานข้อมูลได้", variant: "destructive" });
         }
-    } else if (!auth?.currentUser) {
-        localStorage.setItem('anonymousDailyLog', JSON.stringify(updatedLog));
     }
 
     setIsLoggingMeal(false);
@@ -1074,3 +1073,5 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+    
