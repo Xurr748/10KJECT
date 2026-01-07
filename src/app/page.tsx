@@ -16,9 +16,9 @@ import {
   type ChatOutput as AIChatOutput, 
   type ChatMessage
 } from '@/ai/flows/post-scan-chat';
-import { getFirebase } from '@/lib/firebase'; 
+import { getFirebase, serverTimestamp as getFirestoreServerTimestamp } from '@/lib/firebase'; 
 import { onAuthStateChanged, signOut, type User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'; 
-import { doc, setDoc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { doc, setDoc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
 
 // ShadCN UI Components
@@ -77,28 +77,40 @@ interface UserProfile {
   dailyCalorieGoal?: number;
 }
 
+interface Meal {
+  name: string;
+  calories: number;
+  timestamp: Timestamp;
+}
+
 interface DailyLog {
   date: Timestamp;
   consumedCalories: number;
-  meals: {
-    name: string;
-    calories: number;
-    timestamp: Timestamp;
-  }[];
+  meals: Meal[];
 }
 
 // A reviver function for JSON.parse to correctly handle Firestore Timestamps
 const jsonReviver = (key: string, value: any) => {
-  // This is a common way Firestore Timestamps are stringified
-  if (typeof value === 'object' && value !== null && value.hasOwnProperty('seconds') && value.hasOwnProperty('nanoseconds')) {
-    return new Timestamp(value.seconds, value.nanoseconds);
+  if (typeof value === 'object' && value !== null) {
+    // Handle Timestamps stringified by JSON.stringify
+    if (value.hasOwnProperty('seconds') && value.hasOwnProperty('nanoseconds')) {
+      return new Timestamp(value.seconds, value.nanoseconds);
+    }
+    // Handle Timestamps converted to ISO strings
+    if (key === 'date' || key === 'timestamp') {
+       if (typeof value === 'string' && value.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z/)) {
+        return Timestamp.fromDate(new Date(value));
+      }
+    }
   }
   return value;
 };
 
+
 const safeJsonParse = (item: string | null): any => {
   if (!item) return null;
   try {
+    // Firestore Timestamps get stringified into a format that needs to be revived.
     return JSON.parse(item, jsonReviver);
   } catch (e) {
     console.error("Failed to parse JSON from localStorage", e);
@@ -180,12 +192,21 @@ export default function FSFAPage() {
     if (!currentUser) {
       if (Object.keys(userProfile).length > 0) {
         localStorage.setItem('anonymousUserProfile', JSON.stringify(userProfile));
-      }
-      if(dailyLog) {
-        localStorage.setItem('anonymousDailyLog', JSON.stringify(dailyLog));
+      } else {
+        localStorage.removeItem('anonymousUserProfile');
       }
     }
-  }, [userProfile, dailyLog, currentUser]);
+  }, [userProfile, currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) {
+        if(dailyLog) {
+            localStorage.setItem('anonymousDailyLog', JSON.stringify(dailyLog));
+        } else {
+            localStorage.removeItem('anonymousDailyLog');
+        }
+    }
+  }, [dailyLog, currentUser]);
   
 
   // 4. Main AUTH and USER-DATA loading logic
@@ -252,10 +273,9 @@ export default function FSFAPage() {
                     const mergedMeals = [...remoteLog.meals];
                     const remoteMealTimestamps = new Set(remoteLog.meals.map(m => m.timestamp.seconds));
                     
-                    localLog.meals.forEach((localMeal: any) => {
-                        const localTimestamp = new Timestamp(localMeal.timestamp.seconds, localMeal.timestamp.nanoseconds);
-                        if (!remoteMealTimestamps.has(localTimestamp.seconds)) {
-                            mergedMeals.push({ ...localMeal, timestamp: localTimestamp });
+                    localLog.meals.forEach((localMeal: Meal) => {
+                        if (!remoteMealTimestamps.has(localMeal.timestamp.seconds)) {
+                            mergedMeals.push(localMeal);
                         }
                     });
 
@@ -275,7 +295,6 @@ export default function FSFAPage() {
                     const newLogData = { 
                         ...localLog, 
                         date: Timestamp.fromDate(startOfDay),
-                        meals: localLog.meals.map((m: any) => ({...m, timestamp: new Timestamp(m.timestamp.seconds, m.timestamp.nanoseconds)}))
                     };
                     const docRef = await addDoc(logsCollection, newLogData);
                     setDailyLogId(docRef.id);
@@ -283,6 +302,7 @@ export default function FSFAPage() {
                     localStorage.removeItem('anonymousDailyLog');
                 } else {
                    setDailyLog(null);
+                   setDailyLogId(null);
                 }
             }
         }, (error) => {
@@ -307,15 +327,23 @@ export default function FSFAPage() {
       } else {
         // --- User is LOGGED OUT or ANONYMOUS ---
         console.log("[Auth] User is anonymous.");
+        // Clear user-specific data
         setDailyLogId(null); 
         
+        // Load anonymous data from localStorage
         const savedProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
-        setUserProfile(savedProfile || {});
-        setHeight(String(savedProfile?.height || ''));
-        setWeight(String(savedProfile?.weight || ''));
+        if (savedProfile) {
+            setUserProfile(savedProfile);
+            setHeight(String(savedProfile.height || ''));
+            setWeight(String(savedProfile.weight || ''));
+        } else {
+            setUserProfile({});
+            setHeight('');
+            setWeight('');
+        }
 
         const savedLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
-        setDailyLog(savedLog);
+        setDailyLog(savedLog || null);
       }
     });
   
@@ -493,14 +521,14 @@ export default function FSFAPage() {
         dailyCalorieGoal: roundedCalorieGoal,
       };
       
-      setUserProfile(newProfile);
+      setUserProfile(newProfile); // This will trigger the useEffect to save to localStorage for anonymous users
       
       const { db, auth } = getFirebase();
-      const currentUser = auth?.currentUser;
+      const user = auth?.currentUser;
 
-      if (currentUser && db) {
-        console.log("[BMI] Saving profile to Firestore for user:", currentUser.uid);
-        const userDocRef = doc(db, 'users', currentUser.uid);
+      if (user && db) {
+        console.log("[BMI] Saving profile to Firestore for user:", user.uid);
+        const userDocRef = doc(db, 'users', user.uid);
         await setDoc(userDocRef, newProfile, { merge: true });
         console.log("[BMI] Profile saved to Firestore successfully.");
         toast({ title: "บันทึกข้อมูลสำเร็จ", description: `ข้อมูลโปรไฟล์ของคุณถูกบันทึกในบัญชีเรียบร้อยแล้ว` });
@@ -516,69 +544,70 @@ export default function FSFAPage() {
   };
 
   const handleLogMeal = async (mealName: string, mealCalories: number) => {
-      setIsLoggingMeal(true);
-      try {
-          const newMeal = {
-              name: mealName,
-              calories: mealCalories,
-              timestamp: Timestamp.now(),
-          };
+    if (isLoggingMeal) return;
+    setIsLoggingMeal(true);
 
-          const updatedLog = (prevLog: DailyLog | null): DailyLog => {
-              const currentLog = prevLog || {
-                  date: Timestamp.now(),
-                  consumedCalories: 0,
-                  meals: [],
-              };
-              const updatedMeals = [...currentLog.meals, newMeal];
-              const updatedCalories = currentLog.consumedCalories + mealCalories;
-              return {
-                  ...currentLog,
-                  consumedCalories: updatedCalories,
-                  meals: updatedMeals,
-              };
-          };
+    const newMeal: Meal = {
+        name: mealName,
+        calories: mealCalories,
+        timestamp: Timestamp.now(),
+    };
 
-          const newDailyLog = updatedLog(dailyLog);
-          setDailyLog(newDailyLog);
-          
-          if (userProfile.dailyCalorieGoal && newDailyLog.consumedCalories > userProfile.dailyCalorieGoal) {
-              toast({
-                  title: "คำเตือน: เกินเป้าหมายแคลอรี่!",
-                  description: `วันนี้คุณบริโภคไปแล้ว ${newDailyLog.consumedCalories} kcal ซึ่งเกินเป้าหมาย ${userProfile.dailyCalorieGoal} kcal ของคุณ`,
-                  variant: "destructive"
-              });
-          }
+    // Optimistically update the local state
+    const newDailyLog = {
+        date: dailyLog?.date || Timestamp.now(),
+        consumedCalories: (dailyLog?.consumedCalories || 0) + newMeal.calories,
+        meals: [...(dailyLog?.meals || []), newMeal],
+    };
+    setDailyLog(newDailyLog);
+    
+    // Check for calorie goal
+    if (userProfile.dailyCalorieGoal && newDailyLog.consumedCalories > userProfile.dailyCalorieGoal) {
+        toast({
+            title: "คำเตือน: เกินเป้าหมายแคลอรี่!",
+            description: `วันนี้คุณบริโภคไปแล้ว ${newDailyLog.consumedCalories} kcal ซึ่งเกินเป้าหมาย ${userProfile.dailyCalorieGoal} kcal ของคุณ`,
+            variant: "destructive"
+        });
+    }
 
-          const { db, auth } = getFirebase();
-          const currentUser = auth?.currentUser;
+    try {
+        const { db, auth } = getFirebase();
+        const user = auth?.currentUser;
 
-          if (currentUser && db) {
-              console.log("[Log Meal] Saving meal to Firestore for user:", currentUser.uid);
-              const userLogsCollection = collection(db, 'users', currentUser.uid, 'dailyLogs');
-              
-              const startOfToday = new Date();
-              startOfToday.setHours(0, 0, 0, 0);
-              const firestoreLog = { ...newDailyLog, date: Timestamp.fromDate(startOfToday) };
-
-              if (dailyLogId) {
-                  const docRef = doc(userLogsCollection, dailyLogId);
-                  await setDoc(docRef, firestoreLog, { merge: true });
-                  console.log("[Log Meal] Meal log updated in Firestore.");
-              } else {
-                  const newDocRef = await addDoc(userLogsCollection, firestoreLog);
-                  setDailyLogId(newDocRef.id);
-                  console.log("[Log Meal] New meal log created in Firestore.");
-              }
-          }
-
-          toast({ title: "บันทึกมื้ออาหารสำเร็จ", description: `${mealName} (${mealCalories} kcal) ถูกเพิ่มในบันทึกของคุณ` });
-      } catch (error) {
-          console.error("[Log Meal] Error logging meal to Firestore:", error);
-          toast({ title: "เกิดข้อผิดพลาดในการบันทึก", description: "ไม่สามารถบันทึกข้อมูลมื้ออาหารได้", variant: "destructive" });
-      } finally {
-          setIsLoggingMeal(false);
-      }
+        // If user is logged in, save to Firestore
+        if (user && db) {
+            console.log("[Log Meal] Saving meal to Firestore for user:", user.uid);
+            const userLogsCollection = collection(db, 'users', user.uid, 'dailyLogs');
+            
+            // If there's an existing log for today, update it. Otherwise, create a new one.
+            if (dailyLogId) {
+                const docRef = doc(userLogsCollection, dailyLogId);
+                // We use the newDailyLog state which was optimistically updated
+                await setDoc(docRef, newDailyLog, { merge: true });
+                console.log("[Log Meal] Meal log updated in Firestore.");
+            } else {
+                const startOfToday = new Date();
+                startOfToday.setHours(0, 0, 0, 0);
+                const firestoreLog = { ...newDailyLog, date: Timestamp.fromDate(startOfToday) };
+                const newDocRef = await addDoc(userLogsCollection, firestoreLog);
+                setDailyLogId(newDocRef.id); // Save new log ID for subsequent updates
+                console.log("[Log Meal] New meal log created in Firestore.");
+            }
+        }
+        // For anonymous users, the useEffect for dailyLog will handle saving to localStorage.
+        
+        toast({ title: "บันทึกมื้ออาหารสำเร็จ", description: `${mealName} (${mealCalories} kcal) ถูกเพิ่มในบันทึกของคุณ` });
+    } catch (error) {
+        console.error("[Log Meal] Error logging meal:", error);
+        toast({ title: "เกิดข้อผิดพลาดในการบันทึก", description: "ไม่สามารถบันทึกข้อมูลมื้ออาหารได้", variant: "destructive" });
+        
+        // Revert optimistic update on error
+        const revertedMeals = dailyLog?.meals.slice(0, -1) || [];
+        const revertedCalories = revertedMeals.reduce((sum, meal) => sum + meal.calories, 0);
+        setDailyLog(dailyLog ? { ...dailyLog, meals: revertedMeals, consumedCalories: revertedCalories } : null);
+    } finally {
+        setIsLoggingMeal(false);
+    }
   };
 
 
@@ -977,7 +1006,7 @@ export default function FSFAPage() {
                   </div>
                    <Button onClick={handleCalculateBmi} disabled={isCalculatingBmi} className="w-full">
                      {isCalculatingBmi ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Calculator className="mr-2 h-4 w-4" />}
-                     คำนวณ BMI และแคลอรี่
+                     คำนวณและบันทึก
                    </Button>
                 </CardContent>
                 {userProfile.bmi && (
