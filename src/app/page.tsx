@@ -15,7 +15,7 @@ import {
   type ChatOutput as AIChatOutput, 
   type ChatMessage
 } from '@/ai/flows/post-scan-chat';
-import { getFirebase } from '@/lib/firebase'; 
+import { useAuth, useFirestore, useUser } from '@/firebase'; 
 import { onAuthStateChanged, signOut, type User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'; 
 import { doc, setDoc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, updateDoc } from 'firebase/firestore';
 
@@ -117,9 +117,9 @@ const safeJsonParse = (item: string | null): any => {
 
 export default function FSFAPage() {
   const { toast } = useToast();
-
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isAuthLoading, setIsAuthLoading] = useState(true);
+  const auth = useAuth();
+  const db = useFirestore();
+  const { user: currentUser, isUserLoading: isAuthLoading } = useUser();
 
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -174,23 +174,13 @@ export default function FSFAPage() {
 
   // --- AUTH & DATA MANAGEMENT ---
   useEffect(() => {
-    const { auth, db } = getFirebase();
-    if (!auth || !db) {
-        setIsAuthLoading(false);
+    if (isAuthLoading) {
         return;
     }
 
     let unsubscribeLog: (() => void) | undefined;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      if (unsubscribeLog) {
-        unsubscribeLog();
-        unsubscribeLog = undefined;
-      }
-      
-      if (user) {
-        setCurrentUser(user);
-        
+    const handleUserLoggedIn = async (user: User) => {
         const localProfileData = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
         localStorage.removeItem('anonymousUserProfile');
         localStorage.removeItem('anonymousDailyLog');
@@ -200,11 +190,11 @@ export default function FSFAPage() {
 
         let profileToSet: UserProfile = {};
         if (docSnap.exists()) {
-          profileToSet = docSnap.data() as UserProfile;
+            profileToSet = docSnap.data() as UserProfile;
         } else if (localProfileData && Object.keys(localProfileData).length > 0) {
-          profileToSet = localProfileData;
-          await setDoc(userDocRef, profileToSet, { merge: true });
-          toast({ title: "ข้อมูลถูกย้ายแล้ว", description: "ข้อมูลจากเซสชันที่ไม่ระบุตัวตนของคุณถูกบันทึกไปยังบัญชีใหม่ของคุณแล้ว" });
+            profileToSet = localProfileData;
+            await setDoc(userDocRef, profileToSet, { merge: true });
+            toast({ title: "ข้อมูลถูกย้ายแล้ว", description: "ข้อมูลจากเซสชันที่ไม่ระบุตัวตนของคุณถูกบันทึกไปยังบัญชีใหม่ของคุณแล้ว" });
         }
         
         setUserProfile(profileToSet);
@@ -229,25 +219,28 @@ export default function FSFAPage() {
           console.error("[Log] Error listening to daily log:", error);
           toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดบันทึกแคลอรี่ได้", variant: "destructive" });
         });
-
-      } else {
-        setCurrentUser(null);
+    };
+    
+    if (currentUser) {
+        handleUserLoggedIn(currentUser);
+    } else {
+        if (unsubscribeLog) {
+          unsubscribeLog();
+          unsubscribeLog = undefined;
+        }
         resetLocalData();
         const localProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile')) || {};
         setUserProfile(localProfile);
         setHeight(String(localProfile.height || ''));
         setWeight(String(localProfile.weight || ''));
         setDailyLog(safeJsonParse(localStorage.getItem('anonymousDailyLog')) || null);
-      }
-      setIsAuthLoading(false);
-    });
+    }
   
     return () => {
-      unsubscribeAuth();
       if (unsubscribeLog) unsubscribeLog();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentUser, isAuthLoading, db]);
 
 
   // --- DATA SAVING (Anonymous User) ---
@@ -287,11 +280,6 @@ export default function FSFAPage() {
 
   
   const handleLogout = async () => {
-    const { auth } = getFirebase();
-    if (!auth) {
-      toast({ title: "เกิดข้อผิดพลาด", description: "การตั้งค่า Firebase ไม่สมบูรณ์", variant: "destructive" });
-      return;
-    }
     try {
       await signOut(auth);
       toast({
@@ -417,7 +405,6 @@ export default function FSFAPage() {
     };
     
     if (currentUser) {
-        const { db } = getFirebase();
         if (!db) {
             toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถเชื่อมต่อฐานข้อมูลได้", variant: "destructive"});
             setIsCalculatingBmi(false);
@@ -458,7 +445,6 @@ export default function FSFAPage() {
   
     try {
       if (currentUser) {
-        const { db } = getFirebase();
         if (!db) throw new Error("Firebase not initialized");
   
         const today = new Date();
@@ -532,11 +518,6 @@ export default function FSFAPage() {
 
   const handleLogin = async (event: React.FormEvent) => {
     event.preventDefault();
-    const { auth } = getFirebase();
-    if (!auth) {
-        toast({ title: "ข้อผิดพลาดในการตรวจสอบสิทธิ์", variant: "destructive" });
-        return;
-    }
     setIsAuthOpLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
@@ -556,11 +537,6 @@ export default function FSFAPage() {
 
   const handleRegister = async (event: React.FormEvent) => {
     event.preventDefault();
-    const { auth } = getFirebase();
-    if (!auth) {
-        toast({ title: "ข้อผิดพลาดในการตรวจสอบสิทธิ์", variant: "destructive" });
-        return;
-    }
     setIsAuthOpLoading(true);
 
     if (password !== confirmPassword) {
