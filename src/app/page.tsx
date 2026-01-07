@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -452,19 +453,22 @@ export default function FSFAPage() {
   
         const today = new Date();
         const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
+        const logQuery = query(logsCollectionRef, where('date', '>=', Timestamp.fromDate(startOfDay)));
         
-        const logQuery = query(collection(db, 'users', currentUser.uid, 'dailyLogs'), where('date', '>=', Timestamp.fromDate(startOfDay)));
+        // Use getDocs to check for existing log once, avoiding listeners during write
         const logSnapshot = await getDocs(logQuery);
         
         if (logSnapshot.empty) {
-          const newLogRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
+          // If no log for today, create a new one
           const newLogData: DailyLog = {
             date: Timestamp.fromDate(startOfDay),
             consumedCalories: newMeal.calories,
             meals: [newMeal],
           };
-          addDocumentNonBlocking(newLogRef, newLogData);
+          addDocumentNonBlocking(logsCollectionRef, newLogData);
         } else {
+          // If a log exists, update it
           const logDocRef = logSnapshot.docs[0].ref;
           const currentLogData = logSnapshot.docs[0].data() as DailyLog;
           const updatedMeals = [...currentLogData.meals, newMeal];
@@ -478,6 +482,7 @@ export default function FSFAPage() {
         toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
   
       } else {
+        // Handle anonymous user logging
         const updatedLog: DailyLog = {
             date: dailyLog?.date || Timestamp.now(),
             consumedCalories: (dailyLog?.consumedCalories || 0) + newMeal.calories,
