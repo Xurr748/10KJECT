@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation'; 
@@ -17,7 +17,7 @@ import {
 } from '@/ai/flows/post-scan-chat';
 import { getFirebase, serverTimestamp as getFirestoreServerTimestamp } from '@/lib/firebase'; 
 import { onAuthStateChanged, signOut, type User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'; 
-import { doc, setDoc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch } from 'firebase/firestore';
 
 
 // ShadCN UI Components
@@ -151,130 +151,13 @@ export default function FSFAPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isAuthOpLoading, setIsAuthOpLoading] = useState(false);
 
-
-  // --- AUTH & DATA LOADING ---
-  useEffect(() => {
-    const { auth } = getFirebase();
-    if (!auth) {
-        setIsAuthLoading(false);
-        return;
-    };
-
-    let unsubscribeLog: (() => void) | undefined;
-
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
-      if (unsubscribeLog) {
-        unsubscribeLog(); // Unsubscribe from previous user's log listener
-        unsubscribeLog = undefined;
-      }
-      
-      setCurrentUser(user);
-      setIsAuthLoading(false);
-
-      if (user) {
-        // --- USER IS LOGGED IN ---
-        console.log("[Auth] User logged in:", user.uid);
-        localStorage.removeItem('anonymousUserProfile'); // IMPORTANT: Clean up local data
-        localStorage.removeItem('anonymousDailyLog');
-        
-        const { db } = getFirebase();
-        if (!db) return;
-
-        // 1. Load User Profile
-        const userDocRef = doc(db, 'users', user.uid);
-        const docSnap = await getDoc(userDocRef);
-        if (docSnap.exists()) {
-          const profileData = docSnap.data() as UserProfile;
-          setUserProfile(profileData);
-          setHeight(String(profileData.height || ''));
-          setWeight(String(profileData.weight || ''));
-          console.log("[Auth] Fetched existing profile from Firestore.");
-        } else {
-            // If no profile exists, reset the state
-            setUserProfile({});
-            setHeight('');
-            setWeight('');
-        }
-
-        // 2. Setup Daily Log Listener
-        const today = new Date();
-        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-        const logsCollection = collection(db, 'users', user.uid, 'dailyLogs');
-        const q = query(logsCollection, where('date', '>=', Timestamp.fromDate(startOfDay)));
-        
-        unsubscribeLog = onSnapshot(q, (querySnapshot) => {
-            if (!querySnapshot.empty) {
-                const docSnap = querySnapshot.docs[0];
-                const remoteLog = docSnap.data() as DailyLog;
-                console.log("[Log] Fetched existing log from Firestore for today.");
-                setDailyLog(remoteLog);
-                setDailyLogId(docSnap.id);
-            } else {
-               setDailyLog(null);
-               setDailyLogId(null);
-            }
-        }, (error) => {
-          console.error("[Log] Error listening to daily log:", error);
-        });
-
-      } else {
-        // --- USER IS LOGGED OUT / ANONYMOUS ---
-        console.log("[Auth] User is anonymous.");
-        const localProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile')) || {};
-        setUserProfile(localProfile);
-        setHeight(String(localProfile.height || ''));
-        setWeight(String(localProfile.weight || ''));
-        setDailyLog(safeJsonParse(localStorage.getItem('anonymousDailyLog')) || null);
-        setDailyLogId(null);
-      }
-    });
-  
-    // Cleanup function
-    return () => {
-      unsubscribeAuth();
-      if (unsubscribeLog) unsubscribeLog();
-    };
-  }, [toast]);
-
-
-  // --- DATA SAVING ---
-  useEffect(() => {
-    if (isAuthLoading) return; // Don't save anything until auth state is confirmed
-
-    if (currentUser) {
-      // Logged-in user: save to Firestore
-      if (!userProfile || Object.keys(userProfile).length === 0) return;
-      const { db } = getFirebase();
-      if (!db) return;
-
-      const userDocRef = doc(db, 'users', currentUser.uid);
-      setDoc(userDocRef, userProfile, { merge: true }).catch(error => {
-        console.error("[Firestore Save] Error saving user profile:", error);
-        toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อมูลโปรไฟล์ของคุณได้", variant: "destructive"});
-      });
-
-    } else {
-      // Anonymous user: save to LocalStorage
-      if (userProfile && Object.keys(userProfile).length > 0) {
-        localStorage.setItem('anonymousUserProfile', JSON.stringify(userProfile));
-      }
-    }
-  }, [userProfile, currentUser, isAuthLoading, toast]);
-
-  useEffect(() => {
-     if (isAuthLoading) return; // Don't save anything until auth state is confirmed
-    if (currentUser) {
-        // Firestore saving for daily log is handled via setDoc/addDoc in handleLogMeal
-    } else {
-        // Anonymous user: save daily log to LocalStorage
-        if (dailyLog) {
-            localStorage.setItem('anonymousDailyLog', JSON.stringify(dailyLog));
-        } else {
-            localStorage.removeItem('anonymousDailyLog');
-        }
-    }
-  }, [dailyLog, currentUser, isAuthLoading]);
-
+  const resetLocalData = useCallback(() => {
+    setUserProfile({});
+    setHeight('');
+    setWeight('');
+    setDailyLog(null);
+    setDailyLogId(null);
+  }, []);
 
   // --- NON-USER-SPECIFIC LOCALSTORAGE DATA ---
   useEffect(() => {
@@ -287,6 +170,105 @@ export default function FSFAPage() {
     const savedPreviewUrl = localStorage.getItem('previewUrl');
     if (savedPreviewUrl) setPreviewUrl(savedPreviewUrl);
   }, []);
+
+
+  // --- AUTH & DATA MANAGEMENT ---
+  useEffect(() => {
+    const { auth, db } = getFirebase();
+    if (!auth || !db) {
+        setIsAuthLoading(false);
+        return;
+    }
+
+    let unsubscribeLog: (() => void) | undefined;
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      // Cleanup previous listener if it exists
+      if (unsubscribeLog) {
+        unsubscribeLog();
+        unsubscribeLog = undefined;
+      }
+      
+      if (user) {
+        // --- USER IS LOGGED IN ---
+        setCurrentUser(user);
+        
+        // Clear anonymous data from localStorage
+        const localProfileData = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
+        const localLogData = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
+        localStorage.removeItem('anonymousUserProfile');
+        localStorage.removeItem('anonymousDailyLog');
+        
+        const userDocRef = doc(db, 'users', user.uid);
+        const docSnap = await getDoc(userDocRef);
+
+        let profileToSet: UserProfile = {};
+        if (docSnap.exists()) {
+          // User has an existing profile in Firestore
+          profileToSet = docSnap.data() as UserProfile;
+        } else if (localProfileData && Object.keys(localProfileData).length > 0) {
+          // New user has data from anonymous session, migrate it
+          profileToSet = localProfileData;
+          await setDoc(userDocRef, profileToSet, { merge: true });
+          toast({ title: "ข้อมูลถูกย้ายแล้ว", description: "ข้อมูลจากเซสชันที่ไม่ระบุตัวตนของคุณถูกบันทึกไปยังบัญชีใหม่ของคุณแล้ว" });
+        }
+        
+        setUserProfile(profileToSet);
+        setHeight(String(profileToSet.height || ''));
+        setWeight(String(profileToSet.weight || ''));
+
+        // Setup daily log listener for today
+        const today = new Date();
+        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const logsCollection = collection(db, 'users', user.uid, 'dailyLogs');
+        const q = query(logsCollection, where('date', '>=', Timestamp.fromDate(startOfDay)));
+        
+        unsubscribeLog = onSnapshot(q, (querySnapshot) => {
+            if (!querySnapshot.empty) {
+                const docSnap = querySnapshot.docs[0];
+                setDailyLog(docSnap.data() as DailyLog);
+                setDailyLogId(docSnap.id);
+            } else {
+               setDailyLog(null);
+               setDailyLogId(null);
+            }
+        }, (error) => {
+          console.error("[Log] Error listening to daily log:", error);
+          toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดบันทึกแคลอรี่ได้", variant: "destructive" });
+        });
+
+      } else {
+        // --- USER IS LOGGED OUT / ANONYMOUS ---
+        setCurrentUser(null);
+        resetLocalData();
+        const localProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile')) || {};
+        setUserProfile(localProfile);
+        setHeight(String(localProfile.height || ''));
+        setWeight(String(localProfile.weight || ''));
+        setDailyLog(safeJsonParse(localStorage.getItem('anonymousDailyLog')) || null);
+      }
+      setIsAuthLoading(false);
+    });
+  
+    return () => {
+      unsubscribeAuth();
+      if (unsubscribeLog) unsubscribeLog();
+    };
+  }, [resetLocalData, toast]);
+
+
+  // --- DATA SAVING (Anonymous User) ---
+  useEffect(() => {
+    if (!currentUser && !isAuthLoading) {
+      if (userProfile && Object.keys(userProfile).length > 0) {
+          localStorage.setItem('anonymousUserProfile', JSON.stringify(userProfile));
+      }
+      if (dailyLog) {
+          localStorage.setItem('anonymousDailyLog', JSON.stringify(dailyLog));
+      }
+    }
+  }, [userProfile, dailyLog, currentUser, isAuthLoading]);
+
 
   useEffect(() => {
     if (imageAnalysisResult) localStorage.setItem('imageAnalysisResult', JSON.stringify(imageAnalysisResult));
@@ -377,7 +359,7 @@ export default function FSFAPage() {
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'วิเคราะห์รูปภาพไม่สำเร็จ โปรดลองอีกครั้ง';
         setImageError(errorMessage);
-        setImageAnalysisResult(null); 
+setImageAnalysisResult(null); 
         toast({
           title: "เกิดข้อผิดพลาดในการวิเคราะห์",
           description: errorMessage,
@@ -390,7 +372,7 @@ export default function FSFAPage() {
     reader.onerror = () => {
       setImageError('ไม่สามารถอ่านไฟล์รูปภาพที่เลือก');
       setIsLoadingImageAnalysis(false);
-      setImageAnalysisResult(null); 
+setImageAnalysisResult(null); 
       toast({ title: "ข้อผิดพลาดในการอ่านไฟล์", variant: "destructive" });
     };
   };
@@ -443,18 +425,27 @@ export default function FSFAPage() {
             dailyCalorieGoal: roundedCalorieGoal,
         };
         
-        // This will trigger the useEffect for saving data.
+        if (currentUser) {
+            const { db } = getFirebase();
+            if (!db) throw new Error("Firebase DB not available");
+            const userDocRef = doc(db, 'users', currentUser.uid);
+            await setDoc(userDocRef, newProfile, { merge: true });
+            console.log("[Firestore Save] User profile updated successfully.");
+        }
+
+        // Update local state AFTER successful save or for anonymous users
         setUserProfile(newProfile); 
 
         toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
         
     } catch (error) {
-        console.error("Error during BMI calculation:", error);
-        toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถคำนวณ BMI ได้", variant: "destructive"});
+        console.error("[Calculate BMI] Error:", error);
+        toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถคำนวณและบันทึก BMI ได้", variant: "destructive"});
     } finally {
         setIsCalculatingBmi(false);
     }
   };
+
 
   const handleLogMeal = async () => {
     if (isLoggingMeal || !imageAnalysisResult || !imageAnalysisResult.nutritionalInformation) return;
@@ -477,47 +468,41 @@ export default function FSFAPage() {
         let currentLog = dailyLog;
         let currentLogId = dailyLogId;
 
-        // If no log exists for today, create one
-        if (!currentLog) {
+        if (!currentLogId) {
             const today = new Date();
             const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-            const newLogData = {
+            const newLogData: Omit<DailyLog, 'meals'> & { meals: Meal[] } = {
                 date: Timestamp.fromDate(startOfDay),
-                consumedCalories: 0,
-                meals: [],
+                consumedCalories: newMeal.calories,
+                meals: [newMeal],
             };
             const logRef = await addDoc(collection(db, 'users', currentUser.uid, 'dailyLogs'), newLogData);
-            currentLog = newLogData;
-            currentLogId = logRef.id;
-            setDailyLogId(currentLogId); // Update state
-        }
-        
-        // Add the new meal to the log
-        const updatedMeals = [...(currentLog?.meals || []), newMeal];
-        const updatedCalories = (currentLog?.consumedCalories || 0) + newMeal.calories;
+            setDailyLogId(logRef.id);
+            setDailyLog(newLogData);
+        } else {
+           const updatedMeals = [...(currentLog?.meals || []), newMeal];
+           const updatedCalories = (currentLog?.consumedCalories || 0) + newMeal.calories;
 
-        const updatedLog = {
-          ...currentLog,
-          consumedCalories: updatedCalories,
-          meals: updatedMeals,
-        };
+           const updatedLog: DailyLog = {
+             ...(currentLog as DailyLog),
+             consumedCalories: updatedCalories,
+             meals: updatedMeals,
+           };
         
-        if (currentLogId) {
-          const logDocRef = doc(db, 'users', currentUser.uid, 'dailyLogs', currentLogId);
-          await setDoc(logDocRef, updatedLog, { merge: true });
+           const logDocRef = doc(db, 'users', currentUser.uid, 'dailyLogs', currentLogId);
+           await setDoc(logDocRef, updatedLog, { merge: true });
+           setDailyLog(updatedLog);
         }
-        
-        setDailyLog(updatedLog); // Update local state to reflect change immediately
         toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
 
       } else {
         // Anonymous user
-        const updatedLog = {
+        const updatedLog: DailyLog = {
             date: dailyLog?.date || Timestamp.now(),
             consumedCalories: (dailyLog?.consumedCalories || 0) + newMeal.calories,
             meals: [...(dailyLog?.meals || []), newMeal],
         };
-        setDailyLog(updatedLog); // This will trigger the useEffect to save to localStorage
+        setDailyLog(updatedLog);
         toast({ title: "บันทึกมื้ออาหารสำเร็จ" });
       }
     } catch (error) {
@@ -635,7 +620,9 @@ export default function FSFAPage() {
                   {currentUser ? "บัญชีของฉัน" : "เข้าสู่ระบบ"}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {currentUser ? (
+                {isAuthLoading ? (
+                  <DropdownMenuItem disabled><Loader2 className="animate-spin mr-2"/>กำลังโหลด...</DropdownMenuItem>
+                ) : currentUser ? (
                   <>
                     <DropdownMenuItem disabled>
                       <span className="truncate">{currentUser.email}</span>
