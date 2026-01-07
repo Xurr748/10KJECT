@@ -61,7 +61,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 
 // Lucide Icons
-import { UploadCloud, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, MessageSquareWarning, Send, MessageCircle, ScanLine, Flame, Calculator, PlusCircle, BookCheck } from 'lucide-react';
+import { UploadCloud, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, MessageSquareWarning, Send, MessageCircle, ScanLine, Flame, Calculator, PlusCircle, BookCheck, Clock } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 const GENERIC_SAFETY_UNAVAILABLE = "ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้";
@@ -146,6 +146,8 @@ export default function FSFAPage() {
   const [dailyLogId, setDailyLogId] = useState<string | null>(null);
   const [isLoggingMeal, setIsLoggingMeal] = useState(false);
 
+  const [countdown, setCountdown] = useState<string>('');
+
   const isFoodIdentified = imageAnalysisResult && imageAnalysisResult.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
 
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
@@ -183,6 +185,27 @@ export default function FSFAPage() {
     if (savedPreviewUrl) setPreviewUrl(savedPreviewUrl);
   }, []);
 
+  // Countdown Timer Effect
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = new Date();
+      
+      // Target time is 7:00 AM in Thailand (UTC+7), which is 00:00 UTC.
+      const nextReset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      nextReset.setUTCDate(nextReset.getUTCDate() + 1); // Set to midnight UTC of the next day
+
+      const diff = nextReset.getTime() - now.getTime();
+
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      setCountdown(`${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
 
   // --- AUTH & DATA MANAGEMENT ---
   useEffect(() => {
@@ -190,7 +213,7 @@ export default function FSFAPage() {
         return;
     }
 
-    // Helper to get the start of the current day in UTC
+    // Helper to get the start of the current day in UTC (which corresponds to 7:00 AM Thailand time)
     const getStartOfUTCDay = () => {
         const now = new Date();
         return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
@@ -961,6 +984,16 @@ export default function FSFAPage() {
                           )}
                         </Card>
                       </div>
+
+                      {countdown && (
+                        <div className="mt-4 text-center border-t pt-4">
+                          <p className="text-sm text-muted-foreground flex items-center justify-center">
+                            <Clock className="mr-2 h-4 w-4" />
+                            รีเซ็ตข้อมูลในอีก: <span className="font-semibold ml-1">{countdown}</span>
+                          </p>
+                        </div>
+                      )}
+                      
                       {!currentUser && (
                         <div className="mt-4 text-center border-t pt-4">
                             <p className="text-sm text-muted-foreground mb-3">เข้าสู่ระบบเพื่อบันทึกข้อมูลอย่างถาวร</p>
