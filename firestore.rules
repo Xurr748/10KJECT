@@ -1,0 +1,20 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Allow logged-in users to read, write, and update their own user profile document.
+    // The document ID must match the user's UID.
+    // No one can read or write to other users' documents.
+    match /users/{userId} {
+      allow read, update, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Allow logged-in users to manage their own daily logs.
+    // They can create, read, update, and delete logs associated with their user ID.
+    match /users/{userId}/dailyLogs/{logId} {
+      allow read, list, create, update, delete: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
