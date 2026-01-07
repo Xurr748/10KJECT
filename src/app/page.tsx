@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -18,6 +19,12 @@ import {
 import { useAuth, useFirestore, useUser } from '@/firebase'; 
 import { onAuthStateChanged, signOut, type User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'; 
 import { doc, setDoc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, updateDoc } from 'firebase/firestore';
+import {
+  setDocumentNonBlocking,
+  addDocumentNonBlocking,
+  updateDocumentNonBlocking,
+  deleteDocumentNonBlocking,
+} from '@/firebase/non-blocking-updates';
 
 
 // ShadCN UI Components
@@ -182,8 +189,6 @@ export default function FSFAPage() {
 
     const handleUserLoggedIn = async (user: User) => {
         const localProfileData = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
-        localStorage.removeItem('anonymousUserProfile');
-        localStorage.removeItem('anonymousDailyLog');
         
         const userDocRef = doc(db, 'users', user.uid);
         const docSnap = await getDoc(userDocRef);
@@ -193,8 +198,15 @@ export default function FSFAPage() {
             profileToSet = docSnap.data() as UserProfile;
         } else if (localProfileData && Object.keys(localProfileData).length > 0) {
             profileToSet = localProfileData;
-            await setDoc(userDocRef, profileToSet, { merge: true });
+            
+            // Use non-blocking write
+            setDocumentNonBlocking(userDocRef, profileToSet, { merge: true });
+            
             toast({ title: "ข้อมูลถูกย้ายแล้ว", description: "ข้อมูลจากเซสชันที่ไม่ระบุตัวตนของคุณถูกบันทึกไปยังบัญชีใหม่ของคุณแล้ว" });
+
+            // Clear local data after migration
+            localStorage.removeItem('anonymousUserProfile');
+            localStorage.removeItem('anonymousDailyLog');
         }
         
         setUserProfile(profileToSet);
@@ -382,7 +394,7 @@ export default function FSFAPage() {
     }
   };
 
-  const handleCalculateBmi = async () => {
+  const handleCalculateBmi = () => {
     const h = parseFloat(height);
     const w = parseFloat(weight);
 
@@ -404,23 +416,13 @@ export default function FSFAPage() {
         dailyCalorieGoal: roundedCalorieGoal,
     };
     
-    if (currentUser) {
-        if (!db) {
-            toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถเชื่อมต่อฐานข้อมูลได้", variant: "destructive"});
-            setIsCalculatingBmi(false);
-            return;
-        }
-        try {
-            const userDocRef = doc(db, 'users', currentUser.uid);
-            await setDoc(userDocRef, newProfile, { merge: true });
-            setUserProfile(newProfile); 
-            toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
-        } catch (error) {
-            console.error("[Firestore Save] Error:", error);
-            toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อมูล BMI ไปยังบัญชีของคุณได้", variant: "destructive"});
-        } finally {
-            setIsCalculatingBmi(false);
-        }
+    if (currentUser && db) {
+        const userDocRef = doc(db, 'users', currentUser.uid);
+        // Use non-blocking write for better UI responsiveness and error handling
+        setDocumentNonBlocking(userDocRef, newProfile, { merge: true });
+        setUserProfile(newProfile); // Optimistic UI update
+        toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
+        setIsCalculatingBmi(false);
     } else {
         setUserProfile(newProfile);
         localStorage.setItem('anonymousUserProfile', JSON.stringify(newProfile));
@@ -453,29 +455,27 @@ export default function FSFAPage() {
         const logQuery = query(collection(db, 'users', currentUser.uid, 'dailyLogs'), where('date', '>=', Timestamp.fromDate(startOfDay)));
         const logSnapshot = await getDocs(logQuery);
         
-        const batch = writeBatch(db);
-  
         if (logSnapshot.empty) {
-          // No log for today, create a new one
-          const newLogRef = doc(collection(db, 'users', currentUser.uid, 'dailyLogs'));
+          // No log for today, create a new one using non-blocking add
+          const newLogRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
           const newLogData: DailyLog = {
             date: Timestamp.fromDate(startOfDay),
             consumedCalories: newMeal.calories,
             meals: [newMeal],
           };
-          batch.set(newLogRef, newLogData);
+          addDocumentNonBlocking(newLogRef, newLogData);
         } else {
-          // Log for today exists, update it
+          // Log for today exists, update it using non-blocking update
           const logDocRef = logSnapshot.docs[0].ref;
           const currentLogData = logSnapshot.docs[0].data() as DailyLog;
           const updatedMeals = [...currentLogData.meals, newMeal];
           const updatedCalories = currentLogData.consumedCalories + newMeal.calories;
-          batch.update(logDocRef, {
+          
+          updateDocumentNonBlocking(logDocRef, {
             meals: updatedMeals,
             consumedCalories: updatedCalories
           });
         }
-        await batch.commit();
         toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
   
       } else {
@@ -956,3 +956,6 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+
+    
