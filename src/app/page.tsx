@@ -87,13 +87,14 @@ interface DailyLog {
   }[];
 }
 
-const safeJsonParse = (item: string | null) => {
+const safeJsonParse = (item: string | null): any => {
   if (!item) return null;
   try {
+    // This reviver function is crucial for converting stored ISO date strings back to Date objects,
+    // and then to Firestore Timestamps where needed.
     return JSON.parse(item, (key, value) => {
-      // Re-hydrate Timestamps
-      if (typeof value === 'object' && value !== null && value.seconds && value.nanoseconds) {
-          return new Timestamp(value.seconds, value.nanoseconds);
+      if (typeof value === 'object' && value !== null && value.seconds && typeof value.nanoseconds !== 'undefined') {
+        return new Timestamp(value.seconds, value.nanoseconds);
       }
       return value;
     });
@@ -143,7 +144,7 @@ export default function FSFAPage() {
 
   // --- DATA PERSISTENCE ---
 
-  // 1. Save data to localStorage whenever it changes
+  // 1. Save all non-user-specific data to localStorage whenever it changes
   useEffect(() => {
     if (imageAnalysisResult) localStorage.setItem('imageAnalysisResult', JSON.stringify(imageAnalysisResult));
   }, [imageAnalysisResult]);
@@ -156,10 +157,10 @@ export default function FSFAPage() {
     if (previewUrl) localStorage.setItem('previewUrl', previewUrl);
   }, [previewUrl]);
 
-  // This is the crucial effect that was missing/incorrect.
-  // It ensures the latest anonymous profile is always saved.
+  // 2. Save user-specific anonymous data to localStorage
+  // This is the crucial effect for anonymous users.
   useEffect(() => {
-    // Only save profile and log to localStorage if user is NOT logged in
+    // Only save profile and log to localStorage if user is NOT logged in.
     if (!currentUser) {
       if (Object.keys(userProfile).length > 0) {
         localStorage.setItem('anonymousUserProfile', JSON.stringify(userProfile));
@@ -170,9 +171,9 @@ export default function FSFAPage() {
     }
   }, [userProfile, dailyLog, currentUser]);
 
-
-  // 2. Load data on initial render (for non-user-specific data)
+  // 3. Load all data on initial render & handle Auth changes
   useEffect(() => {
+    // Non-user-specific data loaded once.
     const savedAnalysisResult = safeJsonParse(localStorage.getItem('imageAnalysisResult'));
     if (savedAnalysisResult) setImageAnalysisResult(savedAnalysisResult);
     
@@ -181,23 +182,11 @@ export default function FSFAPage() {
 
     const savedPreviewUrl = localStorage.getItem('previewUrl');
     if (savedPreviewUrl) setPreviewUrl(savedPreviewUrl);
-  }, []); // Empty dependency array ensures this runs only once on mount
-
-  
-  // 3. Set up Firebase listener and manage user-specific data loading
-  useEffect(() => {
+    
+    // User-specific data managed by auth state.
     const { auth } = getFirebase();
     if (!auth) {
-      console.error("[Auth] Firebase Auth is not available. Loading anonymous data as fallback.");
-      // If Firebase isn't ready, load anonymous data as a fallback
-      const savedProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
-      if (savedProfile) {
-          setUserProfile(savedProfile);
-          if (savedProfile.height) setHeight(String(savedProfile.height));
-          if (savedProfile.weight) setWeight(String(savedProfile.weight));
-      }
-      const savedLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
-      if (savedLog) setDailyLog(savedLog);
+      console.error("[Auth] Firebase Auth is not available. Check config.");
       return;
     }
     
@@ -205,10 +194,7 @@ export default function FSFAPage() {
 
     const fetchUserProfile = async (user: User) => {
       const { db } = getFirebase();
-      if (!db) {
-        console.error("[Profile Fetch] Firestore is not available.");
-        return
-      };
+      if (!db) return;
       const userDocRef = doc(db, 'users', user.uid);
       try {
         const docSnap = await getDoc(userDocRef);
@@ -218,60 +204,67 @@ export default function FSFAPage() {
           if (profileData.height) setHeight(String(profileData.height));
           if (profileData.weight) setWeight(String(profileData.weight));
         } else {
-          // Sync local anonymous data to firestore on first login
-          const anonymousProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
-          if (anonymousProfile && (anonymousProfile.bmi || anonymousProfile.height)) {
+          // New user, check for anonymous data to migrate
+           const anonymousProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
+           if (anonymousProfile) {
               await setDoc(userDocRef, anonymousProfile, { merge: true });
               setUserProfile(anonymousProfile);
-          }
+              if (anonymousProfile.height) setHeight(String(anonymousProfile.height));
+              if (anonymousProfile.weight) setWeight(String(anonymousProfile.weight));
+           }
         }
       } catch (error) {
         console.error("[Profile Fetch] Error fetching user profile:", error);
       }
     };
     
-    const fetchDailyLog = async (user: User) => {
+    const setupLogListener = async (user: User) => {
       const { db } = getFirebase();
-      if (!db) {
-        console.error("[Log Fetch] Firestore is not available.");
-        return;
-      }
+      if (!db) return;
+      
       const today = new Date();
       const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const logsCollection = collection(db, 'users', user.uid, 'dailyLogs');
       const q = query(logsCollection, where('date', '>=', Timestamp.fromDate(startOfDay)));
 
-      return onSnapshot(q, (querySnapshot) => {
-          let localLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
+      return onSnapshot(q, async (querySnapshot) => {
+          const localLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
+          
           if (!querySnapshot.empty) {
               const docSnap = querySnapshot.docs[0];
-              let remoteLog = docSnap.data() as DailyLog;
+              const remoteLog = docSnap.data() as DailyLog;
               setDailyLogId(docSnap.id);
 
               if (localLog && localLog.meals.length > 0) {
+                  // Merge local anonymous log with remote log
                   const mergedMeals = [...remoteLog.meals];
                   const remoteMealTimestamps = new Set(remoteLog.meals.map(m => m.timestamp.seconds));
                   localLog.meals.forEach((localMeal: any) => {
-                      if (!remoteMealTimestamps.has(localMeal.timestamp.seconds)) mergedMeals.push(localMeal);
+                      if (!remoteMealTimestamps.has(localMeal.timestamp.seconds)) {
+                          mergedMeals.push(localMeal);
+                      }
                   });
                   mergedMeals.sort((a, b) => a.timestamp.seconds - b.timestamp.seconds);
-                  const mergedLog = { ...remoteLog, meals: mergedMeals, consumedCalories: mergedMeals.reduce((sum, meal) => sum + meal.calories, 0) };
+                  const consumedCalories = mergedMeals.reduce((sum, meal) => sum + meal.calories, 0);
+                  const mergedLog = { ...remoteLog, meals: mergedMeals, consumedCalories };
+
                   setDailyLog(mergedLog);
-                  setDoc(doc(logsCollection, docSnap.id), mergedLog);
+                  await setDoc(doc(logsCollection, docSnap.id), mergedLog, { merge: true });
                   localStorage.removeItem('anonymousDailyLog');
               } else {
                   setDailyLog(remoteLog);
               }
           } else {
+              // No remote log for today exists
               if (localLog && localLog.meals.length > 0) {
+                  // Migrate local anonymous log to Firestore
                   const newLogData = { ...localLog, date: Timestamp.fromDate(startOfDay) };
-                  addDoc(logsCollection, newLogData).then(docRef => {
-                      setDailyLogId(docRef.id);
-                      setDailyLog(newLogData);
-                      localStorage.removeItem('anonymousDailyLog');
-                  });
+                  const docRef = await addDoc(logsCollection, newLogData);
+                  setDailyLogId(docRef.id);
+                  setDailyLog(newLogData);
+                  localStorage.removeItem('anonymousDailyLog');
               } else {
-                 setDailyLog(null);
+                 setDailyLog(null); // No log anywhere
               }
           }
       }, (error) => {
@@ -281,25 +274,31 @@ export default function FSFAPage() {
 
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
+      if (unsubscribeLog) unsubscribeLog(); // Clean up previous listener
+
       if (user) {
-        // User is logged in: fetch from Firestore
+        // --- User is LOGGED IN ---
         fetchUserProfile(user);
-        fetchDailyLog(user).then(unsub => { unsubscribeLog = unsub; });
+        setupLogListener(user).then(unsub => { unsubscribeLog = unsub; });
       } else {
-        // User is logged out: load from localStorage
+        // --- User is LOGGED OUT or ANONYMOUS ---
+        // Reset user-specific IDs
         setDailyLogId(null); 
+        
+        // Load data from localStorage
         const savedProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
         if (savedProfile) {
             setUserProfile(savedProfile);
             if (savedProfile.height) setHeight(String(savedProfile.height));
             if (savedProfile.weight) setWeight(String(savedProfile.weight));
         } else {
-            setUserProfile({}); setHeight(''); setWeight('');
+            setUserProfile({}); 
+            setHeight(''); 
+            setWeight('');
         }
+
         const savedLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
         setDailyLog(savedLog);
-        
-        if (unsubscribeLog) unsubscribeLog();
       }
     });
   
@@ -307,7 +306,7 @@ export default function FSFAPage() {
       unsubscribeAuth();
       if (unsubscribeLog) unsubscribeLog();
     };
-  }, []); // Main listener setup runs once
+  }, []); // Main listener setup runs only once
 
 
   useEffect(() => {
@@ -333,7 +332,7 @@ export default function FSFAPage() {
         title: "ออกจากระบบสำเร็จ",
         description: "ข้อมูลของคุณสำหรับเซสชันนี้จะยังคงอยู่",
       });
-      // State will be reset by onAuthStateChanged listener
+      // The onAuthStateChanged listener will handle resetting the state
     } catch (error: unknown) {
       console.error("Logout error:", error);
       toast({
@@ -478,14 +477,16 @@ export default function FSFAPage() {
       dailyCalorieGoal: roundedCalorieGoal,
     };
     
+    // This will trigger the useEffect that saves to localStorage for anonymous users
     setUserProfile(newProfile);
 
     toast({ title: "คำนวณ BMI สำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
     
+    // If user is logged in, also save to Firestore.
     const { auth, db } = getFirebase();
-    if (auth?.currentUser && db) {
+    if (currentUser && db) {
       try {
-        const userDocRef = doc(db, 'users', auth.currentUser.uid);
+        const userDocRef = doc(db, 'users', currentUser.uid);
         await setDoc(userDocRef, newProfile, { merge: true });
         toast({ title: "บันทึกข้อมูลสำเร็จ", description: `ข้อมูลโปรไฟล์ของคุณถูกบันทึกในบัญชีเรียบร้อยแล้ว` });
       } catch (error) {
@@ -493,8 +494,7 @@ export default function FSFAPage() {
         toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อมูลโปรไฟล์ลงฐานข้อมูลได้", variant: "destructive"});
       }
     }
-    // No need for an else block to save to localStorage here, 
-    // the dedicated useEffect for [userProfile, currentUser] will handle it.
+    
     setIsCalculatingBmi(false);
   };
 
@@ -502,22 +502,38 @@ export default function FSFAPage() {
     setIsLoggingMeal(true);
     
     const currentLog = dailyLog || {
-        date: Timestamp.fromDate(new Date(new Date().setHours(0, 0, 0, 0))),
+        date: Timestamp.now(), // Will be overwritten if not logged in
         consumedCalories: 0,
         meals: [],
     };
-
+    
     const newMeal = {
         name: mealName,
         calories: mealCalories,
         timestamp: Timestamp.now(),
     };
 
-    const updatedLog: DailyLog = {
-        ...currentLog,
-        consumedCalories: currentLog.consumedCalories + mealCalories,
-        meals: [...currentLog.meals, newMeal],
-    };
+    let updatedLog: DailyLog;
+
+    // Handle date object for anonymous vs logged-in users
+    if (currentUser) {
+        updatedLog = {
+            ...currentLog,
+            date: currentLog.date || Timestamp.fromDate(new Date(new Date().setHours(0, 0, 0, 0))), // Ensure date exists for FS
+            consumedCalories: currentLog.consumedCalories + mealCalories,
+            meals: [...currentLog.meals, newMeal],
+        };
+    } else {
+        // For anonymous user, ensure date is serializable for localStorage.
+        // We convert Timestamps to a structure that JSON.stringify can handle.
+         const serializableLog = currentLog ? JSON.parse(JSON.stringify(currentLog)) : { consumedCalories: 0, meals: [] };
+         updatedLog = {
+             ...serializableLog,
+             consumedCalories: serializableLog.consumedCalories + mealCalories,
+             meals: [...serializableLog.meals, JSON.parse(JSON.stringify(newMeal))],
+         } as DailyLog; // We cast here, knowing date will be missing but that's ok for anon
+    }
+
 
     setDailyLog(updatedLog);
 
@@ -531,22 +547,22 @@ export default function FSFAPage() {
         });
     }
     
-    const { auth, db } = getFirebase();
-    if (auth?.currentUser && db) {
+    const { db } = getFirebase();
+    if (currentUser && db) {
         try {
-            const userLogsCollection = collection(db, 'users', auth.currentUser.uid, 'dailyLogs');
-            let docRef;
-
+            const userLogsCollection = collection(db, 'users', currentUser.uid, 'dailyLogs');
+            
             if (dailyLogId) {
-                docRef = doc(userLogsCollection, dailyLogId);
+                // Update existing log document for today
+                const docRef = doc(userLogsCollection, dailyLogId);
                 await setDoc(docRef, updatedLog, { merge: true });
             } else {
+                // Create a new log document for today
                 const newLogData = { ...updatedLog, date: Timestamp.fromDate(new Date(new Date().setHours(0, 0, 0, 0))) };
                 const newDocRef = await addDoc(userLogsCollection, newLogData);
                 setDailyLogId(newDocRef.id);
             }
             console.log('[Log Meal] Meal logged to Firestore.');
-
         } catch (error) {
             console.error("[Log Meal] Error logging meal to Firestore:", error);
             toast({ title: "เกิดข้อผิดพลาดในการบันทึกข้อมูล", description: "ไม่สามารถบันทึกมื้ออาหารลงฐานข้อมูลได้", variant: "destructive" });
@@ -590,11 +606,7 @@ export default function FSFAPage() {
         description: "ยินดีต้อนรับกลับ!",
       });
       setAuthDialogOpen(false); // Close dialog on success
-      localStorage.removeItem('anonymousUserProfile');
-      localStorage.removeItem('anonymousDailyLog');
-      localStorage.removeItem('previewUrl');
-      localStorage.removeItem('imageAnalysisResult');
-      localStorage.removeItem('chatMessages');
+      // The onAuthStateChanged listener will handle migrating data
     } catch (error: any) {
       console.error('Login error:', error);
       let errorMessage = "เกิดข้อผิดพลาดในการเข้าสู่ระบบ";
@@ -615,8 +627,8 @@ export default function FSFAPage() {
 
   const handleRegister = async (event: React.FormEvent) => {
     event.preventDefault();
-    const { auth, db } = getFirebase();
-    if (!auth || !db) {
+    const { auth } = getFirebase();
+    if (!auth) {
         toast({ title: "ข้อผิดพลาดในการตรวจสอบสิทธิ์", description: "บริการ Firebase ไม่พร้อมใช้งาน", variant: "destructive" });
         return;
     }
@@ -643,31 +655,13 @@ export default function FSFAPage() {
     }
 
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      // After creating user, sync local data to firestore
-      const anonymousProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
-      if (anonymousProfile) {
-        await setDoc(doc(db, 'users', user.uid), anonymousProfile, { merge: true });
-      }
-       const anonymousDailyLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
-       if (anonymousDailyLog) {
-         const logsCollection = collection(db, 'users', user.uid, 'dailyLogs');
-         const today = new Date();
-         const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-         const newLogData = { ...anonymousDailyLog, date: Timestamp.fromDate(startOfDay) };
-         await addDoc(logsCollection, newLogData);
-       }
-
-
+      await createUserWithEmailAndPassword(auth, email, password);
+      // The onAuthStateChanged listener will handle data migration
       toast({
         title: "ลงทะเบียนสำเร็จ",
         description: "บัญชีของคุณถูกสร้างเรียบร้อยแล้ว",
       });
       setAuthDialogOpen(false); // Close dialog on success
-      localStorage.removeItem('anonymousUserProfile');
-      localStorage.removeItem('anonymousDailyLog');
     } catch (error: any) {
       console.error('Registration error:', error);
       let errorMessage = "เกิดข้อผิดพลาดในการลงทะเบียน";
@@ -1073,5 +1067,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-
-    
