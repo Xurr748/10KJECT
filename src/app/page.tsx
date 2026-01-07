@@ -204,9 +204,8 @@ export default function FSFAPage() {
     }
   }, [dailyLog, currentUser]);
 
-  // NEW: useEffect to save userProfile to Firestore for logged-in users
+  // NEW: useEffect to save userProfile to Firestore for logged-in users with debounce
   useEffect(() => {
-    // Debounce to prevent rapid writes
     if (profileSaveTimeout.current) {
         clearTimeout(profileSaveTimeout.current);
     }
@@ -218,7 +217,7 @@ export default function FSFAPage() {
                 console.error("[Profile Save] Firestore DB not available.");
                 return;
             }
-            console.log("[Profile Save] Saving profile to Firestore for user:", currentUser.uid);
+            console.log("[Profile Save] Debounced save for profile to Firestore for user:", currentUser.uid, userProfile);
             const userDocRef = doc(db, 'users', currentUser.uid);
             try {
                 await setDoc(userDocRef, userProfile, { merge: true });
