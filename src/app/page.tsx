@@ -159,8 +159,12 @@ export default function FSFAPage() {
   useEffect(() => {
     // Only save profile and log to localStorage if user is NOT logged in
     if (!currentUser) {
-      localStorage.setItem('anonymousUserProfile', JSON.stringify(userProfile));
-      if(dailyLog) localStorage.setItem('anonymousDailyLog', JSON.stringify(dailyLog));
+      if (Object.keys(userProfile).length > 0) {
+        localStorage.setItem('anonymousUserProfile', JSON.stringify(userProfile));
+      }
+      if(dailyLog) {
+        localStorage.setItem('anonymousDailyLog', JSON.stringify(dailyLog));
+      }
     }
   }, [userProfile, dailyLog, currentUser]);
 
@@ -182,7 +186,7 @@ export default function FSFAPage() {
   useEffect(() => {
     const { auth } = getFirebase();
     if (!auth) {
-      console.error("[Auth] Firebase Auth is not available.");
+      console.error("[Auth] Firebase Auth is not available. Loading anonymous data as fallback.");
       // If Firebase isn't ready, load anonymous data as a fallback
       const savedProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
       if (savedProfile) {
@@ -199,7 +203,10 @@ export default function FSFAPage() {
 
     const fetchUserProfile = async (user: User) => {
       const { db } = getFirebase();
-      if (!db) return;
+      if (!db) {
+        console.error("[Profile Fetch] Firestore is not available.");
+        return
+      };
       const userDocRef = doc(db, 'users', user.uid);
       try {
         const docSnap = await getDoc(userDocRef);
@@ -223,7 +230,10 @@ export default function FSFAPage() {
     
     const fetchDailyLog = async (user: User) => {
       const { db } = getFirebase();
-      if (!db) return;
+      if (!db) {
+        console.error("[Log Fetch] Firestore is not available.");
+        return;
+      }
       const today = new Date();
       const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
       const logsCollection = collection(db, 'users', user.uid, 'dailyLogs');
@@ -480,6 +490,9 @@ export default function FSFAPage() {
         console.error("Error saving profile to Firestore:", error);
         toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อมูลโปรไฟล์ลงฐานข้อมูลได้", variant: "destructive"});
       }
+    } else if (!auth?.currentUser) {
+        // Explicitly save to localStorage if not logged in
+        localStorage.setItem('anonymousUserProfile', JSON.stringify(newProfile));
     }
     setIsCalculatingBmi(false);
   };
@@ -537,6 +550,8 @@ export default function FSFAPage() {
             console.error("[Log Meal] Error logging meal to Firestore:", error);
             toast({ title: "เกิดข้อผิดพลาดในการบันทึกข้อมูล", description: "ไม่สามารถบันทึกมื้ออาหารลงฐานข้อมูลได้", variant: "destructive" });
         }
+    } else if (!auth?.currentUser) {
+        localStorage.setItem('anonymousDailyLog', JSON.stringify(updatedLog));
     }
 
     setIsLoggingMeal(false);
@@ -908,8 +923,7 @@ export default function FSFAPage() {
             <Card className="max-w-xl md:max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
               <CardHeader className="p-4 sm:p-6">
                 <CardTitle className="text-lg sm:text-xl md:text-2xl font-headline text-accent">Momu Ai</CardTitle>
-                <CardDescription className="text-xs sm:text-sm md:text-base font-body">สอบถามเกี่ยวกับอาหารและโภชนาการได้ที่นี้😉</CardDescription>
-              </CardHeader>
+                <CardDescription className="text-xs sm:text-sm md:text-base font-body">สอบถามเกี่ยวกับอาหารและโภชนาการได้ที่นี้😉</CardDescription>              </CardHeader>
               <CardContent className="p-4 sm:p-6 space-y-2 sm:space-y-3 md:space-y-4">
                 <ScrollArea className="h-48 sm:h-60 md:h-72 w-full border rounded-md p-2 sm:p-4 bg-muted/30" viewportRef={chatScrollAreaRef}>
                   {chatMessages.length === 0 && (
