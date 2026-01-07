@@ -15,9 +15,9 @@ import {
   type ChatOutput as AIChatOutput, 
   type ChatMessage
 } from '@/ai/flows/post-scan-chat';
-import { getFirebase, serverTimestamp as getFirestoreServerTimestamp } from '@/lib/firebase'; 
+import { getFirebase } from '@/lib/firebase'; 
 import { onAuthStateChanged, signOut, type User, createUserWithEmailAndPassword, signInWithEmailAndPassword } from 'firebase/auth'; 
-import { doc, setDoc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch } from 'firebase/firestore';
+import { doc, setDoc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, updateDoc } from 'firebase/firestore';
 
 
 // ShadCN UI Components
@@ -193,7 +193,6 @@ export default function FSFAPage() {
         // --- USER IS LOGGED IN ---
         setCurrentUser(user);
         
-        // Clear anonymous data from localStorage
         const localProfileData = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
         localStorage.removeItem('anonymousUserProfile');
         localStorage.removeItem('anonymousDailyLog');
@@ -203,10 +202,8 @@ export default function FSFAPage() {
 
         let profileToSet: UserProfile = {};
         if (docSnap.exists()) {
-          // User has an existing profile in Firestore
           profileToSet = docSnap.data() as UserProfile;
         } else if (localProfileData && Object.keys(localProfileData).length > 0) {
-          // New user has data from anonymous session, migrate it
           profileToSet = localProfileData;
           await setDoc(userDocRef, profileToSet, { merge: true });
           toast({ title: "ข้อมูลถูกย้ายแล้ว", description: "ข้อมูลจากเซสชันที่ไม่ระบุตัวตนของคุณถูกบันทึกไปยังบัญชีใหม่ของคุณแล้ว" });
@@ -304,7 +301,6 @@ export default function FSFAPage() {
         title: "ออกจากระบบสำเร็จ",
         description: "ข้อมูลสำหรับเซสชันที่ไม่ล็อกอินของคุณจะถูกโหลด",
       });
-      // The onAuthStateChanged listener will handle resetting the state
     } catch (error: unknown) {
       console.error("Logout error:", error);
       toast({ title: "เกิดข้อผิดพลาดในการออกจากระบบ", variant: "destructive" });
@@ -358,7 +354,7 @@ export default function FSFAPage() {
       } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : 'วิเคราะห์รูปภาพไม่สำเร็จ โปรดลองอีกครั้ง';
         setImageError(errorMessage);
-setImageAnalysisResult(null); 
+        setImageAnalysisResult(null); 
         toast({
           title: "เกิดข้อผิดพลาดในการวิเคราะห์",
           description: errorMessage,
@@ -371,7 +367,7 @@ setImageAnalysisResult(null);
     reader.onerror = () => {
       setImageError('ไม่สามารถอ่านไฟล์รูปภาพที่เลือก');
       setIsLoadingImageAnalysis(false);
-setImageAnalysisResult(null); 
+      setImageAnalysisResult(null); 
       toast({ title: "ข้อผิดพลาดในการอ่านไฟล์", variant: "destructive" });
     };
   };
@@ -433,7 +429,6 @@ setImageAnalysisResult(null);
         try {
             const userDocRef = doc(db, 'users', currentUser.uid);
             await setDoc(userDocRef, newProfile, { merge: true });
-            // Update state only after successful save
             setUserProfile(newProfile); 
             toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
         } catch (error) {
@@ -443,7 +438,6 @@ setImageAnalysisResult(null);
             setIsCalculatingBmi(false);
         }
     } else {
-        // Anonymous user, just update state and save to localStorage
         setUserProfile(newProfile);
         localStorage.setItem('anonymousUserProfile', JSON.stringify(newProfile));
         setIsCalculatingBmi(false);
@@ -455,47 +449,52 @@ setImageAnalysisResult(null);
   const handleLogMeal = async () => {
     if (isLoggingMeal || !imageAnalysisResult || !imageAnalysisResult.nutritionalInformation) return;
     setIsLoggingMeal(true);
-
+  
     const mealName = imageAnalysisResult.foodItem;
     const mealCalories = imageAnalysisResult.nutritionalInformation.estimatedCalories;
-
+  
     const newMeal: Meal = {
-        name: mealName,
-        calories: mealCalories,
-        timestamp: Timestamp.now(),
+      name: mealName,
+      calories: mealCalories,
+      timestamp: Timestamp.now(),
     };
-
+  
     try {
       if (currentUser) {
         const { db } = getFirebase();
         if (!db) throw new Error("Firebase not initialized");
-
+  
         const today = new Date();
         const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        
         const logQuery = query(collection(db, 'users', currentUser.uid, 'dailyLogs'), where('date', '>=', Timestamp.fromDate(startOfDay)));
         const logSnapshot = await getDocs(logQuery);
-
+        
+        const batch = writeBatch(db);
+  
         if (logSnapshot.empty) {
           // No log for today, create a new one
+          const newLogRef = doc(collection(db, 'users', currentUser.uid, 'dailyLogs'));
           const newLogData: DailyLog = {
             date: Timestamp.fromDate(startOfDay),
             consumedCalories: newMeal.calories,
             meals: [newMeal],
           };
-          await addDoc(collection(db, 'users', currentUser.uid, 'dailyLogs'), newLogData);
+          batch.set(newLogRef, newLogData);
         } else {
           // Log for today exists, update it
           const logDocRef = logSnapshot.docs[0].ref;
           const currentLogData = logSnapshot.docs[0].data() as DailyLog;
           const updatedMeals = [...currentLogData.meals, newMeal];
           const updatedCalories = currentLogData.consumedCalories + newMeal.calories;
-          await updateDoc(logDocRef, {
+          batch.update(logDocRef, {
             meals: updatedMeals,
             consumedCalories: updatedCalories
           });
         }
+        await batch.commit();
         toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
-
+  
       } else {
         // Anonymous user
         const updatedLog: DailyLog = {
