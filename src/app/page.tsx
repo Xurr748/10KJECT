@@ -87,22 +87,25 @@ interface DailyLog {
   }[];
 }
 
+// A reviver function for JSON.parse to correctly handle Firestore Timestamps
+const jsonReviver = (key: string, value: any) => {
+  // This is a common way Firestore Timestamps are stringified
+  if (typeof value === 'object' && value !== null && value.hasOwnProperty('seconds') && value.hasOwnProperty('nanoseconds')) {
+    return new Timestamp(value.seconds, value.nanoseconds);
+  }
+  return value;
+};
+
 const safeJsonParse = (item: string | null): any => {
   if (!item) return null;
   try {
-    // This reviver function is crucial for converting stored ISO date strings back to Date objects,
-    // and then to Firestore Timestamps where needed.
-    return JSON.parse(item, (key, value) => {
-      if (typeof value === 'object' && value !== null && value.seconds && typeof value.nanoseconds !== 'undefined') {
-        return new Timestamp(value.seconds, value.nanoseconds);
-      }
-      return value;
-    });
+    return JSON.parse(item, jsonReviver);
   } catch (e) {
     console.error("Failed to parse JSON from localStorage", e);
     return null;
   }
 };
+
 
 export default function FSFAPage() {
   const { toast } = useToast();
@@ -157,23 +160,24 @@ export default function FSFAPage() {
     if (previewUrl) localStorage.setItem('previewUrl', previewUrl);
   }, [previewUrl]);
 
-  // 2. Save user-specific anonymous data to localStorage
-  // This is the crucial effect for anonymous users.
+  // 2. Save user-specific ANONYMOUS data to localStorage whenever it changes
   useEffect(() => {
-    // Only save profile and log to localStorage if user is NOT logged in.
+    // Only save to localStorage if the user is NOT logged in.
     if (!currentUser) {
+      // We check for Object.keys to prevent saving an empty object on initial load
       if (Object.keys(userProfile).length > 0) {
         localStorage.setItem('anonymousUserProfile', JSON.stringify(userProfile));
       }
       if(dailyLog) {
+         // Timestamps need to be handled correctly for JSON serialization
         localStorage.setItem('anonymousDailyLog', JSON.stringify(dailyLog));
       }
     }
   }, [userProfile, dailyLog, currentUser]);
 
-  // 3. Load all data on initial render & handle Auth changes
+  // 3. Main data loading and auth state management effect
   useEffect(() => {
-    // Non-user-specific data loaded once.
+    // Load non-user-specific data on initial render.
     const savedAnalysisResult = safeJsonParse(localStorage.getItem('imageAnalysisResult'));
     if (savedAnalysisResult) setImageAnalysisResult(savedAnalysisResult);
     
@@ -183,7 +187,7 @@ export default function FSFAPage() {
     const savedPreviewUrl = localStorage.getItem('previewUrl');
     if (savedPreviewUrl) setPreviewUrl(savedPreviewUrl);
     
-    // User-specific data managed by auth state.
+    // Setup Firebase auth listener to manage user-specific data
     const { auth } = getFirebase();
     if (!auth) {
       console.error("[Auth] Firebase Auth is not available. Check config.");
@@ -211,6 +215,7 @@ export default function FSFAPage() {
               setUserProfile(anonymousProfile);
               if (anonymousProfile.height) setHeight(String(anonymousProfile.height));
               if (anonymousProfile.weight) setWeight(String(anonymousProfile.weight));
+              localStorage.removeItem('anonymousUserProfile');
            }
         }
       } catch (error) {
@@ -219,62 +224,67 @@ export default function FSFAPage() {
     };
     
     const setupLogListener = async (user: User) => {
-      const { db } = getFirebase();
-      if (!db) return;
-      
-      const today = new Date();
-      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const logsCollection = collection(db, 'users', user.uid, 'dailyLogs');
-      const q = query(logsCollection, where('date', '>=', Timestamp.fromDate(startOfDay)));
+        const { db } = getFirebase();
+        if (!db) return;
+        
+        const today = new Date();
+        const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+        const logsCollection = collection(db, 'users', user.uid, 'dailyLogs');
+        const q = query(logsCollection, where('date', '>=', Timestamp.fromDate(startOfDay)));
 
-      return onSnapshot(q, async (querySnapshot) => {
-          const localLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
-          
-          if (!querySnapshot.empty) {
-              const docSnap = querySnapshot.docs[0];
-              const remoteLog = docSnap.data() as DailyLog;
-              setDailyLogId(docSnap.id);
+        return onSnapshot(q, async (querySnapshot) => {
+            const localLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
+            
+            if (!querySnapshot.empty) {
+                const docSnap = querySnapshot.docs[0];
+                const remoteLog = docSnap.data() as DailyLog;
+                setDailyLogId(docSnap.id);
 
-              if (localLog && localLog.meals.length > 0) {
-                  // Merge local anonymous log with remote log
-                  const mergedMeals = [...remoteLog.meals];
-                  const remoteMealTimestamps = new Set(remoteLog.meals.map(m => m.timestamp.seconds));
-                  localLog.meals.forEach((localMeal: any) => {
-                      if (!remoteMealTimestamps.has(localMeal.timestamp.seconds)) {
-                          mergedMeals.push(localMeal);
-                      }
-                  });
-                  mergedMeals.sort((a, b) => a.timestamp.seconds - b.timestamp.seconds);
-                  const consumedCalories = mergedMeals.reduce((sum, meal) => sum + meal.calories, 0);
-                  const mergedLog = { ...remoteLog, meals: mergedMeals, consumedCalories };
+                if (localLog && localLog.meals.length > 0) {
+                    const mergedMeals = [...remoteLog.meals];
+                    const remoteMealTimestamps = new Set(remoteLog.meals.map(m => m.timestamp.seconds));
+                    
+                    localLog.meals.forEach((localMeal: any) => {
+                        const localTimestamp = new Timestamp(localMeal.timestamp.seconds, localMeal.timestamp.nanoseconds);
+                        if (!remoteMealTimestamps.has(localTimestamp.seconds)) {
+                            mergedMeals.push({ ...localMeal, timestamp: localTimestamp });
+                        }
+                    });
 
-                  setDailyLog(mergedLog);
-                  await setDoc(doc(logsCollection, docSnap.id), mergedLog, { merge: true });
-                  localStorage.removeItem('anonymousDailyLog');
-              } else {
-                  setDailyLog(remoteLog);
-              }
-          } else {
-              // No remote log for today exists
-              if (localLog && localLog.meals.length > 0) {
-                  // Migrate local anonymous log to Firestore
-                  const newLogData = { ...localLog, date: Timestamp.fromDate(startOfDay) };
-                  const docRef = await addDoc(logsCollection, newLogData);
-                  setDailyLogId(docRef.id);
-                  setDailyLog(newLogData);
-                  localStorage.removeItem('anonymousDailyLog');
-              } else {
-                 setDailyLog(null); // No log anywhere
-              }
-          }
-      }, (error) => {
-        console.error("[Log Fetch] Error fetching daily log:", error);
-      });
+                    mergedMeals.sort((a, b) => a.timestamp.seconds - b.timestamp.seconds);
+                    const consumedCalories = mergedMeals.reduce((sum, meal) => sum + meal.calories, 0);
+                    const mergedLog = { ...remoteLog, meals: mergedMeals, consumedCalories };
+
+                    setDailyLog(mergedLog);
+                    await setDoc(doc(logsCollection, docSnap.id), mergedLog, { merge: true });
+                    localStorage.removeItem('anonymousDailyLog');
+                } else {
+                    setDailyLog(remoteLog);
+                }
+            } else {
+                if (localLog && localLog.meals.length > 0) {
+                    const newLogData = { 
+                        ...localLog, 
+                        date: Timestamp.fromDate(startOfDay),
+                        // Ensure meals have correct Timestamp objects
+                        meals: localLog.meals.map((m: any) => ({...m, timestamp: new Timestamp(m.timestamp.seconds, m.timestamp.nanoseconds)}))
+                    };
+                    const docRef = await addDoc(logsCollection, newLogData);
+                    setDailyLogId(docRef.id);
+                    setDailyLog(newLogData);
+                    localStorage.removeItem('anonymousDailyLog');
+                } else {
+                   setDailyLog(null);
+                }
+            }
+        }, (error) => {
+          console.error("[Log Fetch] Error fetching daily log:", error);
+        });
     };
 
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setCurrentUser(user);
-      if (unsubscribeLog) unsubscribeLog(); // Clean up previous listener
+      if (unsubscribeLog) unsubscribeLog();
 
       if (user) {
         // --- User is LOGGED IN ---
@@ -282,10 +292,9 @@ export default function FSFAPage() {
         setupLogListener(user).then(unsub => { unsubscribeLog = unsub; });
       } else {
         // --- User is LOGGED OUT or ANONYMOUS ---
-        // Reset user-specific IDs
         setDailyLogId(null); 
         
-        // Load data from localStorage
+        // Load data from localStorage for anonymous session
         const savedProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
         if (savedProfile) {
             setUserProfile(savedProfile);
@@ -302,11 +311,12 @@ export default function FSFAPage() {
       }
     });
   
+    // Cleanup function
     return () => {
       unsubscribeAuth();
       if (unsubscribeLog) unsubscribeLog();
     };
-  }, []); // Main listener setup runs only once
+  }, []); // This main setup hook should run only once.
 
 
   useEffect(() => {
@@ -332,7 +342,7 @@ export default function FSFAPage() {
         title: "ออกจากระบบสำเร็จ",
         description: "ข้อมูลของคุณสำหรับเซสชันนี้จะยังคงอยู่",
       });
-      // The onAuthStateChanged listener will handle resetting the state
+      // The onAuthStateChanged listener will handle resetting the state for an anonymous session
     } catch (error: unknown) {
       console.error("Logout error:", error);
       toast({
@@ -501,74 +511,68 @@ export default function FSFAPage() {
   const handleLogMeal = async (mealName: string, mealCalories: number) => {
     setIsLoggingMeal(true);
     
-    const currentLog = dailyLog || {
-        date: Timestamp.now(), // Will be overwritten if not logged in
-        consumedCalories: 0,
-        meals: [],
-    };
-    
     const newMeal = {
         name: mealName,
         calories: mealCalories,
         timestamp: Timestamp.now(),
     };
 
-    let updatedLog: DailyLog;
-
-    // Handle date object for anonymous vs logged-in users
-    if (currentUser) {
-        updatedLog = {
-            ...currentLog,
-            date: currentLog.date || Timestamp.fromDate(new Date(new Date().setHours(0, 0, 0, 0))), // Ensure date exists for FS
-            consumedCalories: currentLog.consumedCalories + mealCalories,
-            meals: [...currentLog.meals, newMeal],
+    // Use a function for state update to ensure we have the latest state
+    setDailyLog(prevLog => {
+        const currentLog = prevLog || {
+            date: Timestamp.now(), // This will be the current time, but it's a fallback.
+            consumedCalories: 0,
+            meals: [],
         };
-    } else {
-        // For anonymous user, ensure date is serializable for localStorage.
-        // We convert Timestamps to a structure that JSON.stringify can handle.
-         const serializableLog = currentLog ? JSON.parse(JSON.stringify(currentLog)) : { consumedCalories: 0, meals: [] };
-         updatedLog = {
-             ...serializableLog,
-             consumedCalories: serializableLog.consumedCalories + mealCalories,
-             meals: [...serializableLog.meals, JSON.parse(JSON.stringify(newMeal))],
-         } as DailyLog; // We cast here, knowing date will be missing but that's ok for anon
-    }
 
+        const updatedMeals = [...currentLog.meals, newMeal];
+        const updatedCalories = currentLog.consumedCalories + mealCalories;
 
-    setDailyLog(updatedLog);
+        const updatedLog: DailyLog = {
+            ...currentLog,
+            consumedCalories: updatedCalories,
+            meals: updatedMeals,
+        };
+        
+        // This check is now inside the state updater function
+        if (userProfile.dailyCalorieGoal && updatedCalories > userProfile.dailyCalorieGoal) {
+            toast({
+                title: "คำเตือน: เกินเป้าหมายแคลอรี่!",
+                description: `วันนี้คุณบริโภคไปแล้ว ${updatedCalories} kcal ซึ่งเกินเป้าหมาย ${userProfile.dailyCalorieGoal} kcal ของคุณ`,
+                variant: "destructive"
+            });
+        }
 
-    toast({ title: "บันทึกมื้ออาหารสำเร็จ", description: `${mealName} (${mealCalories} kcal) ถูกเพิ่มในบันทึกของคุณ` });
-
-    if (userProfile.dailyCalorieGoal && updatedLog.consumedCalories > userProfile.dailyCalorieGoal) {
-        toast({
-            title: "คำเตือน: เกินเป้าหมายแคลอรี่!",
-            description: `วันนี้คุณบริโภคไปแล้ว ${updatedLog.consumedCalories} kcal ซึ่งเกินเป้าหมาย ${userProfile.dailyCalorieGoal} kcal ของคุณ`,
-            variant: "destructive"
-        });
-    }
-    
-    const { db } = getFirebase();
-    if (currentUser && db) {
-        try {
+        // Side effect: Save to Firestore if logged in
+        const { db } = getFirebase();
+        if (currentUser && db) {
             const userLogsCollection = collection(db, 'users', currentUser.uid, 'dailyLogs');
             
-            if (dailyLogId) {
-                // Update existing log document for today
-                const docRef = doc(userLogsCollection, dailyLogId);
-                await setDoc(docRef, updatedLog, { merge: true });
-            } else {
-                // Create a new log document for today
-                const newLogData = { ...updatedLog, date: Timestamp.fromDate(new Date(new Date().setHours(0, 0, 0, 0))) };
-                const newDocRef = await addDoc(userLogsCollection, newLogData);
-                setDailyLogId(newDocRef.id);
-            }
-            console.log('[Log Meal] Meal logged to Firestore.');
-        } catch (error) {
-            console.error("[Log Meal] Error logging meal to Firestore:", error);
-            toast({ title: "เกิดข้อผิดพลาดในการบันทึกข้อมูล", description: "ไม่สามารถบันทึกมื้ออาหารลงฐานข้อมูลได้", variant: "destructive" });
-        }
-    }
+            // Ensure date is set to start of today for Firestore query consistency
+            const startOfToday = new Date();
+            startOfToday.setHours(0, 0, 0, 0);
+            const firestoreLog = { ...updatedLog, date: Timestamp.fromDate(startOfToday) };
 
+            if (dailyLogId) {
+                const docRef = doc(userLogsCollection, dailyLogId);
+                setDoc(docRef, firestoreLog, { merge: true }).catch(err => {
+                    console.error("[Log Meal] Error updating meal to Firestore:", err);
+                    toast({ title: "เกิดข้อผิดพลาดในการบันทึกข้อมูล", description: "ไม่สามารถอัปเดตมื้ออาหารลงฐานข้อมูลได้", variant: "destructive" });
+                });
+            } else {
+                addDoc(userLogsCollection, firestoreLog).then(newDocRef => {
+                    setDailyLogId(newDocRef.id);
+                }).catch(err => {
+                    console.error("[Log Meal] Error adding meal to Firestore:", err);
+                    toast({ title: "เกิดข้อผิดพลาดในการบันทึกข้อมูล", description: "ไม่สามารถเพิ่มมื้ออาหารลงฐานข้อมูลได้", variant: "destructive" });
+                });
+            }
+        }
+
+        return updatedLog;
+    });
+
+    toast({ title: "บันทึกมื้ออาหารสำเร็จ", description: `${mealName} (${mealCalories} kcal) ถูกเพิ่มในบันทึกของคุณ` });
     setIsLoggingMeal(false);
   };
 
@@ -1067,3 +1071,5 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+    
