@@ -324,7 +324,7 @@ export default function FSFAPage() {
       unsubscribeAuth();
       if (unsubscribeLog) unsubscribeLog();
     };
-  }, []); // This main setup hook should run only once.
+  }, [toast]); // Added toast to dependency array as it is used inside
 
 
   useEffect(() => {
@@ -483,9 +483,8 @@ export default function FSFAPage() {
     setIsCalculatingBmi(true);
     try {
       const bmi = w / ((h / 100) * (h / 100));
-      // Simple BMR calculation (Mifflin-St Jeor, assuming age 30, sedentary)
-      const calorieGoal = (10 * w) + (6.25 * h) - (5 * 30) + 5; // Male example
-      const roundedCalorieGoal = Math.round(calorieGoal * 1.2); // Sedentary
+      const calorieGoal = (10 * w) + (6.25 * h) - (5 * 30) + 5; 
+      const roundedCalorieGoal = Math.round(calorieGoal * 1.2); 
 
       const newProfile: UserProfile = {
         height: h,
@@ -495,19 +494,21 @@ export default function FSFAPage() {
       };
       
       setUserProfile(newProfile);
-      toast({ title: "คำนวณ BMI สำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
       
-      // If user is logged in, also save to Firestore.
-      const { auth, db } = getFirebase();
+      const { db, auth } = getFirebase();
+      const currentUser = auth?.currentUser;
+
       if (currentUser && db) {
-        console.log("[BMI] Attempting to save profile to Firestore for user:", currentUser.uid);
+        console.log("[BMI] Saving profile to Firestore for user:", currentUser.uid);
         const userDocRef = doc(db, 'users', currentUser.uid);
         await setDoc(userDocRef, newProfile, { merge: true });
-        toast({ title: "บันทึกข้อมูลสำเร็จ", description: `ข้อมูลโปรไฟล์ของคุณถูกบันทึกในบัญชีเรียบร้อยแล้ว` });
         console.log("[BMI] Profile saved to Firestore successfully.");
+        toast({ title: "บันทึกข้อมูลสำเร็จ", description: `ข้อมูลโปรไฟล์ของคุณถูกบันทึกในบัญชีเรียบร้อยแล้ว` });
+      } else {
+        toast({ title: "คำนวณ BMI สำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
       }
     } catch (error) {
-        console.error("Error during BMI calculation or saving:", error);
+        console.error("Error during BMI calculation or saving to Firestore:", error);
         toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อมูลโปรไฟล์ได้", variant: "destructive"});
     } finally {
       setIsCalculatingBmi(false);
@@ -549,10 +550,11 @@ export default function FSFAPage() {
               });
           }
 
-          // Save to Firestore if logged in
-          const { db } = getFirebase();
+          const { db, auth } = getFirebase();
+          const currentUser = auth?.currentUser;
+
           if (currentUser && db) {
-              console.log("[Log Meal] Attempting to save meal to Firestore for user:", currentUser.uid);
+              console.log("[Log Meal] Saving meal to Firestore for user:", currentUser.uid);
               const userLogsCollection = collection(db, 'users', currentUser.uid, 'dailyLogs');
               
               const startOfToday = new Date();
@@ -572,7 +574,7 @@ export default function FSFAPage() {
 
           toast({ title: "บันทึกมื้ออาหารสำเร็จ", description: `${mealName} (${mealCalories} kcal) ถูกเพิ่มในบันทึกของคุณ` });
       } catch (error) {
-          console.error("[Log Meal] Error logging meal:", error);
+          console.error("[Log Meal] Error logging meal to Firestore:", error);
           toast({ title: "เกิดข้อผิดพลาดในการบันทึก", description: "ไม่สามารถบันทึกข้อมูลมื้ออาหารได้", variant: "destructive" });
       } finally {
           setIsLoggingMeal(false);
@@ -1074,4 +1076,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-
