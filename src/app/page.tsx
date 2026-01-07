@@ -175,7 +175,9 @@ export default function FSFAPage() {
   }, [imageAnalysisResult]);
   
   useEffect(() => {
-    localStorage.setItem('chatMessages', JSON.stringify(chatMessages));
+    if (chatMessages.length > 0) {
+      localStorage.setItem('chatMessages', JSON.stringify(chatMessages));
+    }
   }, [chatMessages]);
 
   useEffect(() => {
@@ -191,7 +193,7 @@ export default function FSFAPage() {
   }, [userProfile, currentUser]);
   
   useEffect(() => {
-    if (!currentUser) {
+    if (!currentUser && dailyLog) {
       localStorage.setItem('anonymousDailyLog', JSON.stringify(dailyLog));
     }
   }, [dailyLog, currentUser]);
@@ -212,7 +214,7 @@ export default function FSFAPage() {
         console.log("[Profile Fetch] No user profile found, syncing local to remote.");
         // If profile exists locally but not remotely, save it.
         const anonymousProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
-        if (anonymousProfile?.bmi) {
+        if (anonymousProfile && (anonymousProfile.bmi || anonymousProfile.height)) {
             await setDoc(userDocRef, anonymousProfile, { merge: true });
             setUserProfile(anonymousProfile);
         }
@@ -326,7 +328,11 @@ export default function FSFAPage() {
             setWeight('');
         }
         const savedDailyLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
-        if (savedDailyLog) setDailyLog(savedDailyLog);
+        if (savedDailyLog) {
+            setDailyLog(savedDailyLog);
+        } else {
+            setDailyLog(null);
+        }
         
         if (unsubscribeLog) unsubscribeLog();
       }
@@ -624,6 +630,7 @@ export default function FSFAPage() {
       localStorage.removeItem('anonymousDailyLog');
       localStorage.removeItem('previewUrl');
       localStorage.removeItem('imageAnalysisResult');
+      localStorage.removeItem('chatMessages');
     } catch (error: any) {
       console.error('Login error:', error);
       let errorMessage = "เกิดข้อผิดพลาดในการเข้าสู่ระบบ";
@@ -644,9 +651,9 @@ export default function FSFAPage() {
 
   const handleRegister = async (event: React.FormEvent) => {
     event.preventDefault();
-    const { auth } = getFirebase();
-    if (!auth) {
-        toast({ title: "ข้อผิดพลาดในการตรวจสอบสิทธิ์", description: "บริการ Firebase Authentication ไม่พร้อมใช้งาน", variant: "destructive" });
+    const { auth, db } = getFirebase();
+    if (!auth || !db) {
+        toast({ title: "ข้อผิดพลาดในการตรวจสอบสิทธิ์", description: "บริการ Firebase ไม่พร้อมใช้งาน", variant: "destructive" });
         return;
     }
     setIsAuthLoading(true);
@@ -672,12 +679,31 @@ export default function FSFAPage() {
     }
 
     try {
-      await createUserWithEmailAndPassword(auth, email, password);
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
+
+      // After creating user, sync local data to firestore
+      const anonymousProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
+      if (anonymousProfile) {
+        await setDoc(doc(db, 'users', user.uid), anonymousProfile, { merge: true });
+      }
+       const anonymousDailyLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
+       if (anonymousDailyLog) {
+         const logsCollection = collection(db, 'users', user.uid, 'dailyLogs');
+         const today = new Date();
+         const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+         const newLogData = { ...anonymousDailyLog, date: Timestamp.fromDate(startOfDay) };
+         await addDoc(logsCollection, newLogData);
+       }
+
+
       toast({
         title: "ลงทะเบียนสำเร็จ",
         description: "บัญชีของคุณถูกสร้างเรียบร้อยแล้ว",
       });
       setAuthDialogOpen(false); // Close dialog on success
+      localStorage.removeItem('anonymousUserProfile');
+      localStorage.removeItem('anonymousDailyLog');
     } catch (error: any) {
       console.error('Registration error:', error);
       let errorMessage = "เกิดข้อผิดพลาดในการลงทะเบียน";
