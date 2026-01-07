@@ -195,7 +195,6 @@ export default function FSFAPage() {
         
         // Clear anonymous data from localStorage
         const localProfileData = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
-        const localLogData = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
         localStorage.removeItem('anonymousUserProfile');
         localStorage.removeItem('anonymousDailyLog');
         
@@ -413,36 +412,41 @@ setImageAnalysisResult(null);
     
     setIsCalculatingBmi(true);
     
-    try {
-        const bmi = w / ((h / 100) * (h / 100));
-        const calorieGoal = (10 * w) + (6.25 * h) - (5 * 30) + 5; 
-        const roundedCalorieGoal = Math.round(calorieGoal * 1.2); 
+    const bmi = w / ((h / 100) * (h / 100));
+    const calorieGoal = (10 * w) + (6.25 * h) - (5 * 30) + 5; 
+    const roundedCalorieGoal = Math.round(calorieGoal * 1.2); 
+
+    const newProfile: UserProfile = {
+        height: h,
+        weight: w,
+        bmi: parseFloat(bmi.toFixed(2)),
+        dailyCalorieGoal: roundedCalorieGoal,
+    };
     
-        const newProfile: UserProfile = {
-            height: h,
-            weight: w,
-            bmi: parseFloat(bmi.toFixed(2)),
-            dailyCalorieGoal: roundedCalorieGoal,
-        };
-        
-        if (currentUser) {
-            const { db } = getFirebase();
-            if (!db) throw new Error("Firebase DB not available");
+    if (currentUser) {
+        const { db } = getFirebase();
+        if (!db) {
+            toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถเชื่อมต่อฐานข้อมูลได้", variant: "destructive"});
+            setIsCalculatingBmi(false);
+            return;
+        }
+        try {
             const userDocRef = doc(db, 'users', currentUser.uid);
             await setDoc(userDocRef, newProfile, { merge: true });
-            console.log("[Firestore Save] User profile updated successfully.");
+            // Update state only after successful save
+            setUserProfile(newProfile); 
+            toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
+        } catch (error) {
+            console.error("[Firestore Save] Error:", error);
+            toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกข้อมูล BMI ไปยังบัญชีของคุณได้", variant: "destructive"});
+        } finally {
+            setIsCalculatingBmi(false);
         }
-
-        // Update local state AFTER successful save or for anonymous users
-        setUserProfile(newProfile); 
-
-        toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
-        
-    } catch (error) {
-        console.error("[Calculate BMI] Error:", error);
-        toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถคำนวณและบันทึก BMI ได้", variant: "destructive"});
-    } finally {
+    } else {
+        // Anonymous user, just update state
+        setUserProfile(newProfile);
         setIsCalculatingBmi(false);
+        toast({ title: "คำนวณสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
     }
   };
 
@@ -468,31 +472,33 @@ setImageAnalysisResult(null);
         let currentLog = dailyLog;
         let currentLogId = dailyLogId;
 
+        // Start a batch write
+        const batch = writeBatch(db);
+
         if (!currentLogId) {
             const today = new Date();
             const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-            const newLogData: Omit<DailyLog, 'meals'> & { meals: Meal[] } = {
+            const newLogData: DailyLog = {
                 date: Timestamp.fromDate(startOfDay),
                 consumedCalories: newMeal.calories,
                 meals: [newMeal],
             };
-            const logRef = await addDoc(collection(db, 'users', currentUser.uid, 'dailyLogs'), newLogData);
-            setDailyLogId(logRef.id);
-            setDailyLog(newLogData);
+            // Use set on a new doc ref for batch
+            const newLogRef = doc(collection(db, 'users', currentUser.uid, 'dailyLogs'));
+            batch.set(newLogRef, newLogData);
         } else {
            const updatedMeals = [...(currentLog?.meals || []), newMeal];
            const updatedCalories = (currentLog?.consumedCalories || 0) + newMeal.calories;
 
-           const updatedLog: DailyLog = {
-             ...(currentLog as DailyLog),
-             consumedCalories: updatedCalories,
-             meals: updatedMeals,
-           };
-        
            const logDocRef = doc(db, 'users', currentUser.uid, 'dailyLogs', currentLogId);
-           await setDoc(logDocRef, updatedLog, { merge: true });
-           setDailyLog(updatedLog);
+           // Use update for batch
+           batch.update(logDocRef, {
+             consumedCalories: updatedCalories,
+             meals: updatedMeals
+           });
         }
+        
+        await batch.commit(); // Commit the batch
         toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
 
       } else {
