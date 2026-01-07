@@ -1,6 +1,5 @@
-
 // src/lib/firebase.ts
-import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
+import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getAnalytics, type Analytics, isSupported } from 'firebase/analytics';
 import { getFirestore, type Firestore, serverTimestamp } from 'firebase/firestore';
@@ -15,13 +14,6 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
-// Log to verify that environment variables are loaded
-console.log('[Firebase Init] Raw Environment Variables:', {
-    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? 'SET' : 'NOT SET',
-    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN ? 'SET' : 'NOT SET',
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ? 'SET' : 'NOT SET',
-});
-
 interface FirebaseServices {
   app: FirebaseApp;
   auth: Auth;
@@ -31,57 +23,43 @@ interface FirebaseServices {
 
 let firebaseServices: FirebaseServices | null = null;
 
-function initializeFirebase(): FirebaseServices | null {
-  // Return memoized services if already initialized
-  if (firebaseServices) {
-    return firebaseServices;
-  }
+function initializeFirebase(): FirebaseServices {
+    if (firebaseServices) {
+        return firebaseServices;
+    }
 
-  // Check for essential config keys on the client side
-  if (typeof window !== 'undefined' && (!firebaseConfig.apiKey || !firebaseConfig.authDomain || !firebaseConfig.projectId)) {
-    console.error("🔴 CRITICAL: Missing essential Firebase configuration (apiKey, authDomain, projectId). Please check your .env file and restart the server.");
-    return null;
-  }
+    if (!getApps().length) {
+        // Log for debugging during initialization
+        if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+             console.error("🔴 CRITICAL: Missing Firebase API Key or Project ID. Check .env file.", {
+                apiKey: firebaseConfig.apiKey ? 'OK' : 'MISSING',
+                projectId: firebaseConfig.projectId ? 'OK' : 'MISSING',
+             });
+        }
+        initializeApp(firebaseConfig);
+    }
 
-  try {
-    const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+    const app = getApp();
     const auth = getAuth(app);
     const db = getFirestore(app);
     let analytics: Analytics | null = null;
 
     if (typeof window !== 'undefined') {
-      isSupported().then(supported => {
-        if (supported && firebaseConfig.measurementId) {
-          analytics = getAnalytics(app);
-          // We need to re-assign to the memoized object for it to be available later
-          if(firebaseServices) firebaseServices.analytics = analytics; 
-          console.log('[Firebase Init] Firebase Analytics initialized.');
-        }
-      }).catch(err => {
-         console.error("[Firebase Init] Error checking Analytics support:", err);
-      });
+        isSupported().then(supported => {
+            if (supported) {
+                analytics = getAnalytics(app);
+                if (firebaseServices) firebaseServices.analytics = analytics;
+            }
+        });
     }
-
-    console.log('[Firebase Init] Firebase services initialized successfully.');
+    
     firebaseServices = { app, auth, db, analytics };
     return firebaseServices;
-
-  } catch (error: any) {
-    console.error("🔴 CRITICAL: Error during Firebase initialization:", error.message, error);
-    return null;
-  }
 }
 
-// This is the function that components will import.
-// It returns the initialized services or empty objects if initialization failed.
 export function getFirebase() {
-  const services = initializeFirebase();
-  if (!services) {
-    // Return a "safe" object with null values to prevent app crashes on destructuring
-    // Components should check for the truthiness of these values before using them.
-    return { app: null, auth: null, db: null, analytics: null };
-  }
-  return services;
+  // Always initialize, the function itself will handle the singleton instance.
+  return initializeFirebase();
 }
 
 // Also exporting serverTimestamp for convenience
