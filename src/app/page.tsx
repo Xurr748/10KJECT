@@ -427,17 +427,8 @@ export default function FSFAPage() {
   };
 
   const handleLogMeal = async (mealName: string, mealCalories: number) => {
-    if (!currentUser) {
-        toast({
-            title: "กรุณาเข้าสู่ระบบ",
-            description: "คุณต้องเข้าสู่ระบบเพื่อบันทึกมื้ออาหาร",
-            variant: "destructive"
-        });
-        return;
-    }
-    
     setIsLoggingMeal(true);
-    
+
     const currentLog = dailyLog || {
         date: Timestamp.fromDate(new Date(new Date().setHours(0, 0, 0, 0))),
         consumedCalories: 0,
@@ -445,52 +436,52 @@ export default function FSFAPage() {
     };
 
     const newMeal = {
-      name: mealName,
-      calories: mealCalories,
-      timestamp: Timestamp.now(),
+        name: mealName,
+        calories: mealCalories,
+        timestamp: Timestamp.now(),
     };
 
     const updatedLog = {
-      ...currentLog,
-      consumedCalories: currentLog.consumedCalories + mealCalories,
-      meals: [...currentLog.meals, newMeal],
+        ...currentLog,
+        consumedCalories: currentLog.consumedCalories + mealCalories,
+        meals: [...currentLog.meals, newMeal],
     };
 
     setDailyLog(updatedLog);
 
     toast({ title: "บันทึกมื้ออาหารสำเร็จ", description: `${mealName} (${mealCalories} kcal) ถูกเพิ่มในบันทึกของคุณ` });
 
-    if(userProfile.dailyCalorieGoal && updatedLog.consumedCalories > userProfile.dailyCalorieGoal) {
-        toast({ 
-          title: "คำเตือน: เกินเป้าหมายแคลอรี!", 
-          description: `วันนี้คุณบริโภคไปแล้ว ${updatedLog.consumedCalories} kcal ซึ่งเกินเป้าหมาย ${userProfile.dailyCalorieGoal} kcal ของคุณ`, 
-          variant: "destructive" 
+    if (userProfile.dailyCalorieGoal && updatedLog.consumedCalories > userProfile.dailyCalorieGoal) {
+        toast({
+            title: "คำเตือน: เกินเป้าหมายแคลอรี่!",
+            description: `วันนี้คุณบริโภคไปแล้ว ${updatedLog.consumedCalories} kcal ซึ่งเกินเป้าหมาย ${userProfile.dailyCalorieGoal} kcal ของคุณ`,
+            variant: "destructive"
         });
     }
 
     if (currentUser && db) {
-      try {
-        const userLogsCollection = collection(db, 'users', currentUser.uid, 'dailyLogs');
-        let docRef;
+        try {
+            const userLogsCollection = collection(db, 'users', currentUser.uid, 'dailyLogs');
+            let docRef;
 
-        if (dailyLogId) {
-          docRef = doc(userLogsCollection, dailyLogId);
-          await setDoc(docRef, { consumedCalories: updatedLog.consumedCalories, meals: updatedLog.meals }, { merge: true });
-        } else {
-          const newLogData = { ...updatedLog, date: Timestamp.fromDate(new Date(new Date().setHours(0, 0, 0, 0))) };
-          docRef = await addDoc(userLogsCollection, newLogData);
-          setDailyLogId(docRef.id);
+            if (dailyLogId) {
+                docRef = doc(userLogsCollection, dailyLogId);
+                await setDoc(docRef, { consumedCalories: updatedLog.consumedCalories, meals: updatedLog.meals }, { merge: true });
+            } else {
+                const newLogData = { ...updatedLog, date: Timestamp.fromDate(new Date(new Date().setHours(0, 0, 0, 0))) };
+                docRef = await addDoc(userLogsCollection, newLogData);
+                setDailyLogId(docRef.id);
+            }
+            console.log('[Log Meal] Meal logged to Firestore.');
+
+        } catch (error) {
+            console.error("[Log Meal] Error logging meal to Firestore:", error);
+            toast({ title: "เกิดข้อผิดพลาดในการบันทึกข้อมูล", description: "ไม่สามารถบันทึกมื้ออาหารลงฐานข้อมูลได้", variant: "destructive" });
         }
-        console.log('[Log Meal] Meal logged to Firestore.');
-
-      } catch (error) {
-        console.error("[Log Meal] Error logging meal to Firestore:", error);
-        toast({ title: "เกิดข้อผิดพลาดในการบันทึกข้อมูล", description: "ไม่สามารถบันทึกมื้ออาหารลงฐานข้อมูลได้", variant: "destructive" });
-      }
     }
 
     setIsLoggingMeal(false);
-  };
+};
 
 
   const getBmiInterpretation = (bmi: number | undefined): {text: string, color: string} => {
@@ -763,10 +754,10 @@ export default function FSFAPage() {
                         <>
                           <Separator />
                           <div>
-                            <h4 className="font-semibold text-sm sm:text-base md:text-lg font-body text-foreground flex items-center"><Flame className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-orange-500" />แคลอรีโดยประมาณ:</h4>
+                            <h4 className="font-semibold text-sm sm:text-base md:text-lg font-body text-foreground flex items-center"><Flame className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-orange-500" />แคลอรี่โดยประมาณ:</h4>
                             <div className="mt-1 text-xs sm:text-sm md:text-base font-body text-foreground/80 space-y-1">
                                <div className="flex items-center justify-between">
-                                <p className="text-lg sm:text-xl font-bold text-primary">{imageAnalysisResult.nutritionalInformation.estimatedCalories} กิโลแคลอรี</p>
+                                <p className="text-lg sm:text-xl font-bold text-primary">{imageAnalysisResult.nutritionalInformation.estimatedCalories} กิโลแคลอรี่</p>
                                 <Button
                                   size="sm"
                                   onClick={() => handleLogMeal(imageAnalysisResult.foodItem, imageAnalysisResult.nutritionalInformation.estimatedCalories)}
@@ -855,8 +846,8 @@ export default function FSFAPage() {
             <div className="space-y-4">
               <Card className="shadow-lg rounded-lg overflow-hidden bg-card">
                 <CardHeader>
-                  <CardTitle className="text-lg sm:text-xl font-headline text-primary">คำนวณ BMI และแคลอรี</CardTitle>
-                  <CardDescription className="text-xs sm:text-sm">กรอกข้อมูลเพื่อคำนวณดัชนีมวลกายและแคลอรีที่แนะนำต่อวัน</CardDescription>
+                  <CardTitle className="text-lg sm:text-xl font-headline text-primary">คำนวณ BMI และแคลอรี่</CardTitle>
+                  <CardDescription className="text-xs sm:text-sm">กรอกข้อมูลเพื่อคำนวณดัชนีมวลกายและแคลอรี่ที่แนะนำต่อวัน</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
@@ -869,7 +860,7 @@ export default function FSFAPage() {
                   </div>
                    <Button onClick={handleCalculateBmi} disabled={isCalculatingBmi} className="w-full">
                      {isCalculatingBmi ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Calculator className="mr-2 h-4 w-4" />}
-                     คำนวณ BMI และแคลอรี
+                     คำนวณ BMI และแคลอรี่
                    </Button>
                 </CardContent>
                 {userProfile.bmi && (
@@ -880,7 +871,7 @@ export default function FSFAPage() {
                      </div>
                      {userProfile.dailyCalorieGoal && (
                         <div>
-                            <h4 className="font-semibold text-foreground">แคลอรีที่แนะนำต่อวัน:</h4>
+                            <h4 className="font-semibold text-foreground">แคลอรี่ที่แนะนำต่อวัน:</h4>
                             <p className="text-2xl font-bold text-primary">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
                         </div>
                      )}
@@ -892,63 +883,66 @@ export default function FSFAPage() {
                 <DialogTrigger asChild>
                   <Button variant="outline" className="w-full">
                     <BookCheck className="mr-2 h-4 w-4" />
-                    ภาพรวมแคลอรีวันนี้
+                    ภาพรวมแคลอรี่วันนี้
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-md">
                   <DialogHeader>
-                    <DialogTitle>ภาพรวมแคลอรีวันนี้</DialogTitle>
+                    <DialogTitle>ภาพรวมแคลอรี่วันนี้</DialogTitle>
                     <DialogDescription>
-                      ตรวจสอบเป้าหมายและบันทึกแคลอรีของคุณสำหรับวันนี้
+                      ตรวจสอบเป้าหมายและบันทึกแคลอรี่ของคุณสำหรับวันนี้
                     </DialogDescription>
                   </DialogHeader>
-                  {!currentUser ? (
-                    <div className="py-4 text-center">
-                        <p className="text-sm text-muted-foreground mb-4">กรุณาเข้าสู่ระบบเพื่อดูและบันทึกแคลอรี</p>
-                        <Button onClick={() => openAuthDialog('login')}>
-                            <LogIn className="mr-2 h-4 w-4" />
-                            เข้าสู่ระบบ
-                        </Button>
-                    </div>
-                  ) : (
-                    <div className="py-4">
-                        <div className="space-y-4">
-                          <Card className="p-4 text-center bg-secondary/30">
-                            <CardTitle className="text-base font-semibold">แคลอรีที่แนะนำต่อวัน</CardTitle>
-                            <CardDescription>(เป้าหมาย)</CardDescription>
-                            {userProfile.dailyCalorieGoal ? (
-                              <p className="text-2xl font-bold text-primary pt-2">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
-                             ) : (
-                               <p className="text-sm text-muted-foreground pt-2">กรุณาคำนวณ BMI เพื่อตั้งค่าเป้าหมาย</p>
-                             )}
-                          </Card>
+                  <div className="py-4">
+                      <div className="space-y-4">
+                        <Card className="p-4 text-center bg-secondary/30">
+                          <CardTitle className="text-base font-semibold">แคลอรี่ที่แนะนำต่อวัน</CardTitle>
+                          <CardDescription>(เป้าหมาย)</CardDescription>
+                          {userProfile.dailyCalorieGoal ? (
+                            <p className="text-2xl font-bold text-primary pt-2">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
+                           ) : (
+                             <p className="text-sm text-muted-foreground pt-2">กรุณาคำนวณ BMI เพื่อตั้งค่าเป้าหมาย</p>
+                           )}
+                        </Card>
 
-                          <Card className="p-4 bg-secondary/30">
-                            <CardTitle className="text-base font-semibold text-center">แคลอรี่ที่ใช้ไปแล้ว</CardTitle>
-                            <p className={`text-3xl font-bold text-center pt-2 ${dailyLog && userProfile.dailyCalorieGoal && dailyLog.consumedCalories > userProfile.dailyCalorieGoal ? 'text-destructive' : 'text-green-500'}`}>
-                              {dailyLog?.consumedCalories.toLocaleString() ?? 0} <span className="text-base font-normal">kcal</span>
-                            </p>
-                            
-                            {dailyLog && dailyLog.meals.length > 0 && (
-                              <>
-                                <Separator className="my-3" />
-                                <div className="space-y-2 text-sm text-muted-foreground">
-                                  <h4 className="font-semibold text-foreground text-center">มื้อที่บันทึกแล้ว</h4>
-                                  <ScrollArea className="h-24">
-                                    {dailyLog.meals.map((meal, index) => (
-                                      <div key={index} className="flex justify-between items-center py-1">
-                                        <span className="truncate pr-2">{meal.name}</span>
-                                        <span className="font-medium whitespace-nowrap">{meal.calories.toLocaleString()} kcal</span>
-                                      </div>
-                                    ))}
-                                  </ScrollArea>
-                                </div>
-                              </>
-                            )}
-                          </Card>
+                        <Card className="p-4 bg-secondary/30">
+                          <CardTitle className="text-base font-semibold text-center">แคลอรี่ที่ใช้ไปแล้ว</CardTitle>
+                          <p className={`text-3xl font-bold text-center pt-2 ${dailyLog && userProfile.dailyCalorieGoal && dailyLog.consumedCalories > userProfile.dailyCalorieGoal ? 'text-destructive' : 'text-green-500'}`}>
+                            {dailyLog?.consumedCalories.toLocaleString() ?? 0} <span className="text-base font-normal">kcal</span>
+                          </p>
+                          
+                          {dailyLog && dailyLog.meals.length > 0 && (
+                            <>
+                              <Separator className="my-3" />
+                              <div className="space-y-2 text-sm text-muted-foreground">
+                                <h4 className="font-semibold text-foreground text-center">มื้อที่บันทึกแล้ว</h4>
+                                <ScrollArea className="h-24">
+                                  {dailyLog.meals.map((meal, index) => (
+                                    <div key={index} className="flex justify-between items-center py-1">
+                                      <span className="truncate pr-2">{meal.name}</span>
+                                      <span className="font-medium whitespace-nowrap">{meal.calories.toLocaleString()} kcal</span>
+                                    </div>
+                                  ))}
+                                </ScrollArea>
+                              </div>
+                            </>
+                          )}
+                        </Card>
+                      </div>
+                      {!currentUser && (
+                        <div className="mt-4 text-center border-t pt-4">
+                            <p className="text-sm text-muted-foreground mb-3">เข้าสู่ระบบเพื่อบันทึกข้อมูลของคุณอย่างถาวร</p>
+                            <Button onClick={()=>{
+                                const trigger = document.querySelector('[data-radix-dialog-trigger]') as HTMLElement | null;
+                                if(trigger) trigger.click(); // Close current dialog
+                                openAuthDialog('login');
+                            }}>
+                                <LogIn className="mr-2 h-4 w-4" />
+                                เข้าสู่ระบบ / ลงทะเบียน
+                            </Button>
                         </div>
-                    </div>
-                  )}
+                      )}
+                  </div>
                 </DialogContent>
               </Dialog>
 
@@ -963,5 +957,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-
-    
