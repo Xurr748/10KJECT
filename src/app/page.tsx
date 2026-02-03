@@ -627,6 +627,31 @@ export default function FSFAPage() {
     initiateEmailSignUp(auth, email, password);
   };
 
+  const getMealPeriod = (date: Date): string => {
+    const hour = date.getHours();
+    if (hour >= 6 && hour < 9) return 'เช้า';
+    if (hour >= 9 && hour < 12) return 'สาย';
+    if (hour >= 12 && hour < 14) return 'เที่ยง';
+    if (hour >= 14 && hour < 17) return 'บ่าย';
+    if (hour >= 17 && hour < 20) return 'เย็น';
+    if (hour >= 20 && hour < 23) return 'ค่ำ';
+    return 'ดึก';
+  };
+
+  const groupedMeals = dailyLog?.meals.reduce((acc, meal) => {
+    const mealDate = meal.timestamp.toDate();
+    const period = getMealPeriod(mealDate);
+    if (!acc[period]) {
+        acc[period] = [];
+    }
+    acc[period].push(meal);
+    acc[period].sort((a, b) => a.timestamp.seconds - b.timestamp.seconds);
+    return acc;
+  }, {} as Record<string, Meal[]>);
+
+  const mealPeriodOrder = ['เช้า', 'สาย', 'เที่ยง', 'บ่าย', 'เย็น', 'ค่ำ', 'ดึก'];
+
+
   return (
     <div className="min-h-screen bg-background text-foreground font-body p-2 sm:p-4 md:p-8">
       <header className="py-4 sm:py-6 md:py-8 text-center bg-gradient-to-r from-primary/10 via-secondary/20 to-primary/10 rounded-lg shadow-md mb-6 sm:mb-8 md:mb-12">
@@ -969,15 +994,28 @@ export default function FSFAPage() {
                           {dailyLog && dailyLog.meals.length > 0 && (
                             <>
                               <Separator className="my-3" />
-                              <div className="space-y-2 text-sm text-muted-foreground">
+                              <div className="space-y-2">
                                 <h4 className="font-semibold text-foreground text-center">มื้อที่บันทึกแล้ว</h4>
-                                <ScrollArea className="h-24">
-                                  {dailyLog.meals.map((meal, index) => (
-                                    <div key={index} className="flex justify-between items-center py-1">
-                                      <span className="truncate pr-2">{meal.name}</span>
-                                      <span className="font-medium whitespace-nowrap">{meal.calories.toLocaleString()} kcal</span>
-                                    </div>
+                                <ScrollArea className="h-32">
+                                  <div className="space-y-3 pr-4">
+                                  {groupedMeals && mealPeriodOrder.map(period => (
+                                    groupedMeals[period] && (
+                                      <div key={period}>
+                                        <p className="font-semibold text-sm text-primary">{period}</p>
+                                        <div className="pl-2 space-y-1 mt-1 border-l-2 border-primary/20">
+                                          {groupedMeals[period].map((meal, index) => (
+                                            <div key={index} className="flex justify-between items-center text-sm text-muted-foreground">
+                                              <span className="truncate pr-2">
+                                                {meal.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}: {meal.name}
+                                              </span>
+                                              <span className="font-medium whitespace-nowrap text-foreground/90">{meal.calories.toLocaleString()} kcal</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )
                                   ))}
+                                  </div>
                                 </ScrollArea>
                               </div>
                             </>
@@ -1026,5 +1064,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-
-    
