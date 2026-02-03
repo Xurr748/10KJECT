@@ -348,10 +348,10 @@ export default function FSFAPage() {
             }
         };
 
-        if (isWeeklyDialogOpen && !weeklyLogs && currentUser) {
+        if (isWeeklyDialogOpen && currentUser) {
             fetchWeeklyLogs();
         }
-    }, [isWeeklyDialogOpen, weeklyLogs, currentUser, db, toast]);
+    }, [isWeeklyDialogOpen, currentUser, db, toast]);
 
     // Effect to fetch monthly logs when dialog opens
     useEffect(() => {
@@ -385,10 +385,10 @@ export default function FSFAPage() {
             }
         };
 
-        if (isMonthlyDialogOpen && !monthlyLogs && currentUser) {
+        if (isMonthlyDialogOpen && currentUser) {
             fetchMonthlyLogs();
         }
-    }, [isMonthlyDialogOpen, monthlyLogs, currentUser, db, toast]);
+    }, [isMonthlyDialogOpen, currentUser, db, toast]);
 
 
   // --- DATA SAVING (Anonymous User) ---
