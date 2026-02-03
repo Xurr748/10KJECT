@@ -30,7 +30,7 @@ import {
 } from '@/firebase/non-blocking-login';
 
 // date-fns for date calculations
-import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, format } from 'date-fns';
+import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, format, isWithinInterval } from 'date-fns';
 import { th } from 'date-fns/locale';
 
 // Recharts for charts
@@ -179,14 +179,12 @@ export default function FSFAPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isAuthOpLoading, setIsAuthOpLoading] = useState(false);
 
-  const resetLocalData = useCallback(() => {
+  const resetState = useCallback(() => {
     setUserProfile({});
     setHeight('');
     setWeight('');
     setDailyLog(null);
     setDailyLogId(null);
-    localStorage.removeItem('anonymousUserProfile');
-    localStorage.removeItem('anonymousDailyLog');
   }, []);
 
   // --- NON-USER-SPECIFIC LOCALSTORAGE DATA ---
@@ -239,6 +237,7 @@ export default function FSFAPage() {
 
     const handleUserLoggedIn = async (user: User) => {
         const localProfileData = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
+        const localLogsData: DailyLog[] = safeJsonParse(localStorage.getItem('anonymousDailyLogs')) || [];
         
         const userDocRef = doc(db, 'users', user.uid);
         const docSnap = await getDoc(userDocRef);
@@ -249,9 +248,23 @@ export default function FSFAPage() {
         } else if (localProfileData && Object.keys(localProfileData).length > 0) {
             profileToSet = localProfileData;
             setDocumentNonBlocking(userDocRef, profileToSet, { merge: true });
-            toast({ title: "ข้อมูลถูกย้ายแล้ว", description: "ข้อมูลจากเซสชันที่ไม่ระบุตัวตนของคุณถูกบันทึกไปยังบัญชีใหม่ของคุณแล้ว" });
+        }
+        
+        if (localLogsData.length > 0) {
+            const logsCollectionRef = collection(db, 'users', user.uid, 'dailyLogs');
+            const batch = writeBatch(db);
+            for (const log of localLogsData) {
+                const newLogRef = doc(logsCollectionRef);
+                batch.set(newLogRef, log);
+            }
+            await batch.commit();
+            toast({ title: "ข้อมูลถูกย้ายแล้ว", description: "ข้อมูลทั้งหมดจากเซสชันที่ไม่ระบุตัวตนของคุณถูกบันทึกไปยังบัญชีใหม่ของคุณแล้ว" });
             localStorage.removeItem('anonymousUserProfile');
-            localStorage.removeItem('anonymousDailyLog');
+            localStorage.removeItem('anonymousDailyLogs');
+            localStorage.removeItem('anonymousDailyLog'); // Clean up old key
+        } else if (localProfileData && Object.keys(localProfileData).length > 0) {
+             toast({ title: "ข้อมูลโปรไฟล์ถูกย้ายแล้ว", description: "ข้อมูลโปรไฟล์ของคุณถูกบันทึกไปยังบัญชีใหม่ของคุณแล้ว" });
+             localStorage.removeItem('anonymousUserProfile');
         }
         
         setUserProfile(profileToSet);
@@ -282,26 +295,28 @@ export default function FSFAPage() {
           unsubscribeLog();
           unsubscribeLog = undefined;
         }
-        resetLocalData();
+        resetState();
 
         const localProfile = safeJsonParse(localStorage.getItem('anonymousUserProfile')) || {};
         setUserProfile(localProfile);
         setHeight(String(localProfile.height || ''));
         setWeight(String(localProfile.weight || ''));
 
-        let localLog = safeJsonParse(localStorage.getItem('anonymousDailyLog')) || null;
-
-        // Check if the anonymous log is from a previous day (based on UTC)
-        if (localLog) {
-          const logDate = localLog.date.toDate();
-          const startOfTodayUTC = getStartOfUTCDay();
-          
-          if (logDate < startOfTodayUTC) {
-            localLog = null; // Reset if it's from a previous day
-            localStorage.removeItem('anonymousDailyLog'); // Clear from storage
-          }
+        // One-time migration from old log format to new array format
+        const allLogsRaw = localStorage.getItem('anonymousDailyLogs');
+        let allLogs: DailyLog[] = safeJsonParse(allLogsRaw) || [];
+        if (!allLogsRaw) {
+            const oldLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
+            if (oldLog) {
+                allLogs = [oldLog];
+                localStorage.setItem('anonymousDailyLogs', JSON.stringify(allLogs));
+                localStorage.removeItem('anonymousDailyLog');
+            }
         }
-        setDailyLog(localLog);
+        
+        const todayDateStr = format(getStartOfUTCDay(), 'yyyy-MM-dd');
+        const todayLog = allLogs.find(log => format(log.date.toDate(), 'yyyy-MM-dd') === todayDateStr) || null;
+        setDailyLog(todayLog);
     };
     
     if (currentUser) {
@@ -313,42 +328,53 @@ export default function FSFAPage() {
     return () => {
       if (unsubscribeLog) unsubscribeLog();
     };
-  }, [currentUser, isAuthLoading, db, toast, resetLocalData]);
+  }, [currentUser, isAuthLoading, db, toast, resetState]);
 
 
     // Effect to fetch weekly logs when dialog opens
     useEffect(() => {
         const fetchWeeklyLogs = async () => {
-            if (!currentUser || !db) {
-                setWeeklyLogs(null);
-                return;
-            }
             setIsWeeklyLoading(true);
+            
+            if (currentUser && db) { // Logged-in user
+                const today = new Date();
+                const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+                const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
 
-            const today = new Date();
-            const weekStart = startOfWeek(today, { weekStartsOn: 1 }); // Monday
-            const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
+                const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
+                const q = query(
+                    logsCollectionRef,
+                    where('date', '>=', Timestamp.fromDate(weekStart)),
+                    where('date', '<=', Timestamp.fromDate(weekEnd))
+                );
 
-            const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
-            const q = query(
-                logsCollectionRef,
-                where('date', '>=', Timestamp.fromDate(weekStart)),
-                where('date', '<=', Timestamp.fromDate(weekEnd))
-            );
+                try {
+                    const querySnapshot = await getDocs(q);
+                    const logs = querySnapshot.docs.map(doc => doc.data() as DailyLog);
+                    setWeeklyLogs(logs);
+                } catch (error) {
+                    console.error("Error fetching weekly logs:", error);
+                    toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดข้อมูลรายสัปดาห์ได้", variant: "destructive" });
+                    setWeeklyLogs([]);
+                } finally {
+                    setIsWeeklyLoading(false);
+                }
+            } else { // Anonymous user
+                const today = new Date();
+                const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+                const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
 
-            try {
-                const querySnapshot = await getDocs(q);
-                const logs = querySnapshot.docs.map(doc => doc.data() as DailyLog);
+                const allLogs: DailyLog[] = safeJsonParse(localStorage.getItem('anonymousDailyLogs')) || [];
+                const logs = allLogs.filter(log => {
+                    const logDate = log.date.toDate();
+                    return isWithinInterval(logDate, { start: weekStart, end: weekEnd });
+                });
                 setWeeklyLogs(logs);
-            } catch (error) {
-                console.error("Error fetching weekly logs:", error);
-                toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดข้อมูลรายสัปดาห์ได้", variant: "destructive" });
-            } finally {
                 setIsWeeklyLoading(false);
             }
         };
 
-        if (isWeeklyDialogOpen && currentUser) {
+        if (isWeeklyDialogOpen) {
             fetchWeeklyLogs();
         }
     }, [isWeeklyDialogOpen, currentUser, db, toast]);
@@ -356,36 +382,47 @@ export default function FSFAPage() {
     // Effect to fetch monthly logs when dialog opens
     useEffect(() => {
         const fetchMonthlyLogs = async () => {
-            if (!currentUser || !db) {
-                setMonthlyLogs(null);
-                return;
-            }
             setIsMonthlyLoading(true);
 
-            const today = new Date();
-            const monthStart = startOfMonth(today);
-            const monthEnd = endOfMonth(today);
+            if (currentUser && db) { // Logged-in user
+                const today = new Date();
+                const monthStart = startOfMonth(today);
+                const monthEnd = endOfMonth(today);
 
-            const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
-            const q = query(
-                logsCollectionRef,
-                where('date', '>=', Timestamp.fromDate(monthStart)),
-                where('date', '<=', Timestamp.fromDate(monthEnd))
-            );
+                const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
+                const q = query(
+                    logsCollectionRef,
+                    where('date', '>=', Timestamp.fromDate(monthStart)),
+                    where('date', '<=', Timestamp.fromDate(monthEnd))
+                );
 
-            try {
-                const querySnapshot = await getDocs(q);
-                const logs = querySnapshot.docs.map(doc => doc.data() as DailyLog);
+                try {
+                    const querySnapshot = await getDocs(q);
+                    const logs = querySnapshot.docs.map(doc => doc.data() as DailyLog);
+                    setMonthlyLogs(logs);
+                } catch (error) {
+                    console.error("Error fetching monthly logs:", error);
+                    toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดข้อมูลรายเดือนได้", variant: "destructive" });
+                    setMonthlyLogs([]);
+                } finally {
+                    setIsMonthlyLoading(false);
+                }
+            } else { // Anonymous user
+                const today = new Date();
+                const monthStart = startOfMonth(today);
+                const monthEnd = endOfMonth(today);
+                
+                const allLogs: DailyLog[] = safeJsonParse(localStorage.getItem('anonymousDailyLogs')) || [];
+                const logs = allLogs.filter(log => {
+                    const logDate = log.date.toDate();
+                    return isWithinInterval(logDate, { start: monthStart, end: monthEnd });
+                });
                 setMonthlyLogs(logs);
-            } catch (error) {
-                console.error("Error fetching monthly logs:", error);
-                toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดข้อมูลรายเดือนได้", variant: "destructive" });
-            } finally {
                 setIsMonthlyLoading(false);
             }
         };
 
-        if (isMonthlyDialogOpen && currentUser) {
+        if (isMonthlyDialogOpen) {
             fetchMonthlyLogs();
         }
     }, [isMonthlyDialogOpen, currentUser, db, toast]);
@@ -397,9 +434,7 @@ export default function FSFAPage() {
       if (userProfile && Object.keys(userProfile).length > 0) {
           localStorage.setItem('anonymousUserProfile', JSON.stringify(userProfile));
       }
-      if (dailyLog) {
-          localStorage.setItem('anonymousDailyLog', JSON.stringify(dailyLog));
-      }
+      // Note: dailyLog is now saved as part of anonymousDailyLogs in handleLogMeal
     }
   }, [userProfile, dailyLog, currentUser, isAuthLoading]);
 
@@ -581,9 +616,7 @@ export default function FSFAPage() {
     };
   
     try {
-      if (currentUser) {
-        if (!db) throw new Error("Firebase not initialized");
-        
+      if (currentUser && db) { // Logged-in user
         const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
         const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
         const logQuery = query(logsCollectionRef, where('date', '>=', Timestamp.fromDate(startOfTodayUTC)));
@@ -610,22 +643,34 @@ export default function FSFAPage() {
         }
         toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
   
-      } else {
+      } else { // Anonymous user
         const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-        let currentLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
+        const todayDateStr = format(startOfTodayUTC, 'yyyy-MM-dd');
 
-        // Check if the log is from a previous day and reset if necessary
-        if (currentLog && currentLog.date.toDate() < startOfTodayUTC) {
-            currentLog = null;
+        const allLogs: DailyLog[] = safeJsonParse(localStorage.getItem('anonymousDailyLogs')) || [];
+        const todayLogIndex = allLogs.findIndex(log => format(log.date.toDate(), 'yyyy-MM-dd') === todayDateStr);
+
+        let updatedLog: DailyLog;
+
+        if (todayLogIndex > -1) {
+            const currentLog = allLogs[todayLogIndex];
+            updatedLog = {
+                ...currentLog,
+                consumedCalories: currentLog.consumedCalories + newMeal.calories,
+                meals: [...currentLog.meals, newMeal],
+            };
+            allLogs[todayLogIndex] = updatedLog;
+        } else {
+            updatedLog = {
+                date: Timestamp.fromDate(startOfTodayUTC),
+                consumedCalories: newMeal.calories,
+                meals: [newMeal],
+            };
+            allLogs.push(updatedLog);
         }
-
-        const updatedLog: DailyLog = {
-            date: currentLog?.date || Timestamp.fromDate(startOfTodayUTC),
-            consumedCalories: (currentLog?.consumedCalories || 0) + newMeal.calories,
-            meals: [...(currentLog?.meals || []), newMeal],
-        };
+        
         setDailyLog(updatedLog);
-        localStorage.setItem('anonymousDailyLog', JSON.stringify(updatedLog));
+        localStorage.setItem('anonymousDailyLogs', JSON.stringify(allLogs));
         toast({ title: "บันทึกมื้ออาหารสำเร็จ" });
       }
     } catch (error: any) {
@@ -728,16 +773,19 @@ export default function FSFAPage() {
     return 'ดึก';
   };
 
-  const groupedMeals = dailyLog?.meals.reduce((acc, meal) => {
-    const mealDate = meal.timestamp.toDate();
-    const period = getMealPeriod(mealDate);
-    if (!acc[period]) {
-        acc[period] = [];
-    }
-    acc[period].push(meal);
-    acc[period].sort((a, b) => a.timestamp.seconds - b.timestamp.seconds);
-    return acc;
-  }, {} as Record<string, Meal[]>);
+  const groupedMeals = useMemo(() => {
+    if (!dailyLog?.meals) return {};
+    return dailyLog.meals.reduce((acc, meal) => {
+      const mealDate = meal.timestamp.toDate();
+      const period = getMealPeriod(mealDate);
+      if (!acc[period]) {
+          acc[period] = [];
+      }
+      acc[period].push(meal);
+      acc[period].sort((a, b) => a.timestamp.seconds - b.timestamp.seconds);
+      return acc;
+    }, {} as Record<string, Meal[]>);
+  }, [dailyLog]);
 
   const mealPeriodOrder = ['เช้า', 'สาย', 'เที่ยง', 'บ่าย', 'เย็น', 'ค่ำ', 'ดึก'];
 
@@ -1198,51 +1246,41 @@ export default function FSFAPage() {
                                   กราฟแสดงผลแคลอรี่ที่คุณบริโภคในสัปดาห์นี้
                               </DialogDescription>
                           </DialogHeader>
-                          {currentUser ? (
-                              isWeeklyLoading ? (
-                                  <div className="py-8 flex justify-center"><Loader2 className="animate-spin h-8 w-8" /></div>
-                              ) : weeklyLogs && weeklyLogs.length > 0 ? (
-                                  <div className="py-4 space-y-4">
-                                      <ChartContainer config={chartConfig} className="min-h-[250px] w-full">
-                                          <BarChart accessibilityLayer data={weeklyChartData}>
-                                              <CartesianGrid vertical={false} />
-                                              <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} stroke="#888888" />
-                                              <YAxis stroke="#888888" />
-                                              <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
-                                              <Bar dataKey="calories" fill="var(--color-calories)" radius={8} />
-                                          </BarChart>
-                                      </ChartContainer>
-                                       <div className="grid grid-cols-2 gap-4 text-center">
-                                          <Card className="p-4">
-                                             <CardHeader className="p-0 pb-2">
-                                                <CardTitle className="text-sm font-medium">แคลอรี่รวม</CardTitle>
-                                             </CardHeader>
-                                             <CardContent className="p-0">
-                                                <p className="text-2xl font-bold">{weeklyTotalCalories.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
-                                             </CardContent>
-                                          </Card>
-                                          <Card className="p-4">
-                                              <CardHeader className="p-0 pb-2">
-                                                <CardTitle className="text-sm font-medium">เฉลี่ยต่อวัน</CardTitle>
-                                              </CardHeader>
-                                              <CardContent className="p-0">
-                                                <p className="text-2xl font-bold">{weeklyAverageCalories.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
-                                              </CardContent>
-                                          </Card>
-                                      </div>
-                                  </div>
-                              ) : (
-                                  <p className="py-8 text-center text-muted-foreground">ยังไม่มีข้อมูลสำหรับสัปดาห์นี้</p>
-                              )
-                          ) : (
-                            <div className="py-8 text-center text-muted-foreground">
-                                <p className="mb-4">โปรดเข้าสู่ระบบเพื่อดูข้อมูลสรุปรายสัปดาห์</p>
-                                <Button onClick={() => { setIsWeeklyDialogOpen(false); openAuthDialog('login'); }}>
-                                    <LogIn className="mr-2 h-4 w-4" />
-                                    เข้าสู่ระบบ / ลงทะเบียน
-                                </Button>
-                            </div>
-                          )}
+                          {isWeeklyLoading ? (
+                                <div className="py-8 flex justify-center"><Loader2 className="animate-spin h-8 w-8" /></div>
+                            ) : weeklyLogs && weeklyLogs.length > 0 ? (
+                                <div className="py-4 space-y-4">
+                                    <ChartContainer config={chartConfig} className="min-h-[250px] w-full">
+                                        <BarChart accessibilityLayer data={weeklyChartData}>
+                                            <CartesianGrid vertical={false} />
+                                            <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} stroke="#888888" />
+                                            <YAxis stroke="#888888" />
+                                            <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
+                                            <Bar dataKey="calories" fill="var(--color-calories)" radius={8} />
+                                        </BarChart>
+                                    </ChartContainer>
+                                      <div className="grid grid-cols-2 gap-4 text-center">
+                                        <Card className="p-4">
+                                            <CardHeader className="p-0 pb-2">
+                                              <CardTitle className="text-sm font-medium">แคลอรี่รวม</CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="p-0">
+                                              <p className="text-2xl font-bold">{weeklyTotalCalories.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
+                                            </CardContent>
+                                        </Card>
+                                        <Card className="p-4">
+                                            <CardHeader className="p-0 pb-2">
+                                              <CardTitle className="text-sm font-medium">เฉลี่ยต่อวัน</CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="p-0">
+                                              <p className="text-2xl font-bold">{weeklyAverageCalories.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="py-8 text-center text-muted-foreground">ยังไม่มีข้อมูลสำหรับสัปดาห์นี้</p>
+                            )}
                       </DialogContent>
                   </Dialog>
 
@@ -1260,51 +1298,41 @@ export default function FSFAPage() {
                                   กราฟแสดงผลแคลอรี่ที่คุณบริโภคในเดือนนี้ ({format(new Date(), 'MMMM yyyy', { locale: th })})
                               </DialogDescription>
                           </DialogHeader>
-                           {currentUser ? (
-                              isMonthlyLoading ? (
-                                  <div className="py-8 flex justify-center"><Loader2 className="animate-spin h-8 w-8" /></div>
-                              ) : monthlyLogs && monthlyLogs.length > 0 ? (
-                                  <div className="py-4 space-y-4">
-                                      <ChartContainer config={chartConfig} className="min-h-[250px] w-full h-80">
-                                          <BarChart accessibilityLayer data={monthlyChartData}>
-                                              <CartesianGrid vertical={false} />
-                                              <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} stroke="#888888" fontSize={10} />
-                                              <YAxis stroke="#888888" />
-                                              <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
-                                              <Bar dataKey="calories" fill="var(--color-calories)" radius={4} />
-                                          </BarChart>
-                                      </ChartContainer>
-                                       <div className="grid grid-cols-2 gap-4 text-center">
-                                          <Card className="p-4">
-                                             <CardHeader className="p-0 pb-2">
-                                                <CardTitle className="text-sm font-medium">แคลอรี่รวม</CardTitle>
-                                             </CardHeader>
-                                             <CardContent className="p-0">
-                                                <p className="text-2xl font-bold">{monthlyTotalCalories.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
-                                             </CardContent>
-                                          </Card>
-                                          <Card className="p-4">
-                                              <CardHeader className="p-0 pb-2">
-                                                <CardTitle className="text-sm font-medium">เฉลี่ยต่อวัน (ที่มีข้อมูล)</CardTitle>
-                                              </CardHeader>
-                                              <CardContent className="p-0">
-                                                <p className="text-2xl font-bold">{monthlyAverageCalories.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
-                                              </CardContent>
-                                          </Card>
-                                      </div>
-                                  </div>
-                              ) : (
-                                  <p className="py-8 text-center text-muted-foreground">ยังไม่มีข้อมูลสำหรับเดือนนี้</p>
-                              )
-                          ) : (
-                            <div className="py-8 text-center text-muted-foreground">
-                                <p className="mb-4">โปรดเข้าสู่ระบบเพื่อดูข้อมูลสรุปรายเดือน</p>
-                                <Button onClick={() => { setIsMonthlyDialogOpen(false); openAuthDialog('login'); }}>
-                                    <LogIn className="mr-2 h-4 w-4" />
-                                    เข้าสู่ระบบ / ลงทะเบียน
-                                </Button>
-                            </div>
-                          )}
+                           {isMonthlyLoading ? (
+                                <div className="py-8 flex justify-center"><Loader2 className="animate-spin h-8 w-8" /></div>
+                            ) : monthlyLogs && monthlyLogs.length > 0 ? (
+                                <div className="py-4 space-y-4">
+                                    <ChartContainer config={chartConfig} className="min-h-[250px] w-full h-80">
+                                        <BarChart accessibilityLayer data={monthlyChartData}>
+                                            <CartesianGrid vertical={false} />
+                                            <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} stroke="#888888" fontSize={10} />
+                                            <YAxis stroke="#888888" />
+                                            <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
+                                            <Bar dataKey="calories" fill="var(--color-calories)" radius={4} />
+                                        </BarChart>
+                                    </ChartContainer>
+                                      <div className="grid grid-cols-2 gap-4 text-center">
+                                        <Card className="p-4">
+                                            <CardHeader className="p-0 pb-2">
+                                              <CardTitle className="text-sm font-medium">แคลอรี่รวม</CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="p-0">
+                                              <p className="text-2xl font-bold">{monthlyTotalCalories.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
+                                            </CardContent>
+                                        </Card>
+                                        <Card className="p-4">
+                                            <CardHeader className="p-0 pb-2">
+                                              <CardTitle className="text-sm font-medium">เฉลี่ยต่อวัน (ที่มีข้อมูล)</CardTitle>
+                                            </CardHeader>
+                                            <CardContent className="p-0">
+                                              <p className="text-2xl font-bold">{monthlyAverageCalories.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
+                                            </CardContent>
+                                        </Card>
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="py-8 text-center text-muted-foreground">ยังไม่มีข้อมูลสำหรับเดือนนี้</p>
+                            )}
                       </DialogContent>
                   </Dialog>
               </div>
