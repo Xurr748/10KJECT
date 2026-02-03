@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation'; 
@@ -28,6 +28,14 @@ import {
   initiateEmailSignIn,
   initiateEmailSignUp,
 } from '@/firebase/non-blocking-login';
+
+// date-fns for date calculations
+import { startOfWeek, endOfWeek, startOfMonth, endOfMonth, eachDayOfInterval, format } from 'date-fns';
+import { th } from 'date-fns/locale';
+
+// Recharts for charts
+import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, CartesianGrid } from "recharts"
+import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 
 
 // ShadCN UI Components
@@ -61,7 +69,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 
 // Lucide Icons
-import { UploadCloud, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, MessageSquareWarning, Send, MessageCircle, ScanLine, Flame, Calculator, PlusCircle, BookCheck, Clock } from 'lucide-react';
+import { UploadCloud, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, MessageSquareWarning, Send, MessageCircle, ScanLine, Flame, Calculator, PlusCircle, BookCheck, Clock, CalendarDays, BarChart as BarChartIcon } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 const GENERIC_SAFETY_UNAVAILABLE = "ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้";
@@ -145,6 +153,14 @@ export default function FSFAPage() {
   const [dailyLog, setDailyLog] = useState<DailyLog | null>(null);
   const [dailyLogId, setDailyLogId] = useState<string | null>(null);
   const [isLoggingMeal, setIsLoggingMeal] = useState(false);
+
+  // States for weekly and monthly summaries
+  const [isWeeklyDialogOpen, setIsWeeklyDialogOpen] = useState(false);
+  const [isMonthlyDialogOpen, setIsMonthlyDialogOpen] = useState(false);
+  const [weeklyLogs, setWeeklyLogs] = useState<DailyLog[] | null>(null);
+  const [monthlyLogs, setMonthlyLogs] = useState<DailyLog[] | null>(null);
+  const [isWeeklyLoading, setIsWeeklyLoading] = useState(false);
+  const [isMonthlyLoading, setIsMonthlyLoading] = useState(false);
 
   const [countdown, setCountdown] = useState<string>('');
 
@@ -298,6 +314,81 @@ export default function FSFAPage() {
       if (unsubscribeLog) unsubscribeLog();
     };
   }, [currentUser, isAuthLoading, db, toast, resetLocalData]);
+
+
+    // Effect to fetch weekly logs when dialog opens
+    useEffect(() => {
+        const fetchWeeklyLogs = async () => {
+            if (!currentUser || !db) {
+                setWeeklyLogs(null);
+                return;
+            }
+            setIsWeeklyLoading(true);
+
+            const today = new Date();
+            const weekStart = startOfWeek(today, { weekStartsOn: 1 }); // Monday
+            const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
+
+            const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
+            const q = query(
+                logsCollectionRef,
+                where('date', '>=', Timestamp.fromDate(weekStart)),
+                where('date', '<=', Timestamp.fromDate(weekEnd))
+            );
+
+            try {
+                const querySnapshot = await getDocs(q);
+                const logs = querySnapshot.docs.map(doc => doc.data() as DailyLog);
+                setWeeklyLogs(logs);
+            } catch (error) {
+                console.error("Error fetching weekly logs:", error);
+                toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดข้อมูลรายสัปดาห์ได้", variant: "destructive" });
+            } finally {
+                setIsWeeklyLoading(false);
+            }
+        };
+
+        if (isWeeklyDialogOpen && !weeklyLogs && currentUser) {
+            fetchWeeklyLogs();
+        }
+    }, [isWeeklyDialogOpen, weeklyLogs, currentUser, db, toast]);
+
+    // Effect to fetch monthly logs when dialog opens
+    useEffect(() => {
+        const fetchMonthlyLogs = async () => {
+            if (!currentUser || !db) {
+                setMonthlyLogs(null);
+                return;
+            }
+            setIsMonthlyLoading(true);
+
+            const today = new Date();
+            const monthStart = startOfMonth(today);
+            const monthEnd = endOfMonth(today);
+
+            const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
+            const q = query(
+                logsCollectionRef,
+                where('date', '>=', Timestamp.fromDate(monthStart)),
+                where('date', '<=', Timestamp.fromDate(monthEnd))
+            );
+
+            try {
+                const querySnapshot = await getDocs(q);
+                const logs = querySnapshot.docs.map(doc => doc.data() as DailyLog);
+                setMonthlyLogs(logs);
+            } catch (error) {
+                console.error("Error fetching monthly logs:", error);
+                toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดข้อมูลรายเดือนได้", variant: "destructive" });
+            } finally {
+                setIsMonthlyLoading(false);
+            }
+        };
+
+        if (isMonthlyDialogOpen && !monthlyLogs && currentUser) {
+            fetchMonthlyLogs();
+        }
+    }, [isMonthlyDialogOpen, monthlyLogs, currentUser, db, toast]);
 
 
   // --- DATA SAVING (Anonymous User) ---
@@ -652,6 +743,48 @@ export default function FSFAPage() {
   const mealPeriodOrder = ['เช้า', 'สาย', 'เที่ยง', 'บ่าย', 'เย็น', 'ค่ำ', 'ดึก'];
 
 
+  // Chart data and configs
+    const chartConfig = {
+        calories: { label: "แคลอรี่", color: "hsl(var(--chart-1))" },
+    } satisfies ChartConfig;
+    
+    const weeklyChartData = useMemo(() => {
+        if (!weeklyLogs) return [];
+        const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
+        const weekEnd = endOfWeek(new Date(), { weekStartsOn: 1 });
+        const daysInWeek = eachDayOfInterval({ start: weekStart, end: weekEnd });
+
+        return daysInWeek.map(day => {
+            const logForDay = weeklyLogs.find(log => format(log.date.toDate(), 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'));
+            return {
+                name: format(day, 'E', { locale: th }),
+                calories: logForDay ? logForDay.consumedCalories : 0,
+            };
+        });
+    }, [weeklyLogs]);
+
+    const monthlyChartData = useMemo(() => {
+        if (!monthlyLogs) return [];
+        const monthStart = startOfMonth(new Date());
+        const monthEnd = endOfMonth(new Date());
+        const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+
+        return daysInMonth.map(day => {
+            const logForDay = monthlyLogs.find(log => format(log.date.toDate(), 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'));
+            return {
+                name: format(day, 'd'),
+                calories: logForDay ? logForDay.consumedCalories : 0,
+            };
+        });
+    }, [monthlyLogs]);
+    
+    const weeklyTotalCalories = useMemo(() => weeklyLogs?.reduce((sum, log) => sum + log.consumedCalories, 0) || 0, [weeklyLogs]);
+    const weeklyAverageCalories = useMemo(() => (weeklyLogs && weeklyLogs.length > 0) ? Math.round(weeklyTotalCalories / weeklyLogs.length) : 0, [weeklyLogs, weeklyTotalCalories]);
+    
+    const monthlyTotalCalories = useMemo(() => monthlyLogs?.reduce((sum, log) => sum + log.consumedCalories, 0) || 0, [monthlyLogs]);
+    const monthlyAverageCalories = useMemo(() => (monthlyLogs && monthlyLogs.length > 0) ? Math.round(monthlyTotalCalories / monthlyLogs.length) : 0, [monthlyLogs, monthlyTotalCalories]);
+
+
   return (
     <div className="min-h-screen bg-background text-foreground font-body p-2 sm:p-4 md:p-8">
       <header className="py-4 sm:py-6 md:py-8 text-center bg-gradient-to-r from-primary/10 via-secondary/20 to-primary/10 rounded-lg shadow-md mb-6 sm:mb-8 md:mb-12">
@@ -959,97 +1092,223 @@ export default function FSFAPage() {
                 )}
               </Card>
 
-              <Dialog>
-                <DialogTrigger asChild>
-                  <Button variant="outline" className="w-full">
-                    <BookCheck className="mr-2 h-4 w-4" />
-                    ภาพรวมแคลอรี่วันนี้
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-md">
-                  <DialogHeader>
-                    <DialogTitle>ภาพรวมแคลอรี่วันนี้</DialogTitle>
-                    <DialogDescription>
-                      ตรวจสอบเป้าหมายและบันทึกแคลอรี่ของคุณสำหรับวันนี้
-                    </DialogDescription>
-                  </DialogHeader>
-                  <div className="py-4">
-                      <div className="space-y-4">
-                        <Card className="p-4 text-center bg-secondary/30">
-                          <CardTitle className="text-base font-semibold">แคลอรี่ที่แนะนำต่อวัน</CardTitle>
-                          <CardDescription>(เป้าหมาย)</CardDescription>
-                          {userProfile.dailyCalorieGoal ? (
-                            <p className="text-2xl font-bold text-primary pt-2">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
-                           ) : (
-                             <p className="text-sm text-muted-foreground pt-2">คำนวณ BMI เพื่อตั้งค่าเป้าหมาย</p>
-                           )}
-                        </Card>
+              <div className="grid grid-cols-1 gap-2">
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" className="w-full">
+                        <BookCheck className="mr-2 h-4 w-4" />
+                        ภาพรวมวันนี้
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>ภาพรวมแคลอรี่วันนี้</DialogTitle>
+                        <DialogDescription>
+                          ตรวจสอบเป้าหมายและบันทึกแคลอรี่ของคุณสำหรับวันนี้
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="py-4">
+                          <div className="space-y-4">
+                            <Card className="p-4 text-center bg-secondary/30">
+                              <CardTitle className="text-base font-semibold">แคลอรี่ที่แนะนำต่อวัน</CardTitle>
+                              <CardDescription>(เป้าหมาย)</CardDescription>
+                              {userProfile.dailyCalorieGoal ? (
+                                <p className="text-2xl font-bold text-primary pt-2">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
+                              ) : (
+                                <p className="text-sm text-muted-foreground pt-2">คำนวณ BMI เพื่อตั้งค่าเป้าหมาย</p>
+                              )}
+                            </Card>
 
-                        <Card className="p-4 bg-secondary/30">
-                          <CardTitle className="text-base font-semibold text-center">แคลอรี่ที่ใช้ไปแล้ว</CardTitle>
-                          <p className={`text-3xl font-bold text-center pt-2 ${dailyLog && userProfile.dailyCalorieGoal && dailyLog.consumedCalories > userProfile.dailyCalorieGoal ? 'text-destructive' : 'text-green-500'}`}>
-                            {dailyLog?.consumedCalories.toLocaleString() ?? 0} <span className="text-base font-normal">kcal</span>
-                          </p>
-                          
-                          {dailyLog && dailyLog.meals.length > 0 && (
-                            <>
-                              <Separator className="my-3" />
-                              <div className="space-y-2">
-                                <h4 className="font-semibold text-foreground text-center">มื้อที่บันทึกแล้ว</h4>
-                                <ScrollArea className="h-32">
-                                  <div className="space-y-3 pr-4">
-                                  {groupedMeals && mealPeriodOrder.map(period => (
-                                    groupedMeals[period] && (
-                                      <div key={period}>
-                                        <p className="font-semibold text-sm text-primary">{period}</p>
-                                        <div className="pl-2 space-y-1 mt-1 border-l-2 border-primary/20">
-                                          {groupedMeals[period].map((meal, index) => (
-                                            <div key={index} className="flex justify-between items-center text-sm text-muted-foreground">
-                                              <span className="truncate pr-2">
-                                                {meal.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}: {meal.name}
-                                              </span>
-                                              <span className="font-medium whitespace-nowrap text-foreground/90">{meal.calories.toLocaleString()} kcal</span>
+                            <Card className="p-4 bg-secondary/30">
+                              <CardTitle className="text-base font-semibold text-center">แคลอรี่ที่ใช้ไปแล้ว</CardTitle>
+                              <p className={`text-3xl font-bold text-center pt-2 ${dailyLog && userProfile.dailyCalorieGoal && dailyLog.consumedCalories > userProfile.dailyCalorieGoal ? 'text-destructive' : 'text-green-500'}`}>
+                                {dailyLog?.consumedCalories.toLocaleString() ?? 0} <span className="text-base font-normal">kcal</span>
+                              </p>
+                              
+                              {dailyLog && dailyLog.meals.length > 0 && (
+                                <>
+                                  <Separator className="my-3" />
+                                  <div className="space-y-2">
+                                    <h4 className="font-semibold text-foreground text-center">มื้อที่บันทึกแล้ว</h4>
+                                    <ScrollArea className="h-32">
+                                      <div className="space-y-3 pr-4">
+                                      {groupedMeals && mealPeriodOrder.map(period => (
+                                        groupedMeals[period] && (
+                                          <div key={period}>
+                                            <p className="font-semibold text-sm text-primary">{period}</p>
+                                            <div className="pl-2 space-y-1 mt-1 border-l-2 border-primary/20">
+                                              {groupedMeals[period].map((meal, index) => (
+                                                <div key={index} className="flex justify-between items-center text-sm text-muted-foreground">
+                                                  <span className="truncate pr-2">
+                                                    {meal.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}: {meal.name}
+                                                  </span>
+                                                  <span className="font-medium whitespace-nowrap text-foreground/90">{meal.calories.toLocaleString()} kcal</span>
+                                                </div>
+                                              ))}
                                             </div>
-                                          ))}
-                                        </div>
+                                          </div>
+                                        )
+                                      ))}
                                       </div>
-                                    )
-                                  ))}
+                                    </ScrollArea>
                                   </div>
-                                </ScrollArea>
-                              </div>
-                            </>
-                          )}
-                        </Card>
-                      </div>
+                                </>
+                              )}
+                            </Card>
+                          </div>
 
-                      {countdown && (
-                        <div className="mt-4 text-center border-t pt-4">
-                          <p className="text-sm text-muted-foreground flex items-center justify-center">
-                            <Clock className="mr-2 h-4 w-4" />
-                            รีเซ็ตข้อมูลในอีก: <span className="font-semibold ml-1">{countdown}</span>
-                          </p>
-                        </div>
-                      )}
-                      
-                      {!currentUser && (
-                        <div className="mt-4 text-center border-t pt-4">
-                            <p className="text-sm text-muted-foreground mb-3">เข้าสู่ระบบเพื่อบันทึกข้อมูลอย่างถาวร</p>
-                            <Button onClick={()=>{
-                                const calorieDialogTrigger = document.querySelector('button[aria-haspopup="dialog"][aria-expanded="true"]');
-                                if (calorieDialogTrigger instanceof HTMLElement) {
-                                    calorieDialogTrigger.click();
-                                }
-                                openAuthDialog('login');
-                            }}>
-                                <LogIn className="mr-2 h-4 w-4" />
-                                เข้าสู่ระบบ / ลงทะเบียน
-                            </Button>
-                        </div>
-                      )}
-                  </div>
-                </DialogContent>
-              </Dialog>
+                          {countdown && (
+                            <div className="mt-4 text-center border-t pt-4">
+                              <p className="text-sm text-muted-foreground flex items-center justify-center">
+                                <Clock className="mr-2 h-4 w-4" />
+                                รีเซ็ตข้อมูลในอีก: <span className="font-semibold ml-1">{countdown}</span>
+                              </p>
+                            </div>
+                          )}
+                          
+                          {!currentUser && (
+                            <div className="mt-4 text-center border-t pt-4">
+                                <p className="text-sm text-muted-foreground mb-3">เข้าสู่ระบบเพื่อบันทึกข้อมูลอย่างถาวร</p>
+                                <Button onClick={()=>{
+                                    const calorieDialogTrigger = document.querySelector('button[aria-haspopup="dialog"][aria-expanded="true"]');
+                                    if (calorieDialogTrigger instanceof HTMLElement) {
+                                        calorieDialogTrigger.click();
+                                    }
+                                    openAuthDialog('login');
+                                }}>
+                                    <LogIn className="mr-2 h-4 w-4" />
+                                    เข้าสู่ระบบ / ลงทะเบียน
+                                </Button>
+                            </div>
+                          )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                  
+                  <Dialog open={isWeeklyDialogOpen} onOpenChange={setIsWeeklyDialogOpen}>
+                      <DialogTrigger asChild>
+                          <Button variant="outline" className="w-full">
+                              <CalendarDays className="mr-2 h-4 w-4" />
+                              ภาพรวมสัปดาห์นี้
+                          </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-lg">
+                          <DialogHeader>
+                              <DialogTitle>ภาพรวมแคลอรี่สัปดาห์นี้</DialogTitle>
+                              <DialogDescription>
+                                  กราฟแสดงผลแคลอรี่ที่คุณบริโภคในสัปดาห์นี้
+                              </DialogDescription>
+                          </DialogHeader>
+                          {currentUser ? (
+                              isWeeklyLoading ? (
+                                  <div className="py-8 flex justify-center"><Loader2 className="animate-spin h-8 w-8" /></div>
+                              ) : weeklyLogs && weeklyLogs.length > 0 ? (
+                                  <div className="py-4 space-y-4">
+                                      <ChartContainer config={chartConfig} className="min-h-[250px] w-full">
+                                          <BarChart accessibilityLayer data={weeklyChartData}>
+                                              <CartesianGrid vertical={false} />
+                                              <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} stroke="#888888" />
+                                              <YAxis stroke="#888888" />
+                                              <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
+                                              <Bar dataKey="calories" fill="var(--color-calories)" radius={8} />
+                                          </BarChart>
+                                      </ChartContainer>
+                                       <div className="grid grid-cols-2 gap-4 text-center">
+                                          <Card className="p-4">
+                                             <CardHeader className="p-0 pb-2">
+                                                <CardTitle className="text-sm font-medium">แคลอรี่รวม</CardTitle>
+                                             </CardHeader>
+                                             <CardContent className="p-0">
+                                                <p className="text-2xl font-bold">{weeklyTotalCalories.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
+                                             </CardContent>
+                                          </Card>
+                                          <Card className="p-4">
+                                              <CardHeader className="p-0 pb-2">
+                                                <CardTitle className="text-sm font-medium">เฉลี่ยต่อวัน</CardTitle>
+                                              </CardHeader>
+                                              <CardContent className="p-0">
+                                                <p className="text-2xl font-bold">{weeklyAverageCalories.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
+                                              </CardContent>
+                                          </Card>
+                                      </div>
+                                  </div>
+                              ) : (
+                                  <p className="py-8 text-center text-muted-foreground">ยังไม่มีข้อมูลสำหรับสัปดาห์นี้</p>
+                              )
+                          ) : (
+                            <div className="py-8 text-center text-muted-foreground">
+                                <p className="mb-4">โปรดเข้าสู่ระบบเพื่อดูข้อมูลสรุปรายสัปดาห์</p>
+                                <Button onClick={() => { setIsWeeklyDialogOpen(false); openAuthDialog('login'); }}>
+                                    <LogIn className="mr-2 h-4 w-4" />
+                                    เข้าสู่ระบบ / ลงทะเบียน
+                                </Button>
+                            </div>
+                          )}
+                      </DialogContent>
+                  </Dialog>
+
+                   <Dialog open={isMonthlyDialogOpen} onOpenChange={setIsMonthlyDialogOpen}>
+                      <DialogTrigger asChild>
+                          <Button variant="outline" className="w-full">
+                              <BarChartIcon className="mr-2 h-4 w-4" />
+                              ภาพรวมเดือนนี้
+                          </Button>
+                      </DialogTrigger>
+                      <DialogContent className="max-w-3xl">
+                          <DialogHeader>
+                              <DialogTitle>ภาพรวมแคลอรี่เดือนนี้</DialogTitle>
+                              <DialogDescription>
+                                  กราฟแสดงผลแคลอรี่ที่คุณบริโภคในเดือนนี้ ({format(new Date(), 'MMMM yyyy', { locale: th })})
+                              </DialogDescription>
+                          </DialogHeader>
+                           {currentUser ? (
+                              isMonthlyLoading ? (
+                                  <div className="py-8 flex justify-center"><Loader2 className="animate-spin h-8 w-8" /></div>
+                              ) : monthlyLogs && monthlyLogs.length > 0 ? (
+                                  <div className="py-4 space-y-4">
+                                      <ChartContainer config={chartConfig} className="min-h-[250px] w-full h-80">
+                                          <BarChart accessibilityLayer data={monthlyChartData}>
+                                              <CartesianGrid vertical={false} />
+                                              <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} stroke="#888888" fontSize={10} />
+                                              <YAxis stroke="#888888" />
+                                              <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
+                                              <Bar dataKey="calories" fill="var(--color-calories)" radius={4} />
+                                          </BarChart>
+                                      </ChartContainer>
+                                       <div className="grid grid-cols-2 gap-4 text-center">
+                                          <Card className="p-4">
+                                             <CardHeader className="p-0 pb-2">
+                                                <CardTitle className="text-sm font-medium">แคลอรี่รวม</CardTitle>
+                                             </CardHeader>
+                                             <CardContent className="p-0">
+                                                <p className="text-2xl font-bold">{monthlyTotalCalories.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
+                                             </CardContent>
+                                          </Card>
+                                          <Card className="p-4">
+                                              <CardHeader className="p-0 pb-2">
+                                                <CardTitle className="text-sm font-medium">เฉลี่ยต่อวัน (ที่มีข้อมูล)</CardTitle>
+                                              </CardHeader>
+                                              <CardContent className="p-0">
+                                                <p className="text-2xl font-bold">{monthlyAverageCalories.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
+                                              </CardContent>
+                                          </Card>
+                                      </div>
+                                  </div>
+                              ) : (
+                                  <p className="py-8 text-center text-muted-foreground">ยังไม่มีข้อมูลสำหรับเดือนนี้</p>
+                              )
+                          ) : (
+                            <div className="py-8 text-center text-muted-foreground">
+                                <p className="mb-4">โปรดเข้าสู่ระบบเพื่อดูข้อมูลสรุปรายเดือน</p>
+                                <Button onClick={() => { setIsMonthlyDialogOpen(false); openAuthDialog('login'); }}>
+                                    <LogIn className="mr-2 h-4 w-4" />
+                                    เข้าสู่ระบบ / ลงทะเบียน
+                                </Button>
+                            </div>
+                          )}
+                      </DialogContent>
+                  </Dialog>
+              </div>
 
             </div>
           </PageSection>
@@ -1064,3 +1323,5 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+    
