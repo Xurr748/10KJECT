@@ -636,73 +636,6 @@ export default function FSFAPage() {
     }
   };
   
-  const handleTestLogMeal = async () => {
-    if (isLoggingMeal) return;
-    setIsLoggingMeal(true);
-  
-    const testMeal: Meal = {
-      name: "มื้อทดสอบ",
-      calories: 150,
-      timestamp: Timestamp.now(),
-    };
-  
-    try {
-      if (currentUser) {
-        if (!db) throw new Error("Firebase not initialized");
-        
-        const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-        const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
-        const logQuery = query(logsCollectionRef, where('date', '>=', Timestamp.fromDate(startOfTodayUTC)));
-        
-        const logSnapshot = await getDocs(logQuery);
-        
-        if (logSnapshot.empty) {
-          const newLogData: DailyLog = {
-            date: Timestamp.fromDate(startOfTodayUTC),
-            consumedCalories: testMeal.calories,
-            meals: [testMeal],
-          };
-          addDocumentNonBlocking(logsCollectionRef, newLogData);
-        } else {
-          const logDocRef = logSnapshot.docs[0].ref;
-          const currentLogData = logSnapshot.docs[0].data() as DailyLog;
-          const updatedMeals = [...currentLogData.meals, testMeal];
-          const updatedCalories = currentLogData.consumedCalories + testMeal.calories;
-          
-          updateDocumentNonBlocking(logDocRef, {
-            meals: updatedMeals,
-            consumedCalories: updatedCalories
-          });
-        }
-        toast({ title: "บันทึกมื้อทดสอบสำเร็จ!" });
-  
-      } else {
-        const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-        let currentLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
-
-        // Check if the log is from a previous day and reset if necessary
-        if (currentLog && currentLog.date.toDate() < startOfTodayUTC) {
-            currentLog = null;
-        }
-
-        const updatedLog: DailyLog = {
-            date: currentLog?.date || Timestamp.fromDate(startOfTodayUTC),
-            consumedCalories: (currentLog?.consumedCalories || 0) + testMeal.calories,
-            meals: [...(currentLog?.meals || []), testMeal],
-        };
-        setDailyLog(updatedLog);
-        localStorage.setItem('anonymousDailyLog', JSON.stringify(updatedLog));
-        toast({ title: "บันทึกมื้อทดสอบสำเร็จ" });
-      }
-    } catch (error: any) {
-        console.error("[Test Log Meal] Error:", error.message);
-        toast({ title: "เกิดข้อผิดพลาดในการบันทึกข้อมูลทดสอบ", description: error.message, variant: "destructive" });
-    } finally {
-        setIsLoggingMeal(false);
-    }
-  };
-
-
   const getBmiInterpretation = (bmi: number | undefined): {text: string, color: string} => {
     if (bmi === undefined) return {text: 'N/A', color: 'text-foreground'};
     if (bmi < 18.5) return { text: 'ผอม', color: 'text-blue-500' };
@@ -1248,12 +1181,6 @@ export default function FSFAPage() {
                             </div>
                           )}
                       </div>
-                      <DialogFooter className="border-t pt-4 mt-4">
-                        <Button variant="secondary" onClick={handleTestLogMeal} disabled={isLoggingMeal}>
-                            {isLoggingMeal ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-                            บันทึกทดสอบ (150 kcal)
-                        </Button>
-                      </DialogFooter>
                     </DialogContent>
                   </Dialog>
                   
