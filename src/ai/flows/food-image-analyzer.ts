@@ -22,7 +22,6 @@ const ScanFoodImageInputSchema = z.object({
       'A food image as a Base64 data URI. Format: data:<mimetype>;base64,<encoded_data>'
     ),
 });
-
 export type ScanFoodImageInput = z.infer<typeof ScanFoodImageInputSchema>;
 
 const NutritionalInfoObjectSchema = z.object({
@@ -37,9 +36,8 @@ const ScanFoodImageOutputSchema = z.object({
   nutritionalInformation: NutritionalInfoObjectSchema.describe('Structured nutritional information about the food item.'),
   safetyPrecautions: z
     .array(z.string())
-    .min(1)
-    .max(5)
-    .describe('An array of 1 to 5 food safety precautions for seniors (in Thai).'),
+    .length(3, { message: "Must provide exactly 3 safety precautions." })
+    .describe('An array of exactly 3 food safety precautions for seniors (in Thai).'),
 });
 
 export type ScanFoodImageOutput = z.infer<typeof ScanFoodImageOutputSchema>;
@@ -97,7 +95,7 @@ Analyze the food image provided: {{media url=foodImage}}
     "visibleIngredients": "string[]",
     "reasoning": "string"
   },
-  "safetyPrecautions": "string[]" // An array of 1 to 5 items.
+  "safetyPrecautions": "string[]" // An array of EXACTLY 3 items.
 }
 
 ---
@@ -146,7 +144,9 @@ Analyze the food image provided: {{media url=foodImage}}
     "reasoning": "ไม่สามารถวิเคราะห์ภาพได้เนื่องจากภาพไม่ชัดเจน"
   },
   "safetyPrecautions": [
-    "โปรดถ่ายภาพให้ชัดเจนขึ้นและลองอีกครั้ง"
+    "โปรดถ่ายภาพให้ชัดเจนขึ้นและลองอีกครั้ง",
+    "ตรวจสอบให้แน่ใจว่าภาพมีแสงสว่างเพียงพอ",
+    "รูปภาพอาจไม่ใช่รูปอาหาร"
   ]
 }
 \`\`\`
@@ -180,11 +180,19 @@ const scanFoodImageFlow = ai.defineFlow(
             visibleIngredients: [],
             reasoning: 'AI ไม่ได้ส่งข้อมูลกลับมา',
           },
-          safetyPrecautions: ['โปรดลองอีกครั้ง หรือใช้รูปภาพอื่น'],
+          safetyPrecautions: ['โปรดลองอีกครั้ง หรือใช้รูปภาพอื่น', 'ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต', 'รูปภาพอาจไม่ชัดเจน'],
         };
       }
 
       // Build a complete, validated output object with fallbacks to ensure schema is always met.
+      let precautions = partialOutput.safetyPrecautions?.filter(p => typeof p === 'string' && p.length > 0) ?? [];
+      if (precautions.length > 3) {
+        precautions = precautions.slice(0, 3);
+      }
+      while (precautions.length < 3) {
+        precautions.push('ไม่มีคำแนะนำด้านความปลอดภัยเพิ่มเติม');
+      }
+
       const finalOutput: ScanFoodImageOutput = {
         foodItem: partialOutput.foodItem || 'ไม่สามารถระบุชนิดอาหารได้',
         nutritionalInformation: {
@@ -192,11 +200,7 @@ const scanFoodImageFlow = ai.defineFlow(
           visibleIngredients: partialOutput.nutritionalInformation?.visibleIngredients ?? [],
           reasoning: partialOutput.nutritionalInformation?.reasoning ?? 'ไม่มีข้อมูลโภชนาการ',
         },
-        safetyPrecautions:
-          partialOutput.safetyPrecautions &&
-          partialOutput.safetyPrecautions.length > 0
-            ? partialOutput.safetyPrecautions.slice(0, 5) // Ensure max 5 items
-            : ['ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้'],
+        safetyPrecautions: precautions,
       };
 
 
@@ -212,7 +216,7 @@ const scanFoodImageFlow = ai.defineFlow(
             visibleIngredients: [],
             reasoning: 'เกิดข้อผิดพลาดในการประมวลผลจาก AI',
           },
-          safetyPrecautions: ['โปรดลองอีกครั้ง หรือใช้รูปภาพอื่น'],
+          safetyPrecautions: ['โปรดลองอีกครั้ง หรือใช้รูปภาพอื่น', 'ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต', 'รูปภาพอาจไม่ชัดเจน'],
       };
     }
   }
