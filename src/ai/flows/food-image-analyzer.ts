@@ -57,8 +57,9 @@ const prompt = ai.definePrompt({
   output: { schema: LlmOutputSchema }, // Use the lenient schema for LLM output
   model: 'googleai/gemini-1.5-pro',
   config: {
-    temperature: 0.3,
-    maxOutputTokens: 600,
+    temperature: 0.15,
+    topP: 0.85,
+    maxOutputTokens: 800,
   },
   prompt: `
 You are a professional nutritionist and culinary expert, tasked with analyzing food images for the MOMU SCAN application. Your persona is that of a helpful, accurate, and knowledgeable expert specializing in global cuisine, with a deep understanding of Thai food. Your primary goal is to provide users with structured, easy-to-understand nutritional information and safety advice.
