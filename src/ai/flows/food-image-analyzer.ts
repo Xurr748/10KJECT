@@ -143,15 +143,14 @@ const scanFoodImageFlow = ai.defineFlow(
         throw new Error('AI returned empty or invalid output');
       }
 
-      // Build a complete, validated output object with fallbacks.
+      // Build a complete, validated output object with fallbacks to ensure schema is always met.
       const finalOutput: ScanFoodImageOutput = {
         foodItem: partialOutput.foodItem || 'ไม่สามารถระบุชนิดอาหารได้',
-        nutritionalInformation:
-          partialOutput.nutritionalInformation || {
-            estimatedCalories: 0,
-            visibleIngredients: [],
-            reasoning: 'ไม่มีข้อมูลโภชนาการ',
-          },
+        nutritionalInformation: {
+          estimatedCalories: partialOutput.nutritionalInformation?.estimatedCalories ?? 0,
+          visibleIngredients: partialOutput.nutritionalInformation?.visibleIngredients ?? [],
+          reasoning: partialOutput.nutritionalInformation?.reasoning ?? 'ไม่มีข้อมูลโภชนาการ',
+        },
         safetyPrecautions:
           partialOutput.safetyPrecautions &&
           partialOutput.safetyPrecautions.length > 0
@@ -159,8 +158,9 @@ const scanFoodImageFlow = ai.defineFlow(
             : ['ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้'],
       };
 
+
       console.log('[scanFoodImageFlow] Final Parsed Output:', finalOutput);
-      return finalOutput; // This is guaranteed to match the strict outputSchema
+      return finalOutput; // This is now guaranteed to match the strict outputSchema
     } catch (err: any) {
       console.error('ScanFoodImageFlow Error:', err);
       // Re-throw a more user-friendly error message
