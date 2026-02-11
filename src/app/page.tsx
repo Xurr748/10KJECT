@@ -1019,7 +1019,7 @@ export default function FSFAPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <h4 className="font-semibold text-foreground flex items-center gap-2 mb-2"><Flame className="w-5 h-5 text-orange-500" />แคลอรี่โดยประมาณ</h4>
-                                        <p className="text-2xl font-bold">{imageAnalysisResult.nutritionalInformation.estimatedCalories > 0 ? imageAnalysisResult.nutritionalInformation.estimatedCalories.toLocaleString() : 'N/A'} <span className="text-sm font-normal text-muted-foreground">kcal</span></p>
+                                        <p className="text-2xl font-bold">{(imageAnalysisResult.nutritionalInformation.estimatedCalories ?? 0) > 0 ? imageAnalysisResult.nutritionalInformation.estimatedCalories.toLocaleString() : 'N/A'} <span className="text-sm font-normal text-muted-foreground">kcal</span></p>
                                         <p className="text-xs text-muted-foreground mt-1">{imageAnalysisResult.nutritionalInformation.reasoning}</p>
                                     </div>
                                     {imageAnalysisResult.nutritionalInformation.visibleIngredients.length > 0 && (
@@ -1051,7 +1051,7 @@ export default function FSFAPage() {
                     </CardContent>
                     {isFoodIdentified && (
                         <CardFooter>
-                             <Button size="lg" onClick={handleLogMeal} disabled={isLoggingMeal || imageAnalysisResult.nutritionalInformation.estimatedCalories <= 0} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
+                             <Button size="lg" onClick={handleLogMeal} disabled={isLoggingMeal || (imageAnalysisResult.nutritionalInformation.estimatedCalories ?? 0) <= 0} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
                                 {isLoggingMeal ? <Loader2 className="animate-spin mr-2" /> : <PlusCircle className="mr-2"/>}
                                 เพิ่มในบันทึกแคลอรี่
                             </Button>
@@ -1299,4 +1299,5 @@ export default function FSFAPage() {
 }
 
     
+
 
