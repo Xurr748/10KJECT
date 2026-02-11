@@ -145,8 +145,17 @@ const scanFoodImageFlow = ai.defineFlow(
       console.log('[scanFoodImageFlow] Raw AI Output:', JSON.stringify(partialOutput));
 
       if (!partialOutput) {
-        console.error('[scanFoodImageFlow] AI returned empty or invalid output.');
-        throw new Error('AI returned empty or invalid output');
+        console.warn('[scanFoodImageFlow] AI returned null or undefined output.');
+        // On failure, return a valid object that indicates failure.
+        return {
+          foodItem: 'ไม่สามารถระบุชนิดอาหารได้',
+          nutritionalInformation: {
+            estimatedCalories: 0,
+            visibleIngredients: [],
+            reasoning: 'AI ไม่ได้ส่งข้อมูลกลับมา',
+          },
+          safetyPrecautions: ['โปรดลองอีกครั้ง หรือใช้รูปภาพอื่น'],
+        };
       }
 
       // Build a complete, validated output object with fallbacks to ensure schema is always met.
@@ -169,10 +178,16 @@ const scanFoodImageFlow = ai.defineFlow(
       return finalOutput; // This is now guaranteed to match the strict outputSchema
     } catch (err: any) {
       console.error('ScanFoodImageFlow Error:', err);
-      // Re-throw a more user-friendly error message
-      throw new Error(
-        'ไม่สามารถวิเคราะห์รูปภาพได้ในขณะนี้: ' + (err.message || 'Unknown error')
-      );
+      // On any exception (like schema validation), return a valid object indicating failure.
+      return {
+          foodItem: 'ไม่สามารถระบุชนิดอาหารได้',
+          nutritionalInformation: {
+            estimatedCalories: 0,
+            visibleIngredients: [],
+            reasoning: 'เกิดข้อผิดพลาดในการประมวลผลจาก AI',
+          },
+          safetyPrecautions: ['โปรดลองอีกครั้ง หรือใช้รูปภาพอื่น'],
+      };
     }
   }
 );
