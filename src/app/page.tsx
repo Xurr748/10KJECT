@@ -16,7 +16,7 @@ import {
   type ChatOutput as AIChatOutput, 
   type ChatMessage
 } from '@/ai/flows/post-scan-chat';
-import { useAuth, useFirestore, useUser } from '@/firebase'; 
+import { useAuth, useFirestore, useUser, useCollection } from '@/firebase'; 
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth'; 
 import { doc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, updateDoc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -626,7 +626,7 @@ export default function FSFAPage() {
         name: mealName,
         calories: mealCalories,
         timestamp: Timestamp.now(),
-        imageUrl: imageUrl,
+        ...(imageUrl && { imageUrl }),
       };
 
       if (currentUser) {
@@ -1040,9 +1040,9 @@ export default function FSFAPage() {
                                 <div>
                                     <h4 className="font-semibold text-foreground flex items-center gap-2 mb-2"><Flame className="w-5 h-5 text-orange-500" />แคลอรี่โดยประมาณ</h4>
                                     <p className="text-2xl font-bold">{(imageAnalysisResult.nutritionalInformation.estimatedCalories ?? 0) > 0 ? imageAnalysisResult.nutritionalInformation.estimatedCalories.toLocaleString() : 'N/A'} <span className="text-sm font-normal text-muted-foreground">kcal</span></p>
-                                    <p className="text-xs text-muted-foreground mt-1">{imageAnalysisResult.nutritionalInformation.reasoning}</p>
+                                    {imageAnalysisResult.nutritionalInformation.reasoning && <p className="text-xs text-muted-foreground mt-1">{imageAnalysisResult.nutritionalInformation.reasoning}</p>}
                                 </div>
-                                {imageAnalysisResult.nutritionalInformation.visibleIngredients.length > 0 && (
+                                {imageAnalysisResult.nutritionalInformation.visibleIngredients && imageAnalysisResult.nutritionalInformation.visibleIngredients.length > 0 && (
                                     <div>
                                         <h4 className="font-semibold text-foreground flex items-center gap-2 mb-2"><Wheat className="w-5 h-5 text-yellow-600" />ส่วนผสมที่พบ</h4>
                                         <div className="flex flex-wrap gap-2">
@@ -1321,3 +1321,5 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+    
