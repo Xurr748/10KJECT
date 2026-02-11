@@ -159,6 +159,7 @@ export default function FSFAPage() {
   const [isMonthlyLoading, setIsMonthlyLoading] = useState(false);
 
   const [countdown, setCountdown] = useState<string>('');
+  const [formattedToday, setFormattedToday] = useState<string>('');
 
   const isFoodIdentified = imageAnalysisResult && imageAnalysisResult.foodItem !== UNIDENTIFIED_FOOD_MESSAGE;
 
@@ -213,6 +214,11 @@ export default function FSFAPage() {
     }, 1000);
 
     return () => clearInterval(timer);
+  }, []);
+
+  // Set formatted date on client side to avoid hydration errors
+  useEffect(() => {
+    setFormattedToday(format(new Date(), 'd MMMM yyyy', { locale: th }));
   }, []);
 
 
@@ -1169,7 +1175,7 @@ export default function FSFAPage() {
                         </Dialog>
                     </div>
                 </div>
-                <CardDescription>{format(new Date(), 'd MMMM yyyy', { locale: th })}</CardDescription>
+                <CardDescription>{formattedToday || <Skeleton className="h-5 w-32" />}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
                 <div>
