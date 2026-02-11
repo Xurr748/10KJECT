@@ -19,6 +19,7 @@ import {
 import { useAuth, useFirestore, useUser } from '@/firebase'; 
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth'; 
 import { doc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, updateDoc } from 'firebase/firestore';
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
   setDocumentNonBlocking,
   addDocumentNonBlocking,
@@ -92,6 +93,7 @@ interface Meal {
   name: string;
   calories: number;
   timestamp: Timestamp;
+  imageUrl?: string;
 }
 
 interface DailyLog {
@@ -603,73 +605,92 @@ export default function FSFAPage() {
     setIsLoggingMeal(true);
   
     const mealName = imageAnalysisResult.foodItem;
-    const mealCalories = imageAnalysisResult.nutritionalInformation.estimatedCalories;
+    const mealCalories = imageAnalysisResult.nutritionalInformation.estimatedCalories ?? 0;
   
-    const newMeal: Meal = {
-      name: mealName,
-      calories: mealCalories,
-      timestamp: Timestamp.now(),
-    };
-  
-    if (currentUser) { // Logged-in user
-      const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-      const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
-      const logQuery = query(logsCollectionRef, where('date', '>=', Timestamp.fromDate(startOfTodayUTC)));
-      
-      const logSnapshot = await getDocs(logQuery); 
-      
-      if (logSnapshot.empty) {
-        const newLogData: DailyLog = {
-          date: Timestamp.fromDate(startOfTodayUTC),
-          consumedCalories: newMeal.calories,
-          meals: [newMeal],
-        };
-        addDocumentNonBlocking(logsCollectionRef, newLogData);
-      } else {
-        const logDocRef = logSnapshot.docs[0].ref;
-        const currentLogData = logSnapshot.docs[0].data() as DailyLog;
-        const updatedMeals = [...currentLogData.meals, newMeal];
-        const updatedCalories = currentLogData.consumedCalories + newMeal.calories;
+    let imageUrl: string | undefined = undefined;
+
+    try {
+      if (currentUser && selectedFile) {
+        const storage = getStorage();
+        const filePath = `users/${currentUser.uid}/meals/${Date.now()}_${selectedFile.name}`;
+        const storageRef = ref(storage, filePath);
         
-        updateDocumentNonBlocking(logDocRef, {
-          meals: updatedMeals,
-          consumedCalories: updatedCalories
-        });
+        toast({ title: "กำลังอัปโหลดรูปภาพ...", description: "กรุณารอสักครู่" });
+        const uploadResult = await uploadBytes(storageRef, selectedFile);
+        imageUrl = await getDownloadURL(uploadResult.ref);
+      } else if (!currentUser && previewUrl) {
+        imageUrl = previewUrl; // For anonymous users, store the data URI
       }
-      toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
 
-    } else { // Anonymous user
-      const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-      const todayDateStr = format(startOfTodayUTC, 'yyyy-MM-dd');
+      const newMeal: Meal = {
+        name: mealName,
+        calories: mealCalories,
+        timestamp: Timestamp.now(),
+        imageUrl: imageUrl,
+      };
 
-      const allLogs: DailyLog[] = safeJsonParse(localStorage.getItem('anonymousDailyLogs')) || [];
-      const todayLogIndex = allLogs.findIndex(log => format(log.date.toDate(), 'yyyy-MM-dd') === todayDateStr);
-
-      let updatedLog: DailyLog;
-
-      if (todayLogIndex > -1) {
-          const currentLog = allLogs[todayLogIndex];
-          updatedLog = {
-              ...currentLog,
-              consumedCalories: currentLog.consumedCalories + newMeal.calories,
-              meals: [...currentLog.meals, newMeal],
+      if (currentUser) {
+        const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+        const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
+        const logQuery = query(logsCollectionRef, where('date', '>=', Timestamp.fromDate(startOfTodayUTC)));
+        
+        const logSnapshot = await getDocs(logQuery); 
+        
+        if (logSnapshot.empty) {
+          const newLogData: DailyLog = {
+            date: Timestamp.fromDate(startOfTodayUTC),
+            consumedCalories: newMeal.calories,
+            meals: [newMeal],
           };
-          allLogs[todayLogIndex] = updatedLog;
-      } else {
-          updatedLog = {
-              date: Timestamp.fromDate(startOfTodayUTC),
-              consumedCalories: newMeal.calories,
-              meals: [newMeal],
-          };
-          allLogs.push(updatedLog);
+          await addDoc(logsCollectionRef, newLogData);
+        } else {
+          const logDocRef = logSnapshot.docs[0].ref;
+          const currentLogData = logSnapshot.docs[0].data() as DailyLog;
+          const updatedMeals = [...currentLogData.meals, newMeal];
+          const updatedCalories = currentLogData.consumedCalories + newMeal.calories;
+          
+          await updateDoc(logDocRef, {
+            meals: updatedMeals,
+            consumedCalories: updatedCalories
+          });
+        }
+        toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
+      } else { // Anonymous user
+        const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+        const todayDateStr = format(startOfTodayUTC, 'yyyy-MM-dd');
+
+        const allLogs: DailyLog[] = safeJsonParse(localStorage.getItem('anonymousDailyLogs')) || [];
+        const todayLogIndex = allLogs.findIndex(log => format(log.date.toDate(), 'yyyy-MM-dd') === todayDateStr);
+
+        let updatedLog: DailyLog;
+
+        if (todayLogIndex > -1) {
+            const currentLog = allLogs[todayLogIndex];
+            updatedLog = {
+                ...currentLog,
+                consumedCalories: currentLog.consumedCalories + newMeal.calories,
+                meals: [...currentLog.meals, newMeal],
+            };
+            allLogs[todayLogIndex] = updatedLog;
+        } else {
+            updatedLog = {
+                date: Timestamp.fromDate(startOfTodayUTC),
+                consumedCalories: newMeal.calories,
+                meals: [newMeal],
+            };
+            allLogs.push(updatedLog);
+        }
+        
+        setDailyLog(updatedLog);
+        localStorage.setItem('anonymousDailyLogs', JSON.stringify(allLogs));
+        toast({ title: "บันทึกมื้ออาหารสำเร็จ" });
       }
-      
-      setDailyLog(updatedLog);
-      localStorage.setItem('anonymousDailyLogs', JSON.stringify(allLogs));
-      toast({ title: "บันทึกมื้ออาหารสำเร็จ" });
+    } catch (error) {
+      console.error("Error logging meal:", error);
+      toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกมื้ออาหารได้", variant: "destructive" });
+    } finally {
+      setIsLoggingMeal(false);
     }
-  
-    setIsLoggingMeal(false);
   };
   
   const getBmiInterpretation = (bmi: number | undefined): {text: string, color: string} => {
@@ -1184,8 +1205,13 @@ export default function FSFAPage() {
                                         <div className="pl-2 space-y-3 border-l-2 border-primary/50 ml-2">
                                             {groupedMeals[period].map((meal, index) => (
                                                 <div key={index} className="flex justify-between items-center text-sm text-muted-foreground pl-4">
-                                                    <div className="truncate pr-2">
-                                                        <p className="font-medium text-foreground">{meal.name}</p>
+                                                    {meal.imageUrl && (
+                                                      <div className="w-12 h-12 mr-4 relative rounded-md overflow-hidden flex-shrink-0">
+                                                          <Image src={meal.imageUrl} alt={meal.name} layout="fill" objectFit="cover" data-ai-hint="food meal" />
+                                                      </div>
+                                                    )}
+                                                    <div className="flex-grow truncate pr-2">
+                                                        <p className="font-medium text-foreground truncate">{meal.name}</p>
                                                         <p className="text-xs">{meal.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
                                                     </div>
                                                     <span className="font-medium whitespace-nowrap text-foreground/90">{meal.calories.toLocaleString()} kcal</span>
@@ -1295,8 +1321,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-
-    
-
-
-

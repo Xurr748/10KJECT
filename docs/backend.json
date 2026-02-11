@@ -139,6 +139,11 @@
           "type": "string",
           "format": "date-time",
           "description": "Timestamp of when the meal was logged."
+        },
+        "imageUrl": {
+          "type": "string",
+          "format": "uri",
+          "description": "URL of the meal image stored in Cloud Storage."
         }
       },
       "required": [
