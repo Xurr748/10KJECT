@@ -1034,7 +1034,12 @@ export default function FSFAPage() {
                     <CardContent className="space-y-4">
                         <div>
                             <h3 className="font-semibold text-foreground">อาหารที่ระบุได้:</h3>
-                            <p className="text-lg text-primary font-bold">{imageAnalysisResult.foodItem}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                                <p className="text-lg text-primary font-bold">{imageAnalysisResult.foodItem}</p>
+                                {imageAnalysisResult.cuisineType && imageAnalysisResult.cuisineType !== 'ไม่สามารถระบุประเภทได้' && (
+                                  <Badge variant="outline">{imageAnalysisResult.cuisineType}</Badge>
+                                )}
+                            </div>
                         </div>
                         
                         <>

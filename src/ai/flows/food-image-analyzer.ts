@@ -1,14 +1,14 @@
 'use server';
 /**
- * @fileOverview An AI flow for analyzing food images, optimized for Thai food.
- *
- * - scanFoodImage - A function that handles the food image analysis process.
- * - ScanFoodImageInput - The input type for the scanFoodImage function.
- * - ScanFoodImageOutput - The return type for the scanFoodImage function.
+ * AI Food Image Analysis - Optimized for Thai Food Accuracy
  */
 
 import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
+
+/* =========================
+   INPUT SCHEMA
+========================= */
 
 const ScanFoodImageInputSchema = z.object({
   foodImage: z
@@ -16,12 +16,14 @@ const ScanFoodImageInputSchema = z.object({
     .min(50)
     .refine(val => val.startsWith('data:'), {
       message: 'Invalid data URI format',
-    })
-    .describe(
-      'A food image as a Base64 data URI. Format: data:<mimetype>;base64,<encoded_data>'
-    ),
+    }),
 });
+
 export type ScanFoodImageInput = z.infer<typeof ScanFoodImageInputSchema>;
+
+/* =========================
+   OUTPUT SCHEMA
+========================= */
 
 const NutritionalInfoObjectSchema = z.object({
   estimatedCalories: z.number().describe('The estimated total calories for the dish (in kilocalories).'),
@@ -32,6 +34,7 @@ const NutritionalInfoObjectSchema = z.object({
 
 // This is the final, validated output shape of the flow.
 const ScanFoodImageOutputSchema = z.object({
+  cuisineType: z.string().describe('The type of cuisine the food belongs to, e.g., "อาหารไทย", "อาหารอิตาเลียน" (in Thai).'),
   foodItem: z.string().describe('The identified food item (in Thai). This may indicate if the food is similar to what was identified.'),
   nutritionalInformation: NutritionalInfoObjectSchema.describe('Structured nutritional information about the food item.'),
 });
@@ -42,11 +45,20 @@ export type ScanFoodImageOutput = z.infer<typeof ScanFoodImageOutputSchema>;
 // It makes all properties, including nested ones, optional.
 const LlmOutputSchema = ScanFoodImageOutputSchema.deepPartial();
 
+
+/* =========================
+   MAIN FUNCTION
+========================= */
+
 export async function scanFoodImage(
   input: ScanFoodImageInput
 ): Promise<ScanFoodImageOutput> {
   return scanFoodImageFlow(input);
 }
+
+/* =========================
+   PROMPT (Optimized)
+========================= */
 
 const prompt = ai.definePrompt({
   name: 'scanFoodImagePrompt',
@@ -59,7 +71,7 @@ const prompt = ai.definePrompt({
     maxOutputTokens: 800,
   },
   prompt: `
-You are a professional nutritionist and Thai culinary expert for the MOMU SCAN app. Your goal is to provide accurate, structured nutritional information.
+You are a professional nutritionist and global culinary expert, with a specialization in Thai cuisine, for the MOMU SCAN app.
 
 You MUST respond strictly in valid JSON.
 All string values MUST be in Thai.
@@ -70,22 +82,22 @@ Analyze this food image: {{media url=foodImage}}
 ========================
 INTERNAL MONOLOGUE & ANALYSIS STEPS (MUST FOLLOW)
 ========================
-1.  **Detailed Observation:** I will meticulously list all visible ingredients (e.g., "หมูสับ", "ใบกระเพรา", "ข้าวสวย").
-2.  **Dish Structure Analysis:** Is the rice stir-fried and mixed with ingredients (like ข้าวผัด), or is it plain white rice served with a topping? This is a key differentiator.
+1.  **Cuisine Identification:** First, I will identify the cuisine's origin (e.g., "อาหารไทย", "อาหารญี่ปุ่น", "อาหารอิตาเลียน"). This context is crucial.
+2.  **Dish Identification:** Using the cuisine context, I will meticulously list all visible ingredients (e.g., "หมูสับ", "ใบกระเพรา", "ข้าวสวย"). I will analyze the dish structure (e.g., stir-fried rice vs. rice with topping).
 3.  **Hypothesis & Differentiation:**
-    *   If I see basil (ใบกระเพรา) and minced meat on plain rice, my primary hypothesis is "ผัดกระเพรา".
+    *   If cuisine is "อาหารไทย" and I see basil (ใบกระเพรา) and minced meat on plain rice, my primary hypothesis is "ผัดกระเพรา".
     *   If the rice itself is colored and mixed with ingredients, my hypothesis is "ข้าวผัด".
-    *   If there's a fried egg on plain white rice, it's NOT fried rice.
     *   Based on these rules, I will decide on the most accurate dish name.
 4.  **Confidence Score:** I will assign a confidence score (0-100) based on how certain I am of the identification.
 5.  **Fallback Logic:** If my confidence is below 70, I will use the format "คล้ายกับ [ชื่อเมนู]" for the \`foodItem\`.
 6.  **Calorie Estimation:** Based on the identified dish and ingredients, I will estimate the calories. If a dish is identified (even as "คล้ายกับ..."), \`estimatedCalories\` MUST be greater than 0.
-7.  **Final Fallback:** If I absolutely cannot identify any similarity, I will use the specified "unidentifiable" JSON structure.
+7.  **Final Fallback:** If I absolutely cannot identify anything, I will use the specified "unidentifiable" JSON structure.
 
 ========================
 REQUIRED JSON STRUCTURE
 ========================
 {
+  "cuisineType": "string",
   "foodItem": "string",
   "nutritionalInformation": {
     "estimatedCalories": number,
@@ -99,6 +111,7 @@ REQUIRED JSON STRUCTURE
 ## Example 1: High Confidence (Pad Krapow)
 \`\`\`json
 {
+  "cuisineType": "อาหารไทย",
   "foodItem": "ผัดกระเพราหมูสับไข่ดาว",
   "nutritionalInformation": {
     "estimatedCalories": 650,
@@ -112,6 +125,7 @@ REQUIRED JSON STRUCTURE
 ## Example 2: Similar Food (Unclear Noodle Soup)
 \`\`\`json
 {
+  "cuisineType": "อาหารไทย",
   "foodItem": "คล้ายกับ ก๋วยเตี๋ยวเรือ",
   "nutritionalInformation": {
     "estimatedCalories": 380,
@@ -125,6 +139,7 @@ REQUIRED JSON STRUCTURE
 ## Example 3: Unidentifiable
 \`\`\`json
 {
+  "cuisineType": "ไม่สามารถระบุประเภทได้",
   "foodItem": "ไม่สามารถระบุชนิดอาหารได้",
   "nutritionalInformation": {
     "estimatedCalories": 0,
@@ -136,6 +151,11 @@ REQUIRED JSON STRUCTURE
 \`\`\`
 `,
 });
+
+
+/* =========================
+   FLOW
+========================= */
 
 const scanFoodImageFlow = ai.defineFlow(
   {
@@ -156,7 +176,9 @@ const scanFoodImageFlow = ai.defineFlow(
 
       if (!partialOutput || !partialOutput.nutritionalInformation) {
         console.warn('[scanFoodImageFlow] AI returned null, undefined or incomplete output.');
+        // Return a compliant, "unidentifiable" structure
         return {
+          cuisineType: 'ไม่สามารถระบุประเภทได้',
           foodItem: 'ไม่สามารถระบุชนิดอาหารได้',
           nutritionalInformation: {
             estimatedCalories: 0,
@@ -166,8 +188,9 @@ const scanFoodImageFlow = ai.defineFlow(
           },
         };
       }
-
+      
       const finalOutput: ScanFoodImageOutput = {
+        cuisineType: partialOutput.cuisineType || 'ไม่สามารถระบุประเภทได้',
         foodItem: partialOutput.foodItem || 'ไม่สามารถระบุชนิดอาหารได้',
         nutritionalInformation: {
           estimatedCalories: partialOutput.nutritionalInformation.estimatedCalories ?? 0,
@@ -179,9 +202,12 @@ const scanFoodImageFlow = ai.defineFlow(
 
       console.log('[scanFoodImageFlow] Final Parsed Output:', finalOutput);
       return finalOutput;
+
     } catch (err: any) {
       console.error('ScanFoodImageFlow Error:', err);
+      // Return a compliant, "unidentifiable" structure on error
       return {
+          cuisineType: 'ไม่สามารถระบุประเภทได้',
           foodItem: 'ไม่สามารถระบุชนิดอาหารได้',
           nutritionalInformation: {
             estimatedCalories: 0,
