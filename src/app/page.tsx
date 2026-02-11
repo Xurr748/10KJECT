@@ -37,7 +37,6 @@ import { th } from 'date-fns/locale';
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, CartesianGrid } from "recharts"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 
-
 // ShadCN UI Components
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -46,6 +45,7 @@ import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
+import { Progress } from "@/components/ui/progress";
 import {
   Dialog,
   DialogContent,
@@ -69,23 +69,10 @@ import { Textarea } from '@/components/ui/textarea';
 
 
 // Lucide Icons
-import { UploadCloud, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, MessageSquareWarning, Send, MessageCircle, ScanLine, Flame, Calculator, PlusCircle, BookCheck, Clock, CalendarDays, BarChart as BarChartIcon } from 'lucide-react';
+import { Camera, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, MessageSquareWarning, Send, MessageCircle, ScanLine, Flame, Calculator, PlusCircle, BookCheck, Clock, CalendarDays, BarChart as BarChartIcon, Wheat, Sparkles, Trash2, AreaChart, PieChart } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 const GENERIC_SAFETY_UNAVAILABLE = "ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้";
-
-const PageSection: React.FC<{title: string; icon: React.ReactNode; children: React.ReactNode; id: string; className?: string; titleBgColor?: string; titleTextColor?: string;}> = ({ title, icon, children, id, className, titleBgColor = "bg-primary", titleTextColor = "text-primary-foreground" }) => (
-  <section id={id} className={`py-6 sm:py-8 md:py-12 ${className || ''}`}>
-    <div className="container mx-auto px-4">
-      <h2 className={`text-xl sm:text-2xl md:text-3xl font-headline font-semibold text-center mb-4 sm:mb-6 md:mb-8 ${titleTextColor} ${titleBgColor} py-2 sm:py-3 rounded-lg shadow-md`}>
-        {React.cloneElement(icon as React.ReactElement, { className: "inline-block w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 mr-2 sm:mr-3" })}
-        {title}
-      </h2>
-      {children}
-    </div>
-  </section>
-);
-PageSection.displayName = 'PageSection';
 
 interface UserProfile {
   height?: number;
@@ -204,7 +191,6 @@ export default function FSFAPage() {
     const timer = setInterval(() => {
       const now = new Date();
       
-      // Target time is 7:00 AM in Thailand (UTC+7), which is 00:00 UTC.
       const nextReset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
       nextReset.setUTCDate(nextReset.getUTCDate() + 1); // Set to midnight UTC of the next day
 
@@ -303,18 +289,16 @@ export default function FSFAPage() {
         setHeight(String(localProfile.height || ''));
         setWeight(String(localProfile.weight || ''));
 
-        // One-time migration from old log format to new array format
         const allLogsRaw = localStorage.getItem('anonymousDailyLogs');
         let allLogs: DailyLog[] = safeJsonParse(allLogsRaw) || [];
         
-        if (!allLogsRaw) { // If the new format doesn't exist, check for the old one
+        if (!allLogsRaw) { 
             const oldLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
             if (oldLog) {
-                allLogs = [oldLog]; // Migrate the single log to the array format
+                allLogs = [oldLog]; 
                 localStorage.setItem('anonymousDailyLogs', JSON.stringify(allLogs));
             }
         }
-        // Always remove the old key after checking to prevent re-migration
         localStorage.removeItem('anonymousDailyLog');
         
         const todayDateStr = format(getStartOfUTCDay(), 'yyyy-MM-dd');
@@ -439,7 +423,6 @@ export default function FSFAPage() {
       if (userProfile && Object.keys(userProfile).length > 0) {
           localStorage.setItem('anonymousUserProfile', JSON.stringify(userProfile));
       }
-      // Note: dailyLog is now saved as part of anonymousDailyLogs in handleLogMeal
     }
   }, [userProfile, dailyLog, currentUser, isAuthLoading]);
 
@@ -626,7 +609,7 @@ export default function FSFAPage() {
       const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
       const logQuery = query(logsCollectionRef, where('date', '>=', Timestamp.fromDate(startOfTodayUTC)));
       
-      const logSnapshot = await getDocs(logQuery); // We need to get docs to check existence
+      const logSnapshot = await getDocs(logQuery); 
       
       if (logSnapshot.empty) {
         const newLogData: DailyLog = {
@@ -683,7 +666,7 @@ export default function FSFAPage() {
   };
   
   const getBmiInterpretation = (bmi: number | undefined): {text: string, color: string} => {
-    if (bmi === undefined) return {text: 'N/A', color: 'text-foreground'};
+    if (bmi === undefined) return {text: 'N/A', color: 'text-muted-foreground'};
     if (bmi < 18.5) return { text: 'ผอม', color: 'text-blue-500' };
     if (bmi < 23) return { text: 'สมส่วน', color: 'text-green-500' };
     if (bmi < 25) return { text: 'ท้วม', color: 'text-yellow-500' };
@@ -835,27 +818,30 @@ export default function FSFAPage() {
     const monthlyTotalCalories = useMemo(() => monthlyLogs?.reduce((sum, log) => sum + log.consumedCalories, 0) || 0, [monthlyLogs]);
     const monthlyAverageCalories = useMemo(() => (monthlyLogs && monthlyLogs.length > 0) ? Math.round(monthlyTotalCalories / monthlyLogs.length) : 0, [monthlyLogs, monthlyTotalCalories]);
 
+    const calorieProgress = useMemo(() => {
+      const goal = userProfile.dailyCalorieGoal;
+      const consumed = dailyLog?.consumedCalories || 0;
+      if (!goal || goal === 0) return 0;
+      return (consumed / goal) * 100;
+    }, [userProfile.dailyCalorieGoal, dailyLog?.consumedCalories]);
+
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-body p-2 sm:p-4 md:p-8">
-      <header className="py-4 sm:py-6 md:py-8 text-center bg-gradient-to-r from-primary/10 via-secondary/20 to-primary/10 rounded-lg shadow-md mb-6 sm:mb-8 md:mb-12">
-        <div className="container mx-auto px-2 sm:px-4 flex justify-between items-center">
-          <div className="flex-1 text-left md:text-center">
-            <Link href="/" className="inline-block">
-              <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-headline font-bold text-primary flex items-center justify-start md:justify-center">
-                <ScanLine className="w-6 h-6 sm:w-8 sm:h-8 md:w-10 md:h-10 lg:w-12 lg:h-12 mr-1 sm:mr-2 md:mr-4" />
-                MOMU SCAN
-              </h1>
+    <div className="min-h-screen bg-background text-foreground font-body">
+       <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur-sm">
+        <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
+            <Link href="/" className="flex items-center gap-2">
+                <ScanLine className="h-7 w-7 text-primary" />
+                <span className="text-xl font-bold tracking-tight">MOMU SCAN</span>
             </Link>
-            <p className="mt-1 text-xs sm:text-sm md:text-base lg:text-lg text-foreground/80 font-body text-left md:text-center">
-              สแกนอาหารของคุณ เพื่อสุขภาพที่ดีกว่า
-            </p>
-          </div>
-          <div className="flex items-center space-x-1 sm:space-x-2 md:space-x-3 ml-1 sm:ml-2 md:ml-4">
+          <div className="flex items-center space-x-2">
+             <Link href="/datastore-summary" passHref>
+                <Button variant="ghost" size="sm">สรุปฐานข้อมูล</Button>
+            </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="rounded-full w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 group">
-                  <UserCircle className="w-5 h-5 sm:w-6 sm:h-6 md:w-8 md:h-8 text-accent group-hover:text-primary" />
+                <Button variant="outline" size="icon" className="rounded-full w-9 h-9">
+                  <UserCircle className="w-5 h-5 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
@@ -898,46 +884,33 @@ export default function FSFAPage() {
       <Dialog open={authDialogOpen} onOpenChange={setAuthDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-3xl font-headline text-primary text-center">
+            <DialogTitle className="text-2xl font-bold text-center">
               {authDialogMode === 'login' ? 'เข้าสู่ระบบ' : 'สร้างบัญชีใหม่'}
             </DialogTitle>
-            <DialogDescription className="text-center">
-              {authDialogMode === 'login' ? 'ยินดีต้อนรับกลับ!' : 'กรอกข้อมูลเพื่อลงทะเบียน'}
+            <DialogDescription className="text-center pt-2">
+              {authDialogMode === 'login' ? 'ยินดีต้อนรับกลับสู่ MOMU SCAN!' : 'กรอกข้อมูลเพื่อเริ่มต้นใช้งาน'}
             </DialogDescription>
           </DialogHeader>
-          {authDialogMode === 'login' ? (
-            <form onSubmit={handleLogin} className="space-y-6 pt-4">
+            <form onSubmit={authDialogMode === 'login' ? handleLogin : handleRegister} className="space-y-4 pt-4">
               <div className="space-y-2">
-                <Label htmlFor="login-email">อีเมล</Label>
-                <Input id="login-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required className="text-lg p-3" />
+                <Label htmlFor="auth-email">อีเมล</Label>
+                <Input id="auth-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="login-password">รหัสผ่าน</Label>
-                <Input id="login-password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required className="text-lg p-3" />
+                <Label htmlFor="auth-password">รหัสผ่าน</Label>
+                <Input id="auth-password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
               </div>
-              <Button type="submit" className="w-full text-lg py-6" size="lg" disabled={isAuthOpLoading}>
-                {isAuthOpLoading ? <><Loader2 className="animate-spin mr-2"/>กำลังดำเนินการ...</> : <><LogIn className="mr-2 h-5 w-5" />เข้าสู่ระบบ</>}
+              {authDialogMode === 'register' && (
+                <div className="space-y-2">
+                  <Label htmlFor="auth-confirmPassword">ยืนยันรหัสผ่าน</Label>
+                  <Input id="auth-confirmPassword" type="password" placeholder="••••••••" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+                </div>
+              )}
+              <Button type="submit" className="w-full" size="lg" disabled={isAuthOpLoading}>
+                {isAuthOpLoading ? <Loader2 className="animate-spin mr-2"/> : (authDialogMode === 'login' ? <LogIn className="mr-2 h-4 w-4" /> : <UserPlus className="mr-2 h-4 w-4" />) }
+                {authDialogMode === 'login' ? 'เข้าสู่ระบบ' : 'สร้างบัญชี'}
               </Button>
             </form>
-          ) : (
-            <form onSubmit={handleRegister} className="space-y-6 pt-4">
-              <div className="space-y-2">
-                <Label htmlFor="register-email">อีเมล</Label>
-                <Input id="register-email" type="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required className="text-lg p-3" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="register-password">รหัสผ่าน (6+ ตัวอักษร)</Label>
-                <Input id="register-password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required className="text-lg p-3" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="register-confirmPassword">ยืนยันรหัสผ่าน</Label>
-                <Input id="register-confirmPassword" type="password" placeholder="••••••••" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required className="text-lg p-3" />
-              </div>
-              <Button type="submit" className="w-full text-lg py-6" size="lg" disabled={isAuthOpLoading}>
-                {isAuthOpLoading ? <><Loader2 className="animate-spin mr-2"/>กำลังดำเนินการ...</> : <><UserPlus className="mr-2 h-5 w-5" />สร้างบัญชี</>}
-              </Button>
-            </form>
-          )}
           <DialogFooter className="pt-4">
             <p className="text-sm text-muted-foreground text-center w-full">
               {authDialogMode === 'login' ? 'ยังไม่มีบัญชี?' : 'มีบัญชีอยู่แล้ว?'}
@@ -950,177 +923,248 @@ export default function FSFAPage() {
       </Dialog>
 
 
-      <main className="container mx-auto px-1 sm:px-2 md:px-4 grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8 md:gap-10 lg:gap-16">
-
-        <div className="lg:col-span-2 space-y-6 sm:space-y-8 md:space-y-10 lg:space-y-16">
-          <PageSection title="อาหารอะไรที่อยู่บนจานของคุณ? 🤔🍽️" icon={<Brain />} id="image-scanner" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-primary" titleTextColor="text-primary-foreground">
-            <Card className="max-w-xl md:max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
-              <CardHeader className="p-4 sm:p-6">
-                <CardTitle className="text-lg sm:text-xl md:text-2xl font-headline text-primary">AI วิเคราะห์อาหาร 🤖🥕</CardTitle>
-                <CardDescription className="text-xs sm:text-sm md:text-base font-body">อัปโหลดรูปภาพ แล้ว AI จะประเมินข้อมูลโภชนาการ</CardDescription>
-              </CardHeader>
-              <CardContent className="p-4 sm:p-6 space-y-3 sm:space-y-4 md:space-y-6">
-                <div>
-                  <Label htmlFor="food-image-upload" className="text-sm sm:text-base md:text-lg font-body text-foreground">อัปโหลดรูปภาพอาหาร</Label>
-                  <Input id="food-image-upload" type="file" accept="image/*" onChange={handleFileChange} className="mt-1 sm:mt-2 file:text-primary-foreground file:font-semibold file:mr-2 file:px-2 sm:file:px-3 file:py-1 file:rounded-md file:border-0 file:bg-primary hover:file:bg-primary/90 text-xs sm:text-sm md:text-base p-1 sm:p-2" />
-                </div>
-                
-                {previewUrl && (
-                   <div className="mt-2 sm:mt-4 md:mt-6 mb-2 sm:mb-4 md:mb-6 flex flex-col items-center space-y-1 sm:space-y-2 md:space-y-4 border border-border/60 p-2 sm:p-4 md:p-6 rounded-lg bg-muted/20 shadow-inner">
-                      <div className="flex-shrink-0 flex flex-col items-center">
-                        <p className="text-xs sm:text-sm font-body mb-1 sm:mb-2 text-muted-foreground">ตัวอย่างรูปภาพ:</p>
-                        <Image src={previewUrl} alt="Food preview" width={150} height={150} className="rounded-lg shadow-md object-contain max-h-36 sm:max-h-48 md:max-h-56 mx-auto" data-ai-hint="food meal" />
-                      </div>
+      <main className="container mx-auto grid grid-cols-1 gap-8 px-4 py-8 sm:px-6 lg:grid-cols-5 lg:px-8">
+        <div className="lg:col-span-3 space-y-8">
+            <Card>
+                 <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-xl">
+                        <Camera className="w-6 h-6 text-primary" />
+                        AI วิเคราะห์อาหาร
+                    </CardTitle>
+                    <CardDescription>อัปโหลดรูปภาพอาหาร แล้ว AI จะประเมินข้อมูลโภชนาการให้คุณ</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                    <div className="space-y-2">
+                        <Label htmlFor="food-image-upload" className="sr-only">อัปโหลดรูปภาพอาหาร</Label>
+                        <Input id="food-image-upload" type="file" accept="image/*" onChange={handleFileChange} className="file:text-primary-foreground file:font-semibold file:mr-4 file:px-4 file:py-2 file:rounded-full file:border-0 file:bg-primary hover:file:bg-primary/90" />
                     </div>
-                )}
 
-                {imageError && <p className="text-destructive text-xs sm:text-sm font-body flex items-center"><AlertCircle className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />{imageError}</p>}
+                    {previewUrl && (
+                        <div className="relative group w-full aspect-video rounded-lg overflow-hidden border-2 border-dashed flex items-center justify-center bg-muted/50">
+                            <Image src={previewUrl} alt="Food preview" layout="fill" objectFit="contain" className="p-2" data-ai-hint="food meal" />
+                             <Button variant="destructive" size="icon" className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity" onClick={resetImageRelatedStates}>
+                                <Trash2 className="w-4 h-4"/>
+                                <span className="sr-only">ลบรูปภาพ</span>
+                            </Button>
+                        </div>
+                    )}
+                </CardContent>
+                <CardFooter>
+                     <Button onClick={handleImageAnalysis} disabled={isLoadingImageAnalysis || !previewUrl} className="w-full" size="lg">
+                        {isLoadingImageAnalysis ? (
+                            <><Loader2 className="animate-spin mr-2 h-5 w-5" />กำลังวิเคราะห์...</>
+                        ) : (
+                            <> <Sparkles className="mr-2 h-5 w-5" /> วิเคราะห์รูปภาพ </>
+                        )}
+                    </Button>
+                </CardFooter>
+            </Card>
 
-                <Button onClick={handleImageAnalysis} disabled={isLoadingImageAnalysis || !previewUrl} className="w-full text-sm sm:text-base md:text-lg py-2 sm:py-3 md:py-4" size="default">
-                  {isLoadingImageAnalysis ? (
-                    <><Loader2 className="animate-spin -ml-1 mr-2 sm:mr-3 h-4 w-4 sm:h-5 sm:h-5" />กำลังวิเคราะห์...</>
-                  ) : (
-                    <> <UploadCloud className="mr-2 h-4 w-4 sm:h-5 sm:h-5 md:h-6 md:w-6" /> วิเคราะห์รูปภาพ </>
-                  )}
-                </Button>
-
-                {isLoadingImageAnalysis && (
-                  <div className="space-y-4 mt-4">
-                    <Skeleton className="h-8 w-3/4 mx-auto" />
-                    <Skeleton className="h-24 w-full" />
-                    <Skeleton className="h-16 w-full" />
-                  </div>
-                )}
-
-                {imageAnalysisResult && (
-                  <Card className="mt-4 sm:mt-6 md:mt-8 shadow-md rounded-lg overflow-hidden bg-card border border-primary/30">
-                    <CardHeader className="p-3 sm:p-4 pb-1 sm:pb-2 bg-primary/10">
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-base sm:text-lg md:text-xl font-headline text-primary flex items-center">
-                        {isFoodIdentified ? <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 mr-2 text-green-500" /> : <Info className="w-4 h-4 sm:w-5 sm:h-5 md:w-6 md:h-6 mr-2 text-yellow-500" />}
-                        ผลการวิเคราะห์
-                        </CardTitle>
-                      </div>
+            {isLoadingImageAnalysis && (
+                <Card>
+                    <CardHeader>
+                        <Skeleton className="h-7 w-48" />
                     </CardHeader>
-                    <CardContent className="p-3 sm:p-4 md:p-6 space-y-2 sm:space-y-3 md:space-y-4">
-                      <div>
-                        <h4 className="font-semibold text-sm sm:text-base md:text-lg font-body text-foreground">
-                          อาหารที่ระบุได้:
-                        </h4>
-                        <p className="text-xs sm:text-sm md:text-base font-body text-foreground/80">
-                          {imageAnalysisResult.foodItem === UNIDENTIFIED_FOOD_MESSAGE 
-                             ? "ขออภัย ไม่สามารถระบุรายการอาหารในภาพได้ชัดเจน"
-                             : imageAnalysisResult.foodItem
-                          }
-                        </p>
-                      </div>
-                      
-                      {isFoodIdentified && imageAnalysisResult.nutritionalInformation && (
-                        <>
-                          <Separator />
-                          <div>
-                            <h4 className="font-semibold text-sm sm:text-base md:text-lg font-body text-foreground flex items-center"><Flame className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-orange-500" />แคลอรี่โดยประมาณ:</h4>
-                            <div className="mt-1 text-xs sm:text-sm md:text-base font-body text-foreground/80 space-y-1">
-                               <div className="flex items-center justify-between">
-                                <p className="text-lg sm:text-xl font-bold text-primary">
-                                  {imageAnalysisResult.nutritionalInformation.estimatedCalories > 0 
-                                    ? `${imageAnalysisResult.nutritionalInformation.estimatedCalories} กิโลแคลอรี่`
-                                    : 'N/A'
-                                  }
-                                </p>
-                                <Button
-                                  size="sm"
-                                  onClick={handleLogMeal}
-                                  disabled={isLoggingMeal || imageAnalysisResult.nutritionalInformation.estimatedCalories <= 0}
-                                  className="bg-accent text-accent-foreground hover:bg-accent/90"
-                                >
-                                  {isLoggingMeal ? <Loader2 className="animate-spin mr-2" /> : <PlusCircle className="mr-2"/>}
-                                  เพิ่มในบันทึก
-                                </Button>
-                              </div>
-                              <p className="text-xs text-muted-foreground">{imageAnalysisResult.nutritionalInformation.reasoning}</p>
-                              
-                              {imageAnalysisResult.nutritionalInformation.visibleIngredients.length > 0 && (
-                                <div className="mt-2">
-                                    <p className="font-semibold pt-2">ส่วนผสมที่ใช้ประเมิน:</p>
-                                    <ul className="list-disc pl-4 sm:pl-5 space-y-1">
-                                    {imageAnalysisResult.nutritionalInformation.visibleIngredients.map((ingredient, index) => (
-                                        <li key={index}>{ingredient}</li>
-                                    ))}
-                                    </ul>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      {isFoodIdentified && (imageAnalysisResult.safetyPrecautions && imageAnalysisResult.safetyPrecautions.some(p => p !== GENERIC_SAFETY_UNAVAILABLE)) && (
-                        <>
-                          <Separator />
-                          <div>
-                            <h4 className="font-semibold text-sm sm:text-base md:text-lg font-body text-foreground flex items-center">
-                              <MessageSquareWarning className="w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5 mr-1 sm:mr-2 text-orange-500"/>คำแนะนำด้านความปลอดภัย:
-                            </h4>
-                            <ul className="list-disc pl-3 sm:pl-4 md:pl-5 space-y-1 text-xs sm:text-sm md:text-base font-body text-foreground/80 mt-1 sm:mt-2">
-                              {imageAnalysisResult.safetyPrecautions.map((precaution, index) => (
-                                precaution !== GENERIC_SAFETY_UNAVAILABLE ? <li key={index}>{precaution}</li> : null
-                              )).filter(Boolean)}
-                            </ul>
-                          </div>
-                        </>
-                      )}
+                    <CardContent className="space-y-4">
+                        <Skeleton className="h-5 w-3/4" />
+                        <Skeleton className="h-20 w-full" />
+                        <Skeleton className="h-16 w-full" />
                     </CardContent>
-                  </Card>
-                )}
-              </CardContent>
-            </Card>
-          </PageSection>
+                </Card>
+            )}
 
-          <PageSection title="พูดคุยกับ AI ผู้ช่วย 💬🧠" icon={<MessageCircle />} id="chatbot-section" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-accent" titleTextColor="text-accent-foreground">
-            <Card className="max-w-xl md:max-w-2xl mx-auto shadow-lg rounded-lg overflow-hidden bg-card">
-              <CardHeader className="p-4 sm:p-6">
-                <CardTitle className="text-lg sm:text-xl md:text-2xl font-headline text-accent">Momu AI</CardTitle>
-                <CardDescription className="text-xs sm:text-sm md:text-base font-body">สอบถามเกี่ยวกับอาหารและโภชนาการ</CardDescription>              </CardHeader>
-              <CardContent className="p-4 sm:p-6 space-y-2 sm:space-y-3 md:space-y-4">
-                <ScrollArea className="h-48 sm:h-60 md:h-72 w-full border rounded-md p-2 sm:p-4 bg-muted/30" viewportRef={chatScrollAreaRef}>
-                  {chatMessages.length === 0 && (
-                    <p className="text-center text-xs sm:text-sm md:text-base text-muted-foreground">เริ่มต้นการสนทนา...</p>
-                  )}
-                  {chatMessages.map((msg, index) => (
-                    <div key={index} className={`mb-1 sm:mb-2 md:mb-3 flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`p-2 sm:p-3 rounded-lg max-w-[80%] shadow ${ msg.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'}`}>
-                        <p className="text-xs sm:text-sm whitespace-pre-wrap">{msg.content}</p>
-                      </div>
-                    </div>
-                  ))}
-                  {isChatLoading && (
-                    <div className="flex justify-start mb-1 sm:mb-2">
-                      <div className="p-2 sm:p-3 rounded-lg bg-secondary text-secondary-foreground shadow">
-                        <Loader2 className="h-3 w-3 sm:h-4 sm:h-4 md:h-5 md:h-5 animate-spin" />
-                      </div>
-                    </div>
-                  )}
-                </ScrollArea>
-                <form onSubmit={handleChatSubmit} className="flex items-center space-x-1 sm:space-x-2">
-                  <Textarea ref={chatInputRef} value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="พิมพ์ข้อความ..." className="flex-grow resize-none p-2 md:p-3 text-xs sm:text-sm md:text-base" rows={1} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSubmit(); } }} />
-                  <Button type="submit" size="default" className="text-sm sm:text-base md:text-lg py-2 md:py-3 px-2 sm:px-3 md:px-4" disabled={isChatLoading || !chatInput.trim()}>
-                    {isChatLoading ? <Loader2 className="animate-spin h-3 w-3 sm:h-4 sm:h-4 md:h-5 md:h-5" /> : <Send className="h-3 w-3 sm:h-4 sm:h-4 md:h-5 md:h-5" />}
-                    <span className="sr-only">Send</span>
-                  </Button>
-                </form>
-              </CardContent>
+            {imageAnalysisResult && (
+                <Card className="border-primary/50">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-3 text-xl">
+                            {isFoodIdentified ? <CheckCircle className="w-6 h-6 text-accent" /> : <Info className="w-6 h-6 text-yellow-500" />}
+                            ผลการวิเคราะห์
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div>
+                            <h3 className="font-semibold text-foreground">อาหารที่ระบุได้:</h3>
+                            <p className="text-lg text-primary font-bold">{imageAnalysisResult.foodItem}</p>
+                        </div>
+                        
+                        {isFoodIdentified && (
+                            <>
+                                <Separator />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <h4 className="font-semibold text-foreground flex items-center gap-2 mb-2"><Flame className="w-5 h-5 text-orange-500" />แคลอรี่โดยประมาณ</h4>
+                                        <p className="text-2xl font-bold">{imageAnalysisResult.nutritionalInformation.estimatedCalories.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">kcal</span></p>
+                                        <p className="text-xs text-muted-foreground mt-1">{imageAnalysisResult.nutritionalInformation.reasoning}</p>
+                                    </div>
+                                    {imageAnalysisResult.nutritionalInformation.visibleIngredients.length > 0 && (
+                                        <div>
+                                            <h4 className="font-semibold text-foreground flex items-center gap-2 mb-2"><Wheat className="w-5 h-5 text-yellow-600" />ส่วนผสมที่พบ</h4>
+                                            <div className="flex flex-wrap gap-2">
+                                                {imageAnalysisResult.nutritionalInformation.visibleIngredients.map((ingredient, index) => (
+                                                    <Badge key={index} variant="secondary">{ingredient}</Badge>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                {(imageAnalysisResult.safetyPrecautions && imageAnalysisResult.safetyPrecautions.some(p => p !== GENERIC_SAFETY_UNAVAILABLE)) && (
+                                    <>
+                                        <Separator />
+                                        <div>
+                                            <h4 className="font-semibold text-foreground flex items-center gap-2 mb-2"><MessageSquareWarning className="w-5 h-5 text-amber-600"/>คำแนะนำเพิ่มเติม</h4>
+                                            <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+                                                {imageAnalysisResult.safetyPrecautions.map((precaution, index) => (
+                                                    precaution !== GENERIC_SAFETY_UNAVAILABLE ? <li key={index}>{precaution}</li> : null
+                                                )).filter(Boolean)}
+                                            </ul>
+                                        </div>
+                                    </>
+                                )}
+                            </>
+                        )}
+                    </CardContent>
+                    {isFoodIdentified && (
+                        <CardFooter>
+                             <Button size="lg" onClick={handleLogMeal} disabled={isLoggingMeal || imageAnalysisResult.nutritionalInformation.estimatedCalories <= 0} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
+                                {isLoggingMeal ? <Loader2 className="animate-spin mr-2" /> : <PlusCircle className="mr-2"/>}
+                                เพิ่มในบันทึกแคลอรี่
+                            </Button>
+                        </CardFooter>
+                    )}
+                </Card>
+            )}
+
+            <Card>
+                <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-xl">
+                        <MessageCircle className="w-6 h-6 text-primary" />
+                        Momu AI Assistant
+                    </CardTitle>
+                    <CardDescription>สอบถามเกี่ยวกับอาหาร โภชนาการ หรือข้อสงสัยอื่นๆ</CardDescription>              
+                </CardHeader>
+                <CardContent>
+                    <ScrollArea className="h-72 w-full rounded-lg border bg-muted/30 p-4" viewportRef={chatScrollAreaRef}>
+                        {chatMessages.length === 0 && (
+                            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
+                                <Brain className="w-12 h-12 mb-4"/>
+                                <p className="text-lg font-medium">เริ่มต้นการสนทนา</p>
+                                <p className="text-sm">ถามคำถามเกี่ยวกับอาหารที่สแกนได้เลย!</p>
+                            </div>
+                        )}
+                        <div className="space-y-4">
+                        {chatMessages.map((msg, index) => (
+                            <div key={index} className={`flex items-end gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                {msg.role === 'model' && <UserCircle className="w-6 h-6 text-primary flex-shrink-0"/>}
+                                <div className={`p-3 rounded-lg max-w-[85%] shadow-sm ${ msg.role === 'user' ? 'bg-primary text-primary-foreground rounded-br-none' : 'bg-secondary text-secondary-foreground rounded-bl-none'}`}>
+                                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                                </div>
+                            </div>
+                        ))}
+                        </div>
+                        {isChatLoading && (
+                            <div className="flex items-end gap-2 justify-start mt-4">
+                                <UserCircle className="w-6 h-6 text-primary flex-shrink-0"/>
+                                <div className="p-3 rounded-lg bg-secondary text-secondary-foreground rounded-bl-none shadow-sm">
+                                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                                </div>
+                            </div>
+                        )}
+                    </ScrollArea>
+                </CardContent>
+                <CardFooter>
+                     <form onSubmit={handleChatSubmit} className="flex w-full items-center space-x-2">
+                        <Textarea ref={chatInputRef} value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder="พิมพ์ข้อความของคุณ..." className="flex-grow resize-none" rows={1} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSubmit(); } }} />
+                        <Button type="submit" size="icon" className="flex-shrink-0" disabled={isChatLoading || !chatInput.trim()}>
+                            <Send className="h-4 w-4" />
+                            <span className="sr-only">Send</span>
+                        </Button>
+                    </form>
+                </CardFooter>
             </Card>
-          </PageSection>
         </div>
 
-        <div className="lg:col-span-1 space-y-6 sm:space-y-8 md:space-y-10 lg:space-y-16">
-          <PageSection title="โปรไฟล์และ BMI ของคุณ" icon={<Calculator />} id="bmi-calculator" className="bg-secondary/30 rounded-lg shadow-md" titleBgColor="bg-primary" titleTextColor="text-primary-foreground">
-            <div className="space-y-4">
-              <Card className="shadow-lg rounded-lg overflow-hidden bg-card">
+        <div className="lg:col-span-2 space-y-8">
+           <Card className="sticky top-20">
+            <CardHeader>
+                <CardTitle className="flex items-center justify-between text-xl">
+                    <span>ภาพรวมวันนี้</span>
+                    <span className="text-sm font-normal text-muted-foreground">{format(new Date(), 'd MMMM yyyy', { locale: th })}</span>
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+                <div>
+                  <div className="flex justify-between items-baseline mb-1">
+                    <span className="text-muted-foreground">เป้าหมายรายวัน</span>
+                    <span className="font-bold text-primary">{userProfile.dailyCalorieGoal?.toLocaleString() || 'N/A'} kcal</span>
+                  </div>
+                  <Progress value={calorieProgress} className="h-3" />
+                  <div className="flex justify-between items-baseline mt-1">
+                     <span className={`text-lg font-bold ${calorieProgress > 100 ? 'text-destructive' : 'text-accent'}`}>{dailyLog?.consumedCalories.toLocaleString() ?? 0} kcal</span>
+                     <span className="text-xs text-muted-foreground">บริโภคแล้ว</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2">
+                    <Dialog>
+                        <DialogTrigger asChild><Button variant="outline" className="w-full"><PieChart className="mr-2 h-4 w-4"/>ภาพรวม</Button></DialogTrigger>
+                        {/* Today's Summary Dialog Content... */}
+                    </Dialog>
+                    <Dialog open={isWeeklyDialogOpen} onOpenChange={setIsWeeklyDialogOpen}>
+                        <DialogTrigger asChild><Button variant="outline" className="w-full"><AreaChart className="mr-2 h-4 w-4"/>สัปดาห์</Button></DialogTrigger>
+                         {/* Weekly Summary Dialog Content... */}
+                    </Dialog>
+                    <Dialog open={isMonthlyDialogOpen} onOpenChange={setIsMonthlyDialogOpen}>
+                        <DialogTrigger asChild><Button variant="outline" className="w-full"><BarChartIcon className="mr-2 h-4 w-4"/>เดือน</Button></DialogTrigger>
+                         {/* Monthly Summary Dialog Content... */}
+                    </Dialog>
+                </div>
+                
+                <Separator/>
+
+                 <div>
+                    <h3 className="text-center font-semibold mb-3">มื้อที่บันทึกแล้ว</h3>
+                    {dailyLog && dailyLog.meals.length > 0 ? (
+                        <ScrollArea className="h-48">
+                            <div className="space-y-4 pr-4">
+                            {mealPeriodOrder.map(period => (
+                                groupedMeals[period] && (
+                                <div key={period}>
+                                    <p className="font-semibold text-sm text-primary mb-1">{period}</p>
+                                    <div className="pl-2 space-y-2">
+                                    {groupedMeals[period].map((meal, index) => (
+                                        <div key={index} className="flex justify-between items-center text-sm text-muted-foreground border-b pb-2">
+                                        <div className="truncate pr-2">
+                                            <p className="font-medium text-foreground">{meal.name}</p>
+                                            <p className="text-xs">{meal.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
+                                        </div>
+                                        <span className="font-medium whitespace-nowrap text-foreground/90">{meal.calories.toLocaleString()} kcal</span>
+                                        </div>
+                                    ))}
+                                    </div>
+                                </div>
+                                )
+                            ))}
+                            </div>
+                        </ScrollArea>
+                    ) : (
+                        <div className="text-center text-muted-foreground py-10">
+                            <p>ยังไม่มีการบันทึกมื้ออาหารสำหรับวันนี้</p>
+                        </div>
+                    )}
+                 </div>
+                 <div className="mt-4 text-center border-t pt-4">
+                    <p className="text-xs text-muted-foreground flex items-center justify-center">
+                        <Clock className="mr-1.5 h-3 w-3" />
+                        รีเซ็ตข้อมูลในอีก: <span className="font-semibold ml-1 tabular-nums">{countdown}</span>
+                    </p>
+                </div>
+            </CardContent>
+           </Card>
+
+            <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg sm:text-xl font-headline text-primary">คำนวณ BMI และแคลอรี่</CardTitle>
-                  <CardDescription className="text-xs sm:text-sm">กรอกข้อมูลเพื่อคำนวณ BMI และเป้าหมายแคลอรี่</CardDescription>
+                  <CardTitle className="flex items-center gap-2 text-xl"><Calculator className="w-6 h-6 text-primary"/>โปรไฟล์และ BMI</CardTitle>
+                  <CardDescription>คำนวณดัชนีมวลกายและเป้าหมายแคลอรี่ของคุณ</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="space-y-2">
@@ -1137,228 +1181,142 @@ export default function FSFAPage() {
                    </Button>
                 </CardContent>
                 {userProfile.bmi && (
-                  <CardFooter className="flex flex-col items-start space-y-3 pt-4 border-t">
-                     <div>
-                      <h4 className="font-semibold text-foreground">BMI ของคุณ:</h4>
-                      <p className={`text-2xl font-bold ${getBmiInterpretation(userProfile.bmi).color}`}>{userProfile.bmi} ({getBmiInterpretation(userProfile.bmi).text})</p>
+                  <CardFooter className="flex flex-col items-start space-y-4 pt-4 border-t">
+                     <div className="w-full">
+                      <h4 className="font-semibold text-muted-foreground">ดัชนีมวลกาย (BMI)</h4>
+                      <p className={`text-3xl font-bold ${getBmiInterpretation(userProfile.bmi).color}`}>{userProfile.bmi} <span className="text-lg font-normal">({getBmiInterpretation(userProfile.bmi).text})</span></p>
                      </div>
-                     {userProfile.dailyCalorieGoal && (
-                        <div>
-                            <h4 className="font-semibold text-foreground">แคลอรี่ที่แนะนำต่อวัน:</h4>
-                            <p className="text-2xl font-bold text-primary">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
-                        </div>
-                     )}
                   </CardFooter>
                 )}
-              </Card>
+            </Card>
 
-              <div className="grid grid-cols-1 gap-2">
-                  <Dialog>
-                    <DialogTrigger asChild>
-                      <Button variant="outline" className="w-full">
-                        <BookCheck className="mr-2 h-4 w-4" />
-                        ภาพรวมวันนี้
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-md">
-                      <DialogHeader>
-                        <DialogTitle>ภาพรวมแคลอรี่วันนี้</DialogTitle>
-                        <DialogDescription>
-                          ตรวจสอบเป้าหมายและบันทึกแคลอรี่ของคุณสำหรับวันนี้
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="py-4">
-                          <div className="space-y-4">
-                            <Card className="p-4 text-center bg-secondary/30">
-                              <CardTitle className="text-base font-semibold">แคลอรี่ที่แนะนำต่อวัน</CardTitle>
-                              <CardDescription>(เป้าหมาย)</CardDescription>
-                              {userProfile.dailyCalorieGoal ? (
-                                <p className="text-2xl font-bold text-primary pt-2">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
-                              ) : (
-                                <p className="text-sm text-muted-foreground pt-2">คำนวณ BMI เพื่อตั้งค่าเป้าหมาย</p>
-                              )}
-                            </Card>
-
-                            <Card className="p-4 bg-secondary/30">
-                              <CardTitle className="text-base font-semibold text-center">แคลอรี่ที่ใช้ไปแล้ว</CardTitle>
-                              <p className={`text-3xl font-bold text-center pt-2 ${dailyLog && userProfile.dailyCalorieGoal && dailyLog.consumedCalories > userProfile.dailyCalorieGoal ? 'text-destructive' : 'text-green-500'}`}>
-                                {dailyLog?.consumedCalories.toLocaleString() ?? 0} <span className="text-base font-normal">kcal</span>
-                              </p>
-                              
-                              {dailyLog && dailyLog.meals.length > 0 && (
-                                <>
-                                  <Separator className="my-3" />
-                                  <div className="space-y-2">
-                                    <h4 className="font-semibold text-foreground text-center">มื้อที่บันทึกแล้ว</h4>
-                                    <ScrollArea className="h-32">
-                                      <div className="space-y-3 pr-4">
-                                      {groupedMeals && mealPeriodOrder.map(period => (
-                                        groupedMeals[period] && (
-                                          <div key={period}>
-                                            <p className="font-semibold text-sm text-primary">{period}</p>
-                                            <div className="pl-2 space-y-1 mt-1 border-l-2 border-primary/20">
-                                              {groupedMeals[period].map((meal, index) => (
-                                                <div key={index} className="flex justify-between items-center text-sm text-muted-foreground">
-                                                  <span className="truncate pr-2">
-                                                    {meal.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })}: {meal.name}
-                                                  </span>
-                                                  <span className="font-medium whitespace-nowrap text-foreground/90">{meal.calories.toLocaleString()} kcal</span>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          </div>
-                                        )
-                                      ))}
-                                      </div>
-                                    </ScrollArea>
-                                  </div>
-                                </>
-                              )}
-                            </Card>
-                          </div>
-
-                          {countdown && (
-                            <div className="mt-4 text-center border-t pt-4">
-                              <p className="text-sm text-muted-foreground flex items-center justify-center">
-                                <Clock className="mr-2 h-4 w-4" />
-                                รีเซ็ตข้อมูลในอีก: <span className="font-semibold ml-1">{countdown}</span>
-                              </p>
-                            </div>
-                          )}
-                          
-                          {!currentUser && (
-                            <div className="mt-4 text-center border-t pt-4">
-                                <p className="text-sm text-muted-foreground mb-3">เข้าสู่ระบบเพื่อบันทึกข้อมูลอย่างถาวร</p>
-                                <Button onClick={()=>{
-                                    const calorieDialogTrigger = document.querySelector('button[aria-haspopup="dialog"][aria-expanded="true"]');
-                                    if (calorieDialogTrigger instanceof HTMLElement) {
-                                        calorieDialogTrigger.click();
-                                    }
-                                    openAuthDialog('login');
-                                }}>
-                                    <LogIn className="mr-2 h-4 w-4" />
-                                    เข้าสู่ระบบ / ลงทะเบียน
-                                </Button>
-                            </div>
-                          )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                  
-                  <Dialog open={isWeeklyDialogOpen} onOpenChange={setIsWeeklyDialogOpen}>
-                      <DialogTrigger asChild>
-                          <Button variant="outline" className="w-full">
-                              <CalendarDays className="mr-2 h-4 w-4" />
-                              ภาพรวมสัปดาห์นี้
-                          </Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-lg">
-                          <DialogHeader>
-                              <DialogTitle>ภาพรวมแคลอรี่สัปดาห์นี้</DialogTitle>
-                              <DialogDescription>
-                                  กราฟแสดงผลแคลอรี่ที่คุณบริโภคในสัปดาห์นี้
-                              </DialogDescription>
-                          </DialogHeader>
-                          {isWeeklyLoading ? (
-                                <div className="py-8 flex justify-center"><Loader2 className="animate-spin h-8 w-8" /></div>
-                            ) : weeklyLogs && weeklyLogs.length > 0 ? (
-                                <div className="py-4 space-y-4">
-                                    <ChartContainer config={chartConfig} className="min-h-[250px] w-full">
-                                        <BarChart accessibilityLayer data={weeklyChartData}>
-                                            <CartesianGrid vertical={false} />
-                                            <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} stroke="#888888" />
-                                            <YAxis stroke="#888888" />
-                                            <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
-                                            <Bar dataKey="calories" fill="var(--color-calories)" radius={8} />
-                                        </BarChart>
-                                    </ChartContainer>
-                                      <div className="grid grid-cols-2 gap-4 text-center">
-                                        <Card className="p-4">
-                                            <CardHeader className="p-0 pb-2">
-                                              <CardTitle className="text-sm font-medium">แคลอรี่รวม</CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="p-0">
-                                              <p className="text-2xl font-bold">{weeklyTotalCalories.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
-                                            </CardContent>
-                                        </Card>
-                                        <Card className="p-4">
-                                            <CardHeader className="p-0 pb-2">
-                                              <CardTitle className="text-sm font-medium">เฉลี่ยต่อวัน</CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="p-0">
-                                              <p className="text-2xl font-bold">{weeklyAverageCalories.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
-                                            </CardContent>
-                                        </Card>
-                                    </div>
-                                </div>
+            <Dialog>
+                <DialogTrigger asChild hidden />
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                    <DialogTitle>ภาพรวมแคลอรี่วันนี้</DialogTitle>
+                    <DialogDescription>
+                        ตรวจสอบเป้าหมายและบันทึกแคลอรี่ของคุณสำหรับวันนี้
+                    </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        <div className="space-y-4">
+                        <Card className="p-4 text-center bg-secondary/30">
+                            <CardTitle className="text-base font-semibold">แคลอรี่ที่แนะนำต่อวัน</CardTitle>
+                            <CardDescription>(เป้าหมาย)</CardDescription>
+                            {userProfile.dailyCalorieGoal ? (
+                            <p className="text-2xl font-bold text-primary pt-2">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
                             ) : (
-                                <p className="py-8 text-center text-muted-foreground">ยังไม่มีข้อมูลสำหรับสัปดาห์นี้</p>
+                            <p className="text-sm text-muted-foreground pt-2">คำนวณ BMI เพื่อตั้งค่าเป้าหมาย</p>
                             )}
-                      </DialogContent>
-                  </Dialog>
+                        </Card>
 
-                   <Dialog open={isMonthlyDialogOpen} onOpenChange={setIsMonthlyDialogOpen}>
-                      <DialogTrigger asChild>
-                          <Button variant="outline" className="w-full">
-                              <BarChartIcon className="mr-2 h-4 w-4" />
-                              ภาพรวมเดือนนี้
-                          </Button>
-                      </DialogTrigger>
-                      <DialogContent className="max-w-3xl">
-                          <DialogHeader>
-                              <DialogTitle>ภาพรวมแคลอรี่เดือนนี้</DialogTitle>
-                              <DialogDescription>
-                                  กราฟแสดงผลแคลอรี่ที่คุณบริโภคในเดือนนี้ ({format(new Date(), 'MMMM yyyy', { locale: th })})
-                              </DialogDescription>
-                          </DialogHeader>
-                           {isMonthlyLoading ? (
-                                <div className="py-8 flex justify-center"><Loader2 className="animate-spin h-8 w-8" /></div>
-                            ) : monthlyLogs && monthlyLogs.length > 0 ? (
-                                <div className="py-4 space-y-4">
-                                    <ChartContainer config={chartConfig} className="min-h-[250px] w-full h-80">
-                                        <BarChart accessibilityLayer data={monthlyChartData}>
-                                            <CartesianGrid vertical={false} />
-                                            <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} stroke="#888888" fontSize={10} />
-                                            <YAxis stroke="#888888" />
-                                            <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
-                                            <Bar dataKey="calories" fill="var(--color-calories)" radius={4} />
-                                        </BarChart>
-                                    </ChartContainer>
-                                      <div className="grid grid-cols-2 gap-4 text-center">
-                                        <Card className="p-4">
-                                            <CardHeader className="p-0 pb-2">
-                                              <CardTitle className="text-sm font-medium">แคลอรี่รวม</CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="p-0">
-                                              <p className="text-2xl font-bold">{monthlyTotalCalories.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
-                                            </CardContent>
-                                        </Card>
-                                        <Card className="p-4">
-                                            <CardHeader className="p-0 pb-2">
-                                              <CardTitle className="text-sm font-medium">เฉลี่ยต่อวัน (ที่มีข้อมูล)</CardTitle>
-                                            </CardHeader>
-                                            <CardContent className="p-0">
-                                              <p className="text-2xl font-bold">{monthlyAverageCalories.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
-                                            </CardContent>
-                                        </Card>
-                                    </div>
-                                </div>
-                            ) : (
-                                <p className="py-8 text-center text-muted-foreground">ยังไม่มีข้อมูลสำหรับเดือนนี้</p>
-                            )}
-                      </DialogContent>
-                  </Dialog>
-              </div>
+                        <Card className="p-4 bg-secondary/30">
+                            <CardTitle className="text-base font-semibold text-center">แคลอรี่ที่ใช้ไปแล้ว</CardTitle>
+                            <p className={`text-3xl font-bold text-center pt-2 ${dailyLog && userProfile.dailyCalorieGoal && dailyLog.consumedCalories > userProfile.dailyCalorieGoal ? 'text-destructive' : 'text-green-500'}`}>
+                            {dailyLog?.consumedCalories.toLocaleString() ?? 0} <span className="text-base font-normal">kcal</span>
+                            </p>
+                            
+                        </Card>
+                        </div>
+                        {!currentUser && (
+                        <div className="mt-4 text-center border-t pt-4">
+                            <p className="text-sm text-muted-foreground mb-3">เข้าสู่ระบบเพื่อบันทึกข้อมูลอย่างถาวร</p>
+                            <Button onClick={()=>{
+                                const calorieDialogTrigger = document.querySelector('button[aria-haspopup="dialog"][aria-expanded="true"]');
+                                if (calorieDialogTrigger instanceof HTMLElement) {
+                                    calorieDialogTrigger.click();
+                                }
+                                openAuthDialog('login');
+                            }}>
+                                <LogIn className="mr-2 h-4 w-4" />
+                                เข้าสู่ระบบ / ลงทะเบียน
+                            </Button>
+                        </div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
 
-            </div>
-          </PageSection>
+            <Dialog open={isWeeklyDialogOpen} onOpenChange={setIsWeeklyDialogOpen}>
+                <DialogTrigger asChild hidden />
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>ภาพรวมแคลอรี่สัปดาห์นี้</DialogTitle>
+                        <DialogDescription>กราฟแสดงผลแคลอรี่ที่คุณบริโภคในสัปดาห์นี้</DialogDescription>
+                    </DialogHeader>
+                    {isWeeklyLoading ? (
+                        <div className="py-8 flex justify-center"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
+                    ) : weeklyLogs && weeklyLogs.length > 0 ? (
+                        <div className="py-4 space-y-4">
+                            <ChartContainer config={chartConfig} className="min-h-[250px] w-full">
+                                <BarChart accessibilityLayer data={weeklyChartData}>
+                                    <CartesianGrid vertical={false} />
+                                    <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} stroke="hsl(var(--muted-foreground))" />
+                                    <YAxis stroke="hsl(var(--muted-foreground))" />
+                                    <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
+                                    <Bar dataKey="calories" fill="var(--color-calories)" radius={8} />
+                                </BarChart>
+                            </ChartContainer>
+                                <div className="grid grid-cols-2 gap-4 text-center">
+                                <Card className="p-4">
+                                    <CardHeader className="p-0 pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">แคลอรี่รวม</CardTitle></CardHeader>
+                                    <CardContent className="p-0"><p className="text-2xl font-bold">{weeklyTotalCalories.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">kcal</span></p></CardContent>
+                                </Card>
+                                <Card className="p-4">
+                                    <CardHeader className="p-0 pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">เฉลี่ยต่อวัน</CardTitle></CardHeader>
+                                    <CardContent className="p-0"><p className="text-2xl font-bold">{weeklyAverageCalories.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">kcal</span></p></CardContent>
+                                </Card>
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="py-8 text-center text-muted-foreground">ยังไม่มีข้อมูลสำหรับสัปดาห์นี้</p>
+                    )}
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isMonthlyDialogOpen} onOpenChange={setIsMonthlyDialogOpen}>
+                <DialogTrigger asChild hidden />
+                <DialogContent className="max-w-3xl">
+                    <DialogHeader>
+                        <DialogTitle>ภาพรวมแคลอรี่เดือนนี้</DialogTitle>
+                        <DialogDescription>กราฟแสดงผลแคลอรี่ที่คุณบริโภคในเดือนนี้ ({format(new Date(), 'MMMM yyyy', { locale: th })})</DialogDescription>
+                    </DialogHeader>
+                    {isMonthlyLoading ? (
+                        <div className="py-8 flex justify-center"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>
+                    ) : monthlyLogs && monthlyLogs.length > 0 ? (
+                        <div className="py-4 space-y-4">
+                            <ChartContainer config={chartConfig} className="min-h-[250px] w-full h-80">
+                                <BarChart accessibilityLayer data={monthlyChartData}>
+                                    <CartesianGrid vertical={false} />
+                                    <XAxis dataKey="name" tickLine={false} tickMargin={10} axisLine={false} stroke="hsl(var(--muted-foreground))" fontSize={10} />
+                                    <YAxis stroke="hsl(var(--muted-foreground))" />
+                                    <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dot" />} />
+                                    <Bar dataKey="calories" fill="var(--color-calories)" radius={4} />
+                                </BarChart>
+                            </ChartContainer>
+                                <div className="grid grid-cols-2 gap-4 text-center">
+                                <Card className="p-4">
+                                    <CardHeader className="p-0 pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">แคลอรี่รวม</CardTitle></CardHeader>
+                                    <CardContent className="p-0"><p className="text-2xl font-bold">{monthlyTotalCalories.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">kcal</span></p></CardContent>
+                                </Card>
+                                <Card className="p-4">
+                                    <CardHeader className="p-0 pb-2"><CardTitle className="text-sm font-medium text-muted-foreground">เฉลี่ยต่อวัน (ที่มีข้อมูล)</CardTitle></CardHeader>
+                                    <CardContent className="p-0"><p className="text-2xl font-bold">{monthlyAverageCalories.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">kcal</span></p></CardContent>
+                                </Card>
+                            </div>
+                        </div>
+                    ) : (
+                        <p className="py-8 text-center text-muted-foreground">ยังไม่มีข้อมูลสำหรับเดือนนี้</p>
+                    )}
+                </DialogContent>
+            </Dialog>
+
         </div>
       </main>
 
-      <footer className="text-center py-4 sm:py-6 md:py-8 mt-6 sm:mt-8 md:mt-12 lg:mt-16 border-t border-border/50">
-        <Link href="/datastore-summary" className="text-sm text-muted-foreground hover:text-primary transition-colors">
-          สรุปฐานข้อมูล
-        </Link>
+      <footer className="text-center py-8 mt-8 border-t">
+        <p className="text-sm text-muted-foreground">MOMU SCAN - Created with Firebase Studio</p>
       </footer>
     </div>
   );

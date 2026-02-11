@@ -8,41 +8,42 @@ body {
 
 @layer base {
   :root {
-    --background: 208 100% 97%; /* Very light blue #F0F8FF */
-    --foreground: 210 40% 15%; /* Dark blue-grey */
+    --background: 210 40% 98%; /* Lighter, cleaner background */
+    --foreground: 222.2 84% 4.9%;
 
-    --card: 0 0% 100%; /* White */
-    --card-foreground: 210 40% 15%; /* Dark blue-grey */
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
 
-    --popover: 0 0% 100%; /* White */
-    --popover-foreground: 210 40% 15%; /* Dark blue-grey */
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 212 98% 73%; /* Soft blue #77B5FE */
-    --primary-foreground: 0 0% 100%; /* White */
+    --primary: 217 91% 60%; /* A more vibrant blue */
+    --primary-foreground: 210 40% 98%;
 
-    --secondary: 210 100% 90%; /* Lighter shade of background */
-    --secondary-foreground: 212 98% 43%; /* Darker version of primary */
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
 
-    --muted: 210 40% 90%; /* Lighter grey-blue */
-    --muted-foreground: 210 40% 45%; /* Darker grey-blue */
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 248 100% 80%; /* Muted purple #A898FF */
-    --accent-foreground: 0 0% 100%; /* White */
+    --accent: 142 76% 36%; /* A calm green for success/health actions */
+    --accent-foreground: 210 40% 98%;
 
-    --destructive: 0 84.2% 60.2%; /* Standard red */
-    --destructive-foreground: 0 0% 98%; /* Light color for destructive */
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
 
-    --border: 210 40% 85%; /* Slightly darker than muted for borders */
-    --input: 210 40% 92%; /* Slightly darker than muted for inputs */
-    --ring: 212 98% 63%; /* A slightly darker shade of primary for focus rings */
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 217 91% 60%;
 
-    --chart-1: 12 76% 61%;
-    --chart-2: 173 58% 39%;
-    --chart-3: 197 37% 24%;
+    --chart-1: 217 91% 60%; /* primary */
+    --chart-2: 142 76% 36%; /* accent */
+    --chart-3: 24 9.8% 10%;
     --chart-4: 43 74% 66%;
     --chart-5: 27 87% 67%;
-    --radius: 0.5rem;
+    --radius: 0.75rem; /* Slightly larger radius for a softer look */
 
+    /* Keep sidebar vars for now, even if not used in this page */
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
     --sidebar-primary: 240 5.9% 10%;
@@ -54,40 +55,41 @@ body {
   }
 
   .dark {
-    --background: 210 40% 5%; /* Dark blue for dark mode */
-    --foreground: 208 100% 97%; /* Very light blue for dark mode text */
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
 
-    --card: 210 40% 8%; /* Slightly lighter dark blue for cards */
-    --card-foreground: 208 100% 97%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
 
-    --popover: 210 40% 8%;
-    --popover-foreground: 208 100% 97%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
 
-    --primary: 212 98% 73%; /* Soft blue #77B5FE - can remain same or adjust */
-    --primary-foreground: 0 0% 10%; /* Dark text on primary for dark mode if primary is light */
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
 
-    --secondary: 210 40% 12%; /* Darker secondary */
-    --secondary-foreground: 208 100% 97%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 210 40% 12%;
-    --muted-foreground: 210 40% 60%; /* Lighter muted text */
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
 
-    --accent: 248 100% 80%; /* Muted purple #A898FF - can remain same or adjust */
-    --accent-foreground: 0 0% 10%; /* Dark text on accent for dark mode if accent is light */
+    --accent: 142 71% 45%; /* Darker green */
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
     
-    --destructive: 0 72.2% 50.6%; /* Slightly adjusted red for dark */
-    --destructive-foreground: 0 0% 98%;
+    --chart-1: 210 40% 98%; /* primary */
+    --chart-2: 142 71% 45%; /* accent */
+    --chart-3: 204 20% 98%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
 
-    --border: 210 40% 20%;
-    --input: 210 40% 20%;
-    --ring: 212 98% 63%;
-    
-    --chart-1: 220 70% 50%;
-    --chart-2: 160 60% 45%;
-    --chart-3: 30 80% 55%;
-    --chart-4: 280 65% 60%;
-    --chart-5: 340 75% 55%;
-
+    /* Keep sidebar vars for now */
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;

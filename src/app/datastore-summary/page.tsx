@@ -82,14 +82,14 @@ export default function DatastoreSummaryPage() {
   }, [db]);
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-body p-4 sm:p-6 md:p-8">
-      <header className="mb-8">
-        <div className="container mx-auto flex items-center justify-between">
-          <h1 className="text-3xl sm:text-4xl font-headline font-bold text-primary flex items-center">
-            <Database className="w-8 h-8 mr-3" />
-            สรุปฐานข้อมูล
-          </h1>
-          <Button asChild variant="outline">
+    <div className="min-h-screen bg-background text-foreground font-body">
+       <header className="sticky top-0 z-40 w-full border-b bg-background/95 backdrop-blur-sm">
+        <div className="container mx-auto flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
+            <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
+                <Database className="h-6 w-6" />
+                สรุปฐานข้อมูล
+            </h1>
+          <Button asChild variant="outline" size="sm">
             <Link href="/">
               <ArrowLeft className="w-4 h-4 mr-2" />
               กลับหน้าหลัก
@@ -103,14 +103,14 @@ export default function DatastoreSummaryPage() {
           <Loader2 className="w-12 h-12 animate-spin text-primary" />
         </div>
       ) : (
-        <main className="container mx-auto grid grid-cols-1 gap-8">
+        <main className="container mx-auto py-8 px-4 sm:px-6 lg:px-8 grid grid-cols-1 gap-8">
           {/* Articles Card */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center">
-                    <FileText className="w-6 h-6 mr-3 text-primary"/>
-                    บทความ (Articles)
+                <div className="flex items-center gap-3">
+                    <FileText className="w-6 h-6 text-muted-foreground"/>
+                    <span className="text-xl">บทความ (Articles)</span>
                 </div>
                 <Badge variant="secondary">{articles.length} รายการ</Badge>
               </CardTitle>
@@ -139,7 +139,7 @@ export default function DatastoreSummaryPage() {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={3} className="text-center text-muted-foreground">
+                        <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
                           ไม่มีข้อมูลบทความ
                         </TableCell>
                       </TableRow>
@@ -154,9 +154,9 @@ export default function DatastoreSummaryPage() {
           <Card>
             <CardHeader>
                 <CardTitle className="flex items-center justify-between">
-                    <div className="flex items-center">
-                        <Utensils className="w-6 h-6 mr-3 text-primary"/>
-                        รายการอาหาร (Food Items)
+                    <div className="flex items-center gap-3">
+                        <Utensils className="w-6 h-6 text-muted-foreground"/>
+                        <span className="text-xl">รายการอาหาร (Food Items)</span>
                     </div>
                     <Badge variant="secondary">{foodItems.length} รายการ</Badge>
                 </CardTitle>
@@ -183,7 +183,7 @@ export default function DatastoreSummaryPage() {
                           <TableCell>{item.nutritionalInformation}</TableCell>
                           <TableCell>{item.safetyAdvice}</TableCell>
                           <TableCell>
-                            <a href={item.imageUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                            <a href={item.imageUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">
                               ดูรูป
                             </a>
                           </TableCell>
@@ -191,7 +191,7 @@ export default function DatastoreSummaryPage() {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center text-muted-foreground">
+                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                           ไม่มีข้อมูลรายการอาหาร
                         </TableCell>
                       </TableRow>
@@ -206,9 +206,9 @@ export default function DatastoreSummaryPage() {
           <Card>
             <CardHeader>
                <CardTitle className="flex items-center justify-between">
-                    <div className="flex items-center">
-                        <HelpCircle className="w-6 h-6 mr-3 text-primary"/>
-                        ถาม-ตอบ (Q&A)
+                    <div className="flex items-center gap-3">
+                        <HelpCircle className="w-6 h-6 text-muted-foreground"/>
+                        <span className="text-xl">ถาม-ตอบ (Q&A)</span>
                     </div>
                     <Badge variant="secondary">{questionAnswers.length} รายการ</Badge>
                 </CardTitle>
@@ -237,7 +237,7 @@ export default function DatastoreSummaryPage() {
                       ))
                     ) : (
                       <TableRow>
-                        <TableCell colSpan={3} className="text-center text-muted-foreground">
+                        <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
                           ไม่มีข้อมูลการถาม-ตอบ
                         </TableCell>
                       </TableRow>
@@ -250,6 +250,9 @@ export default function DatastoreSummaryPage() {
 
         </main>
       )}
+       <footer className="text-center py-8 mt-8 border-t">
+        <p className="text-sm text-muted-foreground">MOMU SCAN - Created with Firebase Studio</p>
+      </footer>
     </div>
   );
 }
