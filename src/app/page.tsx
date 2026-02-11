@@ -65,6 +65,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion"
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 
@@ -823,7 +829,7 @@ export default function FSFAPage() {
       const goal = userProfile.dailyCalorieGoal;
       const consumed = dailyLog?.consumedCalories || 0;
       if (!goal || goal === 0) return 0;
-      return (consumed / goal) * 100;
+      return Math.min((consumed / goal) * 100, 100); // Cap at 100% for UI
     }, [userProfile.dailyCalorieGoal, dailyLog?.consumedCalories]);
 
 
@@ -1087,79 +1093,77 @@ export default function FSFAPage() {
         <div className="lg:col-span-2 space-y-8">
            <Card className="sticky top-20">
             <CardHeader>
-                <CardTitle className="flex items-center justify-between text-xl">
-                    <span>ภาพรวมวันนี้</span>
-                    <span className="text-sm font-normal text-muted-foreground">{format(new Date(), 'd MMMM yyyy', { locale: th })}</span>
-                </CardTitle>
+                <div className="flex justify-between items-center">
+                    <CardTitle className="text-xl">ภาพรวมวันนี้</CardTitle>
+                     <div className="flex items-center gap-2">
+                        <Dialog open={isWeeklyDialogOpen} onOpenChange={setIsWeeklyDialogOpen}>
+                            <DialogTrigger asChild><Button variant="outline" size="sm"><AreaChart className="h-4 w-4 lg:mr-2"/> <span className="hidden lg:inline">สัปดาห์</span></Button></DialogTrigger>
+                        </Dialog>
+                        <Dialog open={isMonthlyDialogOpen} onOpenChange={setIsMonthlyDialogOpen}>
+                            <DialogTrigger asChild><Button variant="outline" size="sm"><BarChartIcon className="h-4 w-4 lg:mr-2"/> <span className="hidden lg:inline">เดือน</span></Button></DialogTrigger>
+                        </Dialog>
+                    </div>
+                </div>
+                <CardDescription>{format(new Date(), 'd MMMM yyyy', { locale: th })}</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
                 <div>
                   <div className="flex justify-between items-baseline mb-1">
-                    <span className="text-muted-foreground">เป้าหมายรายวัน</span>
-                    <span className="font-bold text-primary">{userProfile.dailyCalorieGoal?.toLocaleString() || 'N/A'} kcal</span>
+                    <span className="text-sm text-muted-foreground">แคลอรี่ที่บริโภค</span>
+                    <span className="text-sm text-muted-foreground">เป้าหมาย: {userProfile.dailyCalorieGoal?.toLocaleString() || 'N/A'} kcal</span>
                   </div>
                   <Progress value={calorieProgress} className="h-3" />
                   <div className="flex justify-between items-baseline mt-1">
-                     <span className={`text-lg font-bold ${calorieProgress > 100 ? 'text-destructive' : 'text-accent'}`}>{dailyLog?.consumedCalories.toLocaleString() ?? 0} kcal</span>
-                     <span className="text-xs text-muted-foreground">บริโภคแล้ว</span>
+                     <span className={`text-lg font-bold ${(dailyLog?.consumedCalories ?? 0) > (userProfile.dailyCalorieGoal ?? 9999) ? 'text-destructive' : 'text-accent'}`}>{dailyLog?.consumedCalories.toLocaleString() ?? 0} kcal</span>
+                     <span className="text-sm font-semibold text-muted-foreground">{Math.round(calorieProgress)}%</span>
                   </div>
-                </div>
-
-                <div className="flex gap-2">
-                    <Dialog>
-                        <DialogTrigger asChild><Button variant="outline" className="w-full"><PieChart className="mr-2 h-4 w-4"/>ภาพรวม</Button></DialogTrigger>
-                        {/* Today's Summary Dialog Content... */}
-                    </Dialog>
-                    <Dialog open={isWeeklyDialogOpen} onOpenChange={setIsWeeklyDialogOpen}>
-                        <DialogTrigger asChild><Button variant="outline" className="w-full"><AreaChart className="mr-2 h-4 w-4"/>สัปดาห์</Button></DialogTrigger>
-                         {/* Weekly Summary Dialog Content... */}
-                    </Dialog>
-                    <Dialog open={isMonthlyDialogOpen} onOpenChange={setIsMonthlyDialogOpen}>
-                        <DialogTrigger asChild><Button variant="outline" className="w-full"><BarChartIcon className="mr-2 h-4 w-4"/>เดือน</Button></DialogTrigger>
-                         {/* Monthly Summary Dialog Content... */}
-                    </Dialog>
                 </div>
                 
                 <Separator/>
 
                  <div>
-                    <h3 className="text-center font-semibold mb-3">มื้อที่บันทึกแล้ว</h3>
+                    <h3 className="text-md font-semibold mb-3">มื้อที่บันทึกแล้ว</h3>
                     {dailyLog && dailyLog.meals.length > 0 ? (
-                        <ScrollArea className="h-48">
-                            <div className="space-y-4 pr-4">
+                        <Accordion type="single" collapsible className="w-full" defaultValue={mealPeriodOrder.find(p => groupedMeals[p]) ? `period-${mealPeriodOrder.find(p => groupedMeals[p])}`: undefined}>
                             {mealPeriodOrder.map(period => (
                                 groupedMeals[period] && (
-                                <div key={period}>
-                                    <p className="font-semibold text-sm text-primary mb-1">{period}</p>
-                                    <div className="pl-2 space-y-2">
-                                    {groupedMeals[period].map((meal, index) => (
-                                        <div key={index} className="flex justify-between items-center text-sm text-muted-foreground border-b pb-2">
-                                        <div className="truncate pr-2">
-                                            <p className="font-medium text-foreground">{meal.name}</p>
-                                            <p className="text-xs">{meal.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
+                                <AccordionItem value={`period-${period}`} key={period}>
+                                    <AccordionTrigger className="py-2">
+                                        <div className="flex justify-between w-full pr-4 items-center">
+                                            <span className="font-semibold">{period}</span>
+                                            <span className="text-sm text-muted-foreground">{groupedMeals[period].reduce((sum, meal) => sum + meal.calories, 0).toLocaleString()} kcal</span>
                                         </div>
-                                        <span className="font-medium whitespace-nowrap text-foreground/90">{meal.calories.toLocaleString()} kcal</span>
+                                    </AccordionTrigger>
+                                    <AccordionContent className="pt-2">
+                                        <div className="pl-2 space-y-3 border-l-2 border-primary/50 ml-2">
+                                            {groupedMeals[period].map((meal, index) => (
+                                                <div key={index} className="flex justify-between items-center text-sm text-muted-foreground pl-4">
+                                                    <div className="truncate pr-2">
+                                                        <p className="font-medium text-foreground">{meal.name}</p>
+                                                        <p className="text-xs">{meal.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
+                                                    </div>
+                                                    <span className="font-medium whitespace-nowrap text-foreground/90">{meal.calories.toLocaleString()} kcal</span>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ))}
-                                    </div>
-                                </div>
+                                    </AccordionContent>
+                                </AccordionItem>
                                 )
                             ))}
-                            </div>
-                        </ScrollArea>
+                        </Accordion>
                     ) : (
                         <div className="text-center text-muted-foreground py-10">
                             <p>ยังไม่มีการบันทึกมื้ออาหารสำหรับวันนี้</p>
                         </div>
                     )}
                  </div>
-                 <div className="mt-4 text-center border-t pt-4">
-                    <p className="text-xs text-muted-foreground flex items-center justify-center">
-                        <Clock className="mr-1.5 h-3 w-3" />
-                        รีเซ็ตข้อมูลในอีก: <span className="font-semibold ml-1 tabular-nums">{countdown}</span>
-                    </p>
-                </div>
             </CardContent>
+            <CardFooter className="flex items-center justify-center">
+                 <p className="text-xs text-muted-foreground flex items-center justify-center">
+                    <Clock className="mr-1.5 h-3 w-3" />
+                    รีเซ็ตข้อมูลในอีก: <span className="font-semibold ml-1 tabular-nums">{countdown}</span>
+                </p>
+            </CardFooter>
            </Card>
 
             <Card>
@@ -1190,54 +1194,6 @@ export default function FSFAPage() {
                   </CardFooter>
                 )}
             </Card>
-
-            <Dialog>
-                <DialogTrigger asChild hidden />
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                    <DialogTitle>ภาพรวมแคลอรี่วันนี้</DialogTitle>
-                    <DialogDescription>
-                        ตรวจสอบเป้าหมายและบันทึกแคลอรี่ของคุณสำหรับวันนี้
-                    </DialogDescription>
-                    </DialogHeader>
-                    <div className="py-4">
-                        <div className="space-y-4">
-                        <Card className="p-4 text-center bg-secondary/30">
-                            <CardTitle className="text-base font-semibold">แคลอรี่ที่แนะนำต่อวัน</CardTitle>
-                            <CardDescription>(เป้าหมาย)</CardDescription>
-                            {userProfile.dailyCalorieGoal ? (
-                            <p className="text-2xl font-bold text-primary pt-2">{userProfile.dailyCalorieGoal.toLocaleString()} <span className="text-sm font-normal">kcal</span></p>
-                            ) : (
-                            <p className="text-sm text-muted-foreground pt-2">คำนวณ BMI เพื่อตั้งค่าเป้าหมาย</p>
-                            )}
-                        </Card>
-
-                        <Card className="p-4 bg-secondary/30">
-                            <CardTitle className="text-base font-semibold text-center">แคลอรี่ที่ใช้ไปแล้ว</CardTitle>
-                            <p className={`text-3xl font-bold text-center pt-2 ${dailyLog && userProfile.dailyCalorieGoal && dailyLog.consumedCalories > userProfile.dailyCalorieGoal ? 'text-destructive' : 'text-green-500'}`}>
-                            {dailyLog?.consumedCalories.toLocaleString() ?? 0} <span className="text-base font-normal">kcal</span>
-                            </p>
-                            
-                        </Card>
-                        </div>
-                        {!currentUser && (
-                        <div className="mt-4 text-center border-t pt-4">
-                            <p className="text-sm text-muted-foreground mb-3">เข้าสู่ระบบเพื่อบันทึกข้อมูลอย่างถาวร</p>
-                            <Button onClick={()=>{
-                                const calorieDialogTrigger = document.querySelector('button[aria-haspopup="dialog"][aria-expanded="true"]');
-                                if (calorieDialogTrigger instanceof HTMLElement) {
-                                    calorieDialogTrigger.click();
-                                }
-                                openAuthDialog('login');
-                            }}>
-                                <LogIn className="mr-2 h-4 w-4" />
-                                เข้าสู่ระบบ / ลงทะเบียน
-                            </Button>
-                        </div>
-                        )}
-                    </div>
-                </DialogContent>
-            </Dialog>
 
             <Dialog open={isWeeklyDialogOpen} onOpenChange={setIsWeeklyDialogOpen}>
                 <DialogTrigger asChild hidden />
@@ -1322,3 +1278,5 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+    
