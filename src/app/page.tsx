@@ -1011,18 +1011,23 @@ export default function FSFAPage() {
                         </p>
                       </div>
                       
-                      {isFoodIdentified && imageAnalysisResult.nutritionalInformation && imageAnalysisResult.nutritionalInformation.estimatedCalories > 0 && (
+                      {isFoodIdentified && imageAnalysisResult.nutritionalInformation && (
                         <>
                           <Separator />
                           <div>
                             <h4 className="font-semibold text-sm sm:text-base md:text-lg font-body text-foreground flex items-center"><Flame className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-orange-500" />แคลอรี่โดยประมาณ:</h4>
                             <div className="mt-1 text-xs sm:text-sm md:text-base font-body text-foreground/80 space-y-1">
                                <div className="flex items-center justify-between">
-                                <p className="text-lg sm:text-xl font-bold text-primary">{imageAnalysisResult.nutritionalInformation.estimatedCalories} กิโลแคลอรี่</p>
+                                <p className="text-lg sm:text-xl font-bold text-primary">
+                                  {imageAnalysisResult.nutritionalInformation.estimatedCalories > 0 
+                                    ? `${imageAnalysisResult.nutritionalInformation.estimatedCalories} กิโลแคลอรี่`
+                                    : 'N/A'
+                                  }
+                                </p>
                                 <Button
                                   size="sm"
                                   onClick={handleLogMeal}
-                                  disabled={isLoggingMeal}
+                                  disabled={isLoggingMeal || imageAnalysisResult.nutritionalInformation.estimatedCalories <= 0}
                                   className="bg-accent text-accent-foreground hover:bg-accent/90"
                                 >
                                   {isLoggingMeal ? <Loader2 className="animate-spin mr-2" /> : <PlusCircle className="mr-2"/>}
@@ -1031,12 +1036,16 @@ export default function FSFAPage() {
                               </div>
                               <p className="text-xs text-muted-foreground">{imageAnalysisResult.nutritionalInformation.reasoning}</p>
                               
-                              <p className="font-semibold pt-2">ส่วนผสมที่ใช้ประเมิน:</p>
-                              <ul className="list-disc pl-4 sm:pl-5 space-y-1">
-                                {imageAnalysisResult.nutritionalInformation.visibleIngredients.map((ingredient, index) => (
-                                  <li key={index}>{ingredient}</li>
-                                ))}
-                              </ul>
+                              {imageAnalysisResult.nutritionalInformation.visibleIngredients.length > 0 && (
+                                <div className="mt-2">
+                                    <p className="font-semibold pt-2">ส่วนผสมที่ใช้ประเมิน:</p>
+                                    <ul className="list-disc pl-4 sm:pl-5 space-y-1">
+                                    {imageAnalysisResult.nutritionalInformation.visibleIngredients.map((ingredient, index) => (
+                                        <li key={index}>{ingredient}</li>
+                                    ))}
+                                    </ul>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </>
