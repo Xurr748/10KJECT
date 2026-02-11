@@ -55,7 +55,7 @@ const prompt = ai.definePrompt({
   name: 'scanFoodImagePrompt',
   input: { schema: ScanFoodImageInputSchema },
   output: { schema: LlmOutputSchema }, // Use the lenient schema for LLM output
-  model: 'googleai/gemini-2.5-pro',
+  model: 'googleai/gemini-2.5-flash',
   config: {
     temperature: 0.3,
     maxOutputTokens: 600,
