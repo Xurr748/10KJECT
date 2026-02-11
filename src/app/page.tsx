@@ -1091,7 +1091,7 @@ export default function FSFAPage() {
         </div>
 
         <div className="lg:col-span-2 space-y-8">
-           <Card className="sticky top-20">
+           <Card>
             <CardHeader>
                 <div className="flex justify-between items-center">
                     <CardTitle className="text-xl">ภาพรวมวันนี้</CardTitle>
