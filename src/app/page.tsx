@@ -76,7 +76,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 
 // Lucide Icons
-import { Camera, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, MessageSquareWarning, Send, MessageCircle, ScanLine, Flame, Calculator, PlusCircle, BookCheck, Clock, CalendarDays, BarChart as BarChartIcon, Wheat, Sparkles, Trash2, AreaChart, PieChart } from 'lucide-react';
+import { Camera, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, MessageSquareWarning, Send, MessageCircle, ScanLine, Flame, Calculator, PlusCircle, BookCheck, Clock, CalendarDays, BarChart as BarChartIcon, Wheat, Sparkles, Trash2, AreaChart, PieChart, UploadCloud } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 const GENERIC_SAFETY_UNAVAILABLE = "ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้";
@@ -940,21 +940,40 @@ export default function FSFAPage() {
                     </CardTitle>
                     <CardDescription>อัปโหลดรูปภาพอาหาร แล้ว AI จะประเมินข้อมูลโภชนาการให้คุณ</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-6">
-                    <div className="space-y-2">
-                        <Label htmlFor="food-image-upload" className="sr-only">อัปโหลดรูปภาพอาหาร</Label>
-                        <Input id="food-image-upload" type="file" accept="image/*" onChange={handleFileChange} className="file:text-primary-foreground file:font-semibold file:mr-4 file:px-4 file:py-2 file:rounded-full file:border-0 file:bg-primary hover:file:bg-primary/90" />
-                    </div>
-
-                    {previewUrl && (
-                        <div className="relative group w-full aspect-video rounded-lg overflow-hidden border-2 border-dashed flex items-center justify-center bg-muted/50">
-                            <Image src={previewUrl} alt="Food preview" layout="fill" objectFit="contain" className="p-2" data-ai-hint="food meal" />
-                             <Button variant="destructive" size="icon" className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity" onClick={resetImageRelatedStates}>
-                                <Trash2 className="w-4 h-4"/>
-                                <span className="sr-only">ลบรูปภาพ</span>
-                            </Button>
-                        </div>
-                    )}
+                <CardContent>
+                  {!previewUrl ? (
+                      <div className="relative">
+                          <input
+                            id="food-image-upload"
+                            type="file"
+                            className="hidden"
+                            accept="image/*"
+                            onChange={handleFileChange}
+                          />
+                          <Label
+                            htmlFor="food-image-upload"
+                            className="flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer bg-muted/50 hover:bg-muted transition-colors"
+                          >
+                            <div className="flex flex-col items-center justify-center text-center pt-5 pb-6">
+                              <UploadCloud className="w-10 h-10 mb-4 text-muted-foreground" />
+                              <p className="mb-2 text-sm text-muted-foreground">
+                                <span className="font-semibold text-primary">คลิกเพื่ออัปโหลด</span> หรือลากไฟล์มาวาง
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                PNG, JPG (สูงสุด 5MB)
+                              </p>
+                            </div>
+                          </Label>
+                      </div>
+                  ) : (
+                      <div className="relative group w-full aspect-video rounded-lg overflow-hidden border-2 border-dashed flex items-center justify-center bg-muted/50">
+                          <Image src={previewUrl} alt="Food preview" layout="fill" objectFit="contain" className="p-2" data-ai-hint="food meal" />
+                           <Button variant="destructive" size="icon" className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity" onClick={resetImageRelatedStates}>
+                              <Trash2 className="w-4 h-4"/>
+                              <span className="sr-only">ลบรูปภาพ</span>
+                          </Button>
+                      </div>
+                  )}
                 </CardContent>
                 <CardFooter>
                      <Button onClick={handleImageAnalysis} disabled={isLoadingImageAnalysis || !previewUrl} className="w-full" size="lg">
@@ -1000,7 +1019,7 @@ export default function FSFAPage() {
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <h4 className="font-semibold text-foreground flex items-center gap-2 mb-2"><Flame className="w-5 h-5 text-orange-500" />แคลอรี่โดยประมาณ</h4>
-                                        <p className="text-2xl font-bold">{imageAnalysisResult.nutritionalInformation.estimatedCalories.toLocaleString()} <span className="text-sm font-normal text-muted-foreground">kcal</span></p>
+                                        <p className="text-2xl font-bold">{imageAnalysisResult.nutritionalInformation.estimatedCalories > 0 ? imageAnalysisResult.nutritionalInformation.estimatedCalories.toLocaleString() : 'N/A'} <span className="text-sm font-normal text-muted-foreground">kcal</span></p>
                                         <p className="text-xs text-muted-foreground mt-1">{imageAnalysisResult.nutritionalInformation.reasoning}</p>
                                     </div>
                                     {imageAnalysisResult.nutritionalInformation.visibleIngredients.length > 0 && (
@@ -1280,3 +1299,4 @@ export default function FSFAPage() {
 }
 
     
+
