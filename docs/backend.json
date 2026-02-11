@@ -1,3 +1,4 @@
+
 {
   "entities": {
     "Article": {
@@ -97,6 +98,82 @@
         "answer",
         "timestamp"
       ]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Stores user-specific profile information like height, weight, and health goals.",
+      "type": "object",
+      "properties": {
+        "height": {
+          "type": "number",
+          "description": "User's height in centimeters."
+        },
+        "weight": {
+          "type": "number",
+          "description": "User's weight in kilograms."
+        },
+        "bmi": {
+          "type": "number",
+          "description": "User's calculated Body Mass Index."
+        },
+        "dailyCalorieGoal": {
+          "type": "number",
+          "description": "User's recommended daily calorie intake goal."
+        }
+      }
+    },
+    "Meal": {
+      "title": "Meal",
+      "description": "Represents a single meal logged by the user.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name of the food item for the meal."
+        },
+        "calories": {
+          "type": "number",
+          "description": "Estimated calories for the meal."
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of when the meal was logged."
+        }
+      },
+      "required": [
+        "name",
+        "calories",
+        "timestamp"
+      ]
+    },
+    "DailyLog": {
+      "title": "Daily Log",
+      "description": "A daily summary of a user's calorie consumption and meals.",
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "format": "date-time",
+          "description": "The date for which the log is recorded (usually start of day UTC)."
+        },
+        "consumedCalories": {
+          "type": "number",
+          "description": "Total calories consumed on this day."
+        },
+        "meals": {
+          "type": "array",
+          "description": "List of meals consumed on this day.",
+          "items": {
+            "$ref": "#/entities/Meal"
+          }
+        }
+      },
+      "required": [
+        "date",
+        "consumedCalories",
+        "meals"
+      ]
     }
   },
   "auth": {
@@ -110,49 +187,36 @@
       {
         "path": "/articles/{articleId}",
         "definition": {
-          "entityName": "Article",
-          "schema": {
-            "$ref": "#/backend/entities/Article"
-          },
-          "description": "Collection for storing articles on senior nutrition and food safety.",
-          "params": [
-            {
-              "name": "articleId",
-              "description": "Unique identifier for the article."
-            }
-          ]
+          "schema": { "$ref": "#/entities/Article" },
+          "description": "Collection for storing articles on senior nutrition and food safety."
         }
       },
       {
         "path": "/food_items/{foodItemId}",
         "definition": {
-          "entityName": "FoodItem",
-          "schema": {
-            "$ref": "#/backend/entities/FoodItem"
-          },
-          "description": "Collection for storing food items identified by the AI image scanner.",
-          "params": [
-            {
-              "name": "foodItemId",
-              "description": "Unique identifier for the food item."
-            }
-          ]
+          "schema": { "$ref": "#/entities/FoodItem" },
+          "description": "Collection for storing food items identified by the AI image scanner."
         }
       },
       {
         "path": "/question_answers/{questionAnswerId}",
         "definition": {
-          "entityName": "QuestionAnswer",
-          "schema": {
-            "$ref": "#/backend/entities/QuestionAnswer"
-          },
-          "description": "Collection for storing question and answer pairs from the interactive Q&A feature.",
-          "params": [
-            {
-              "name": "questionAnswerId",
-              "description": "Unique identifier for the question and answer pair."
-            }
-          ]
+          "schema": { "$ref": "#/entities/QuestionAnswer" },
+          "description": "Collection for storing question and answer pairs from the interactive Q&A feature."
+        }
+      },
+      {
+        "path": "/users/{userId}",
+        "definition": {
+          "schema": { "$ref": "#/entities/UserProfile" },
+          "description": "Stores user profile data."
+        }
+      },
+      {
+        "path": "/users/{userId}/dailyLogs/{logId}",
+        "definition": {
+          "schema": { "$ref": "#/entities/DailyLog" },
+          "description": "Subcollection for a user's daily meal and calorie logs."
         }
       }
     ],

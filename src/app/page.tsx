@@ -236,6 +236,7 @@ export default function FSFAPage() {
     let unsubscribeLog: (() => void) | undefined;
 
     const handleUserLoggedIn = async (user: User) => {
+        if (!db) return;
         const localProfileData = safeJsonParse(localStorage.getItem('anonymousUserProfile'));
         const localLogsData: DailyLog[] = safeJsonParse(localStorage.getItem('anonymousDailyLogs')) || [];
         
@@ -305,14 +306,16 @@ export default function FSFAPage() {
         // One-time migration from old log format to new array format
         const allLogsRaw = localStorage.getItem('anonymousDailyLogs');
         let allLogs: DailyLog[] = safeJsonParse(allLogsRaw) || [];
-        if (!allLogsRaw) {
+        
+        if (!allLogsRaw) { // If the new format doesn't exist, check for the old one
             const oldLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
             if (oldLog) {
-                allLogs = [oldLog];
+                allLogs = [oldLog]; // Migrate the single log to the array format
                 localStorage.setItem('anonymousDailyLogs', JSON.stringify(allLogs));
-                localStorage.removeItem('anonymousDailyLog');
             }
         }
+        // Always remove the old key after checking to prevent re-migration
+        localStorage.removeItem('anonymousDailyLog');
         
         const todayDateStr = format(getStartOfUTCDay(), 'yyyy-MM-dd');
         const todayLog = allLogs.find(log => format(log.date.toDate(), 'yyyy-MM-dd') === todayDateStr) || null;
@@ -334,9 +337,10 @@ export default function FSFAPage() {
     // Effect to fetch weekly logs when dialog opens
     useEffect(() => {
         const fetchWeeklyLogs = async () => {
+            if (!db) return;
             setIsWeeklyLoading(true);
             
-            if (currentUser && db) { // Logged-in user
+            if (currentUser) { // Logged-in user
                 const today = new Date();
                 const weekStart = startOfWeek(today, { weekStartsOn: 1 });
                 const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
@@ -382,9 +386,10 @@ export default function FSFAPage() {
     // Effect to fetch monthly logs when dialog opens
     useEffect(() => {
         const fetchMonthlyLogs = async () => {
+            if(!db) return;
             setIsMonthlyLoading(true);
 
-            if (currentUser && db) { // Logged-in user
+            if (currentUser) { // Logged-in user
                 const today = new Date();
                 const monthStart = startOfMonth(today);
                 const monthEnd = endOfMonth(today);
@@ -463,6 +468,7 @@ export default function FSFAPage() {
 
   
   const handleLogout = async () => {
+    if (!auth) return;
     try {
       await signOut(auth);
       toast({
@@ -590,7 +596,7 @@ export default function FSFAPage() {
     if (currentUser && db) {
         const userDocRef = doc(db, 'users', currentUser.uid);
         setDocumentNonBlocking(userDocRef, newProfile, { merge: true });
-        setUserProfile(newProfile);
+        setUserProfile(newProfile); // Optimistic update
         toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
         setIsCalculatingBmi(false);
     } else {
@@ -603,7 +609,7 @@ export default function FSFAPage() {
 
 
   const handleLogMeal = async () => {
-    if (isLoggingMeal || !imageAnalysisResult || !imageAnalysisResult.nutritionalInformation) return;
+    if (isLoggingMeal || !imageAnalysisResult || !imageAnalysisResult.nutritionalInformation || !db) return;
     setIsLoggingMeal(true);
   
     const mealName = imageAnalysisResult.foodItem;
@@ -615,70 +621,65 @@ export default function FSFAPage() {
       timestamp: Timestamp.now(),
     };
   
-    try {
-      if (currentUser && db) { // Logged-in user
-        const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-        const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
-        const logQuery = query(logsCollectionRef, where('date', '>=', Timestamp.fromDate(startOfTodayUTC)));
+    if (currentUser) { // Logged-in user
+      const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+      const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
+      const logQuery = query(logsCollectionRef, where('date', '>=', Timestamp.fromDate(startOfTodayUTC)));
+      
+      const logSnapshot = await getDocs(logQuery); // We need to get docs to check existence
+      
+      if (logSnapshot.empty) {
+        const newLogData: DailyLog = {
+          date: Timestamp.fromDate(startOfTodayUTC),
+          consumedCalories: newMeal.calories,
+          meals: [newMeal],
+        };
+        addDocumentNonBlocking(logsCollectionRef, newLogData);
+      } else {
+        const logDocRef = logSnapshot.docs[0].ref;
+        const currentLogData = logSnapshot.docs[0].data() as DailyLog;
+        const updatedMeals = [...currentLogData.meals, newMeal];
+        const updatedCalories = currentLogData.consumedCalories + newMeal.calories;
         
-        const logSnapshot = await getDocs(logQuery);
-        
-        if (logSnapshot.empty) {
-          const newLogData: DailyLog = {
-            date: Timestamp.fromDate(startOfTodayUTC),
-            consumedCalories: newMeal.calories,
-            meals: [newMeal],
-          };
-          addDocumentNonBlocking(logsCollectionRef, newLogData);
-        } else {
-          const logDocRef = logSnapshot.docs[0].ref;
-          const currentLogData = logSnapshot.docs[0].data() as DailyLog;
-          const updatedMeals = [...currentLogData.meals, newMeal];
-          const updatedCalories = currentLogData.consumedCalories + newMeal.calories;
-          
-          updateDocumentNonBlocking(logDocRef, {
-            meals: updatedMeals,
-            consumedCalories: updatedCalories
-          });
-        }
-        toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
-  
-      } else { // Anonymous user
-        const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-        const todayDateStr = format(startOfTodayUTC, 'yyyy-MM-dd');
-
-        const allLogs: DailyLog[] = safeJsonParse(localStorage.getItem('anonymousDailyLogs')) || [];
-        const todayLogIndex = allLogs.findIndex(log => format(log.date.toDate(), 'yyyy-MM-dd') === todayDateStr);
-
-        let updatedLog: DailyLog;
-
-        if (todayLogIndex > -1) {
-            const currentLog = allLogs[todayLogIndex];
-            updatedLog = {
-                ...currentLog,
-                consumedCalories: currentLog.consumedCalories + newMeal.calories,
-                meals: [...currentLog.meals, newMeal],
-            };
-            allLogs[todayLogIndex] = updatedLog;
-        } else {
-            updatedLog = {
-                date: Timestamp.fromDate(startOfTodayUTC),
-                consumedCalories: newMeal.calories,
-                meals: [newMeal],
-            };
-            allLogs.push(updatedLog);
-        }
-        
-        setDailyLog(updatedLog);
-        localStorage.setItem('anonymousDailyLogs', JSON.stringify(allLogs));
-        toast({ title: "บันทึกมื้ออาหารสำเร็จ" });
+        updateDocumentNonBlocking(logDocRef, {
+          meals: updatedMeals,
+          consumedCalories: updatedCalories
+        });
       }
-    } catch (error: any) {
-        console.error("[Log Meal] Error:", error.message);
-        toast({ title: "เกิดข้อผิดพลาดในการบันทึก", description: error.message, variant: "destructive" });
-    } finally {
-        setIsLoggingMeal(false);
+      toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
+
+    } else { // Anonymous user
+      const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+      const todayDateStr = format(startOfTodayUTC, 'yyyy-MM-dd');
+
+      const allLogs: DailyLog[] = safeJsonParse(localStorage.getItem('anonymousDailyLogs')) || [];
+      const todayLogIndex = allLogs.findIndex(log => format(log.date.toDate(), 'yyyy-MM-dd') === todayDateStr);
+
+      let updatedLog: DailyLog;
+
+      if (todayLogIndex > -1) {
+          const currentLog = allLogs[todayLogIndex];
+          updatedLog = {
+              ...currentLog,
+              consumedCalories: currentLog.consumedCalories + newMeal.calories,
+              meals: [...currentLog.meals, newMeal],
+          };
+          allLogs[todayLogIndex] = updatedLog;
+      } else {
+          updatedLog = {
+              date: Timestamp.fromDate(startOfTodayUTC),
+              consumedCalories: newMeal.calories,
+              meals: [newMeal],
+          };
+          allLogs.push(updatedLog);
+      }
+      
+      setDailyLog(updatedLog);
+      localStorage.setItem('anonymousDailyLogs', JSON.stringify(allLogs));
+      toast({ title: "บันทึกมื้ออาหารสำเร็จ" });
     }
+  
+    setIsLoggingMeal(false);
   };
   
   const getBmiInterpretation = (bmi: number | undefined): {text: string, color: string} => {
@@ -725,6 +726,7 @@ export default function FSFAPage() {
   };
 
   useEffect(() => {
+    if (!auth) return;
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setIsAuthOpLoading(false);
       if (user) {
@@ -740,6 +742,7 @@ export default function FSFAPage() {
 
   const handleLogin = (event: React.FormEvent) => {
     event.preventDefault();
+    if (!auth) return;
     if (!email || !password) {
       toast({ title: "ข้อมูลไม่ครบถ้วน", description: "โปรดกรอกอีเมลและรหัสผ่าน", variant: "destructive" });
       return;
@@ -750,6 +753,7 @@ export default function FSFAPage() {
 
   const handleRegister = (event: React.FormEvent) => {
     event.preventDefault();
+    if (!auth) return;
     if (password !== confirmPassword) {
       toast({ title: "ลงทะเบียนไม่สำเร็จ", description: "รหัสผ่านไม่ตรงกัน", variant: "destructive" });
       return;
