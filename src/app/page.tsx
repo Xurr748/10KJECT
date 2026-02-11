@@ -988,7 +988,7 @@ export default function FSFAPage() {
                       </div>
                   ) : (
                       <div className="relative group w-full aspect-video rounded-lg overflow-hidden border-2 border-dashed flex items-center justify-center bg-muted/50">
-                          <Image src={previewUrl} alt="Food preview" layout="fill" objectFit="contain" className="p-2" data-ai-hint="food meal" />
+                          <Image src={previewUrl} alt="Food preview" fill className="object-contain p-2" data-ai-hint="food meal" />
                            <Button variant="destructive" size="icon" className="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity" onClick={resetImageRelatedStates}>
                               <Trash2 className="w-4 h-4"/>
                               <span className="sr-only">ลบรูปภาพ</span>
@@ -1207,7 +1207,7 @@ export default function FSFAPage() {
                                                 <div key={index} className="flex justify-between items-center text-sm text-muted-foreground pl-4">
                                                     {meal.imageUrl && (
                                                       <div className="w-12 h-12 mr-4 relative rounded-md overflow-hidden flex-shrink-0">
-                                                          <Image src={meal.imageUrl} alt={meal.name} layout="fill" objectFit="cover" data-ai-hint="food meal" />
+                                                          <Image src={meal.imageUrl} alt={meal.name} fill className="object-cover" data-ai-hint="food meal" />
                                                       </div>
                                                     )}
                                                     <div className="flex-grow truncate pr-2">
