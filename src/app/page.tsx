@@ -618,8 +618,6 @@ export default function FSFAPage() {
         toast({ title: "กำลังอัปโหลดรูปภาพ...", description: "กรุณารอสักครู่" });
         const uploadResult = await uploadBytes(storageRef, selectedFile);
         imageUrl = await getDownloadURL(uploadResult.ref);
-      } else if (!currentUser && previewUrl) {
-        imageUrl = previewUrl; // For anonymous users, store the data URI
       }
 
       const newMeal: Meal = {
@@ -642,14 +640,14 @@ export default function FSFAPage() {
             consumedCalories: newMeal.calories,
             meals: [newMeal],
           };
-          await addDoc(logsCollectionRef, newLogData);
+          addDocumentNonBlocking(logsCollectionRef, newLogData);
         } else {
           const logDocRef = logSnapshot.docs[0].ref;
           const currentLogData = logSnapshot.docs[0].data() as DailyLog;
           const updatedMeals = [...currentLogData.meals, newMeal];
           const updatedCalories = currentLogData.consumedCalories + newMeal.calories;
           
-          await updateDoc(logDocRef, {
+          updateDocumentNonBlocking(logDocRef, {
             meals: updatedMeals,
             consumedCalories: updatedCalories
           });
