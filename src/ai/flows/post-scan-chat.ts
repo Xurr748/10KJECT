@@ -1,59 +1,77 @@
 'use server';
 /**
- * @fileOverview A Genkit flow for handling chatbot conversations.
+ * @fileOverview A chatbot flow for post-scan Q&A.
  *
- * - chatWithBot - A function that processes user messages and returns bot responses.
+ * - chatWithBot - A function to interact with the chat flow.
  * - ChatInput - The input type for the chatWithBot function.
  * - ChatOutput - The return type for the chatWithBot function.
+ * - ChatMessage - The type for a single message in the conversation history.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { ai } from '@/ai/genkit';
+import { z } from 'genkit';
 
 const ChatMessageSchema = z.object({
-  role: z.enum(['user', 'model']).describe("The role of the message sender, either 'user' or 'model' (for AI)."),
-  content: z.string().describe("The text content of the message."),
+  role: z.enum(['user', 'model']),
+  content: z.string().max(1000),
 });
+
 export type ChatMessage = z.infer<typeof ChatMessageSchema>;
 
 const ChatInputSchema = z.object({
-  message: z.string().describe("The user's current message to the chatbot."),
-  history: z.array(ChatMessageSchema).optional().describe("The history of the conversation so far. Each message has a role ('user' or 'model') and content."),
+  message: z.string().max(1000),
+  history: z.array(ChatMessageSchema).optional(),
 });
+
 export type ChatInput = z.infer<typeof ChatInputSchema>;
 
 const ChatOutputSchema = z.object({
-  response: z.string().describe("The chatbot's response to the user's message."),
+  response: z.string(),
 });
+
 export type ChatOutput = z.infer<typeof ChatOutputSchema>;
 
 export async function chatWithBot(input: ChatInput): Promise<ChatOutput> {
   return postScanChatFlow(input);
 }
 
+function sanitize(text: string) {
+  return text.replace(
+    /(ignore previous instructions|system prompt|developer mode)/gi,
+    ''
+  );
+}
+
 const prompt = ai.definePrompt({
   name: 'postScanChatPrompt',
-  input: {schema: ChatInputSchema},
-  output: {schema: ChatOutputSchema},
+  input: { schema: ChatInputSchema },
+  output: { schema: ChatOutputSchema },
   model: 'googleai/gemini-2.5-flash',
-  prompt: `You are a friendly and helpful chatbot assistant for the MOMU SCAN application.
-Your primary goal is to assist users with their queries, especially related to food, nutrition, and healthy eating.
-Be concise and helpful in your responses.
+  config: {
+    temperature: 0.4,
+    maxOutputTokens: 400,
+  },
+  prompt: `
+You are a friendly nutrition assistant for MOMU SCAN.
+- Keep responses under 150 words.
+- Be practical.
+- Avoid medical diagnosis.
+- Respond only in Thai.
+- Do not mention you are an AI model.
 
-Here is the conversation history (if any):
+Conversation history:
 {{#if history}}
 {{#each history}}
 {{role}}: {{{content}}}
 {{/each}}
 {{/if}}
 
-User's current message:
-user: {{{message}}}
+User:
+{{{message}}}
 
-Your response (as 'model'):
+Response:
 `,
 });
-
 
 const postScanChatFlow = ai.defineFlow(
   {
@@ -61,14 +79,32 @@ const postScanChatFlow = ai.defineFlow(
     inputSchema: ChatInputSchema,
     outputSchema: ChatOutputSchema,
   },
-  async (input) => {
-    const llmResponse = await prompt(input);
-    const output = llmResponse.output;
+  async input => {
+    try {
+      const limitedHistory = input.history?.slice(-10);
 
-    if (!output || !output.response) {
-      console.error('Chat Flow: AI model did not return a valid response.');
-      return { response: "ขออภัยค่ะ ระบบมีปัญหาในการประมวลผลคำขอของคุณ โปรดลองอีกครั้ง" };
+      const safeInput = {
+        message: sanitize(input.message),
+        history: limitedHistory?.map(m => ({
+          ...m,
+          content: sanitize(m.content),
+        })),
+      };
+
+      const llmResponse = await prompt(safeInput);
+      const output = llmResponse.output;
+
+      if (!output?.response) {
+        throw new Error('Invalid AI response');
+      }
+
+      return { response: output.response };
+    } catch (err) {
+      console.error('Chat Flow Error:', err);
+      return {
+        response:
+          'ขออภัยค่ะ ระบบกำลังมีปัญหาในการประมวลผล กรุณาลองใหม่อีกครั้ง',
+      };
     }
-    return { response: output.response };
   }
 );
