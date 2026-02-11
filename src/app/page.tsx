@@ -1013,41 +1013,39 @@ export default function FSFAPage() {
                             <p className="text-lg text-primary font-bold">{imageAnalysisResult.foodItem}</p>
                         </div>
                         
-                        {isFoodIdentified && (
-                            <>
-                                <Separator />
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <h4 className="font-semibold text-foreground flex items-center gap-2 mb-2"><Flame className="w-5 h-5 text-orange-500" />แคลอรี่โดยประมาณ</h4>
-                                        <p className="text-2xl font-bold">{(imageAnalysisResult.nutritionalInformation.estimatedCalories ?? 0) > 0 ? imageAnalysisResult.nutritionalInformation.estimatedCalories.toLocaleString() : 'N/A'} <span className="text-sm font-normal text-muted-foreground">kcal</span></p>
-                                        <p className="text-xs text-muted-foreground mt-1">{imageAnalysisResult.nutritionalInformation.reasoning}</p>
-                                    </div>
-                                    {imageAnalysisResult.nutritionalInformation.visibleIngredients.length > 0 && (
-                                        <div>
-                                            <h4 className="font-semibold text-foreground flex items-center gap-2 mb-2"><Wheat className="w-5 h-5 text-yellow-600" />ส่วนผสมที่พบ</h4>
-                                            <div className="flex flex-wrap gap-2">
-                                                {imageAnalysisResult.nutritionalInformation.visibleIngredients.map((ingredient, index) => (
-                                                    <Badge key={index} variant="secondary">{ingredient}</Badge>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    )}
+                        <>
+                            <Separator />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <h4 className="font-semibold text-foreground flex items-center gap-2 mb-2"><Flame className="w-5 h-5 text-orange-500" />แคลอรี่โดยประมาณ</h4>
+                                    <p className="text-2xl font-bold">{(imageAnalysisResult.nutritionalInformation.estimatedCalories ?? 0) > 0 ? imageAnalysisResult.nutritionalInformation.estimatedCalories.toLocaleString() : 'N/A'} <span className="text-sm font-normal text-muted-foreground">kcal</span></p>
+                                    <p className="text-xs text-muted-foreground mt-1">{imageAnalysisResult.nutritionalInformation.reasoning}</p>
                                 </div>
-                                {(imageAnalysisResult.safetyPrecautions && imageAnalysisResult.safetyPrecautions.some(p => p !== GENERIC_SAFETY_UNAVAILABLE)) && (
-                                    <>
-                                        <Separator />
-                                        <div>
-                                            <h4 className="font-semibold text-foreground flex items-center gap-2 mb-2"><MessageSquareWarning className="w-5 h-5 text-amber-600"/>คำแนะนำเพิ่มเติม</h4>
-                                            <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
-                                                {imageAnalysisResult.safetyPrecautions.map((precaution, index) => (
-                                                    precaution !== GENERIC_SAFETY_UNAVAILABLE ? <li key={index}>{precaution}</li> : null
-                                                )).filter(Boolean)}
-                                            </ul>
+                                {imageAnalysisResult.nutritionalInformation.visibleIngredients.length > 0 && (
+                                    <div>
+                                        <h4 className="font-semibold text-foreground flex items-center gap-2 mb-2"><Wheat className="w-5 h-5 text-yellow-600" />ส่วนผสมที่พบ</h4>
+                                        <div className="flex flex-wrap gap-2">
+                                            {imageAnalysisResult.nutritionalInformation.visibleIngredients.map((ingredient, index) => (
+                                                <Badge key={index} variant="secondary">{ingredient}</Badge>
+                                            ))}
                                         </div>
-                                    </>
+                                    </div>
                                 )}
-                            </>
-                        )}
+                            </div>
+                            {(imageAnalysisResult.safetyPrecautions && imageAnalysisResult.safetyPrecautions.some(p => p !== GENERIC_SAFETY_UNAVAILABLE)) && (
+                                <>
+                                    <Separator />
+                                    <div>
+                                        <h4 className="font-semibold text-foreground flex items-center gap-2 mb-2"><MessageSquareWarning className="w-5 h-5 text-amber-600"/>คำแนะนำเพิ่มเติม</h4>
+                                        <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
+                                            {imageAnalysisResult.safetyPrecautions.map((precaution, index) => (
+                                                precaution !== GENERIC_SAFETY_UNAVAILABLE ? <li key={index}>{precaution}</li> : null
+                                            )).filter(Boolean)}
+                                        </ul>
+                                    </div>
+                                </>
+                            )}
+                        </>
                     </CardContent>
                     {isFoodIdentified && (
                         <CardFooter>
@@ -1299,5 +1297,6 @@ export default function FSFAPage() {
 }
 
     
+
 
 
