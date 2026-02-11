@@ -13,6 +13,11 @@ service cloud.firestore {
     match /users/{uid} {
       allow read, write: if signedIn() && isOwner(uid);
     }
+    
+    // Allow a user to read/write their own daily logs subcollection
+    match /users/{userId}/dailyLogs/{logId} {
+      allow read, write: if signedIn() && isOwner(userId);
+    }
 
     match /scans/{scanId} {
       allow create: if signedIn();
@@ -24,6 +29,20 @@ service cloud.firestore {
       allow create: if signedIn();
       allow read, update, delete: if signedIn()
         && resource.data.userId == request.auth.uid;
+    }
+
+    // Allow public read access for summary page
+    match /articles/{articleId} {
+      allow read: if true;
+      allow write: if false; 
+    }
+    match /food_items/{foodItemId} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /question_answers/{qaId} {
+      allow read: if true;
+      allow write: if false;
     }
 
     match /{document=**} {
