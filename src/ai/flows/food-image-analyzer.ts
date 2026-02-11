@@ -80,18 +80,15 @@ Do NOT output any text outside the JSON block.
 Analyze this food image: {{media url=foodImage}}
 
 ========================
-INTERNAL MONOLOGUE & ANALYSIS STEPS (MUST FOLLOW)
+RULES
 ========================
-1.  **Cuisine Identification:** First, I will identify the cuisine's origin (e.g., "อาหารไทย", "อาหารญี่ปุ่น", "อาหารอิตาเลียน"). This context is crucial.
-2.  **Dish Identification:** Using the cuisine context, I will meticulously list all visible ingredients (e.g., "หมูสับ", "ใบกระเพรา", "ข้าวสวย"). I will analyze the dish structure (e.g., stir-fried rice vs. rice with topping).
-3.  **Hypothesis & Differentiation:**
-    *   If cuisine is "อาหารไทย" and I see basil (ใบกระเพรา) and minced meat on plain rice, my primary hypothesis is "ผัดกระเพรา".
-    *   If the rice itself is colored and mixed with ingredients, my hypothesis is "ข้าวผัด".
-    *   Based on these rules, I will decide on the most accurate dish name.
-4.  **Confidence Score:** I will assign a confidence score (0-100) based on how certain I am of the identification.
-5.  **Fallback Logic:** If my confidence is below 70, I will use the format "คล้ายกับ [ชื่อเมนู]" for the \`foodItem\`.
-6.  **Calorie Estimation:** Based on the identified dish and ingredients, I will estimate the calories. If a dish is identified (even as "คล้ายกับ..."), \`estimatedCalories\` MUST be greater than 0.
-7.  **Final Fallback:** If I absolutely cannot identify anything, I will use the specified "unidentifiable" JSON structure.
+1.  **Cuisine Type**: First, identify the cuisine's origin (e.g., "อาหารไทย", "อาหารญี่ปุ่น").
+2.  **Dish Name**: Based on the cuisine, identify the most likely dish name.
+    - If you are not 100% sure, use the format "คล้ายกับ [ชื่อเมนู]" (Similar to [Dish Name]).
+    - If completely unidentifiable, use "ไม่สามารถระบุชนิดอาหารได้".
+3.  **Confidence Score**: Assign a confidence score (0-100) for your identification.
+4.  **Calories**: If a dish is identified (even as "คล้ายกับ..."), \`estimatedCalories\` MUST be greater than 0. Estimate calories based on visible ingredients and typical portion sizes.
+5.  **Unidentifiable**: If the food is unidentifiable, use the exact JSON structure provided in "Example 3".
 
 ========================
 REQUIRED JSON STRUCTURE
@@ -173,39 +170,34 @@ const scanFoodImageFlow = ai.defineFlow(
       const partialOutput = result.output;
 
       console.log('[scanFoodImageFlow] Raw AI Output:', JSON.stringify(partialOutput));
-
-      if (!partialOutput || !partialOutput.nutritionalInformation) {
-        console.warn('[scanFoodImageFlow] AI returned null, undefined or incomplete output.');
-        // Return a compliant, "unidentifiable" structure
-        return {
-          cuisineType: 'ไม่สามารถระบุประเภทได้',
-          foodItem: 'ไม่สามารถระบุชนิดอาหารได้',
-          nutritionalInformation: {
-            estimatedCalories: 0,
-            visibleIngredients: [],
-            reasoning: 'AI ไม่ได้ส่งข้อมูลกลับมา',
-            confidence: 0,
-          },
-        };
-      }
       
+      // This is a much safer way to build the output,
+      // resilient to null/undefined values at any level from the AI.
       const finalOutput: ScanFoodImageOutput = {
-        cuisineType: partialOutput.cuisineType || 'ไม่สามารถระบุประเภทได้',
-        foodItem: partialOutput.foodItem || 'ไม่สามารถระบุชนิดอาหารได้',
+        cuisineType: partialOutput?.cuisineType || 'ไม่สามารถระบุประเภทได้',
+        foodItem: partialOutput?.foodItem || 'ไม่สามารถระบุชนิดอาหารได้',
         nutritionalInformation: {
-          estimatedCalories: partialOutput.nutritionalInformation.estimatedCalories ?? 0,
-          visibleIngredients: partialOutput.nutritionalInformation.visibleIngredients ?? [],
-          reasoning: partialOutput.nutritionalInformation.reasoning ?? 'ไม่มีข้อมูลโภชนาการ',
-          confidence: partialOutput.nutritionalInformation.confidence ?? 0,
+          estimatedCalories: partialOutput?.nutritionalInformation?.estimatedCalories ?? 0,
+          visibleIngredients: partialOutput?.nutritionalInformation?.visibleIngredients ?? [],
+          reasoning: partialOutput?.nutritionalInformation?.reasoning ?? 'ไม่มีข้อมูลโภชนาการ',
+          confidence: partialOutput?.nutritionalInformation?.confidence ?? 0,
         },
       };
+
+      // Additional sanity check: if the AI returns an "unidentifiable" food name,
+      // ensure the calories and confidence are also zero for consistency.
+      if (finalOutput.foodItem === 'ไม่สามารถระบุชนิดอาหารได้') {
+          finalOutput.nutritionalInformation.estimatedCalories = 0;
+          finalOutput.nutritionalInformation.confidence = 0;
+      }
 
       console.log('[scanFoodImageFlow] Final Parsed Output:', finalOutput);
       return finalOutput;
 
     } catch (err: any) {
       console.error('ScanFoodImageFlow Error:', err);
-      // Return a compliant, "unidentifiable" structure on error
+      // Return a compliant, "unidentifiable" structure on any unexpected error.
+      // This prevents the server action from throwing an unhandled exception.
       return {
           cuisineType: 'ไม่สามารถระบุประเภทได้',
           foodItem: 'ไม่สามารถระบุชนิดอาหารได้',
