@@ -1091,6 +1091,35 @@ export default function FSFAPage() {
         </div>
 
         <div className="lg:col-span-2 space-y-8">
+            <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-xl"><Calculator className="w-6 h-6 text-primary"/>โปรไฟล์และ BMI</CardTitle>
+                  <CardDescription>คำนวณดัชนีมวลกายและเป้าหมายแคลอรี่ของคุณ</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="height">ส่วนสูง (ซม.)</Label>
+                    <Input id="height" type="number" placeholder="เช่น 165" value={height} onChange={(e) => setHeight(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="weight">น้ำหนัก (กก.)</Label>
+                    <Input id="weight" type="number" placeholder="เช่น 55" value={weight} onChange={(e) => setWeight(e.target.value)} />
+                  </div>
+                   <Button onClick={handleCalculateBmi} disabled={isCalculatingBmi} className="w-full">
+                     {isCalculatingBmi ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Calculator className="mr-2 h-4 w-4" />}
+                     คำนวณและบันทึก
+                   </Button>
+                </CardContent>
+                {userProfile.bmi && (
+                  <CardFooter className="flex flex-col items-start space-y-4 pt-4 border-t">
+                     <div className="w-full">
+                      <h4 className="font-semibold text-muted-foreground">ดัชนีมวลกาย (BMI)</h4>
+                      <p className={`text-3xl font-bold ${getBmiInterpretation(userProfile.bmi).color}`}>{userProfile.bmi} <span className="text-lg font-normal">({getBmiInterpretation(userProfile.bmi).text})</span></p>
+                     </div>
+                  </CardFooter>
+                )}
+            </Card>
+
            <Card>
             <CardHeader>
                 <div className="flex justify-between items-center">
@@ -1165,35 +1194,6 @@ export default function FSFAPage() {
                 </p>
             </CardFooter>
            </Card>
-
-            <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-xl"><Calculator className="w-6 h-6 text-primary"/>โปรไฟล์และ BMI</CardTitle>
-                  <CardDescription>คำนวณดัชนีมวลกายและเป้าหมายแคลอรี่ของคุณ</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="height">ส่วนสูง (ซม.)</Label>
-                    <Input id="height" type="number" placeholder="เช่น 165" value={height} onChange={(e) => setHeight(e.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="weight">น้ำหนัก (กก.)</Label>
-                    <Input id="weight" type="number" placeholder="เช่น 55" value={weight} onChange={(e) => setWeight(e.target.value)} />
-                  </div>
-                   <Button onClick={handleCalculateBmi} disabled={isCalculatingBmi} className="w-full">
-                     {isCalculatingBmi ? <Loader2 className="animate-spin mr-2 h-4 w-4" /> : <Calculator className="mr-2 h-4 w-4" />}
-                     คำนวณและบันทึก
-                   </Button>
-                </CardContent>
-                {userProfile.bmi && (
-                  <CardFooter className="flex flex-col items-start space-y-4 pt-4 border-t">
-                     <div className="w-full">
-                      <h4 className="font-semibold text-muted-foreground">ดัชนีมวลกาย (BMI)</h4>
-                      <p className={`text-3xl font-bold ${getBmiInterpretation(userProfile.bmi).color}`}>{userProfile.bmi} <span className="text-lg font-normal">({getBmiInterpretation(userProfile.bmi).text})</span></p>
-                     </div>
-                  </CardFooter>
-                )}
-            </Card>
 
             <Dialog open={isWeeklyDialogOpen} onOpenChange={setIsWeeklyDialogOpen}>
                 <DialogTrigger asChild hidden />
