@@ -77,10 +77,9 @@ import { Textarea } from '@/components/ui/textarea';
 
 
 // Lucide Icons
-import { Camera, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, MessageSquareWarning, Send, MessageCircle, ScanLine, Flame, Calculator, PlusCircle, BookCheck, Clock, CalendarDays, BarChart as BarChartIcon, Wheat, Sparkles, Trash2, AreaChart, PieChart, UploadCloud } from 'lucide-react';
+import { Camera, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, Send, MessageCircle, ScanLine, Flame, Calculator, PlusCircle, BookCheck, Clock, CalendarDays, BarChart as BarChartIcon, Wheat, Sparkles, Trash2, AreaChart, PieChart, UploadCloud } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
-const GENERIC_SAFETY_UNAVAILABLE = "ไม่มีคำแนะนำด้านความปลอดภัยเฉพาะสำหรับรายการนี้";
 
 interface UserProfile {
   height?: number;
@@ -1057,19 +1056,6 @@ export default function FSFAPage() {
                                     </div>
                                 )}
                             </div>
-                            {(imageAnalysisResult.safetyPrecautions && imageAnalysisResult.safetyPrecautions.some(p => p !== GENERIC_SAFETY_UNAVAILABLE)) && (
-                                <>
-                                    <Separator />
-                                    <div>
-                                        <h4 className="font-semibold text-foreground flex items-center gap-2 mb-2"><MessageSquareWarning className="w-5 h-5 text-amber-600"/>คำแนะนำเพิ่มเติม</h4>
-                                        <ul className="list-disc pl-5 space-y-1 text-sm text-muted-foreground">
-                                            {imageAnalysisResult.safetyPrecautions.map((precaution, index) => (
-                                                precaution !== GENERIC_SAFETY_UNAVAILABLE ? <li key={index}>{precaution}</li> : null
-                                            )).filter(Boolean)}
-                                        </ul>
-                                    </div>
-                                </>
-                            )}
                         </>
                     </CardContent>
                     {isFoodIdentified && (
