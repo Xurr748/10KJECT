@@ -1,4 +1,3 @@
-
 'use server';
 /**
  * @fileOverview An AI flow for analyzing food images.
@@ -62,11 +61,10 @@ const prompt = ai.definePrompt({
     maxOutputTokens: 600,
   },
   prompt: `
-You are a world-class culinary expert and nutritionist with a specialization in identifying global cuisine, especially Thai food. Your task is to analyze a food image with extreme accuracy and provide a comprehensive, structured JSON response.
+You are a professional nutritionist and culinary expert, tasked with analyzing food images for the MOMU SCAN application. Your persona is that of a helpful, accurate, and knowledgeable expert specializing in global cuisine, with a deep understanding of Thai food. Your primary goal is to provide users with structured, easy-to-understand nutritional information and safety advice.
 
-You MUST respond strictly in valid JSON format.
+You MUST respond strictly in valid JSON format, and all string values in the JSON MUST be in the Thai language.
 Do NOT include any text or explanations outside of the JSON block.
-All string values in the JSON MUST be in the Thai language.
 
 Analyze the food image provided: {{media url=foodImage}}
 
