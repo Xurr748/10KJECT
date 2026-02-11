@@ -70,25 +70,31 @@ All responses must be in Thai.
 
 Analyze the food image provided: {{media url=foodImage}}
 
-Return JSON with the structure defined below.
+**Your task is to identify the food and provide a complete nutritional analysis.**
+
+1.  **Identify the main dish:** Determine the name of the food in the image.
+2.  **Analyze nutritional content:**
+    *   Estimate the total calories. **This is a required field.** Base your estimate on typical ingredients and portion size.
+    *   List the main visible ingredients.
+    *   Explain the reasoning for your calorie estimate (e.g., "based on portion size and visible oil").
+3.  **Provide safety advice:** List 1-5 relevant safety precautions or health tips.
 
 ## JSON Structure
 {
-  "foodItem": string,
+  "foodItem": "string",
   "nutritionalInformation": {
-    "estimatedCalories": number,
-    "visibleIngredients": string[],
-    "reasoning": string
+    "estimatedCalories": "number",
+    "visibleIngredients": "string[]",
+    "reasoning": "string"
   },
-  "safetyPrecautions": string[]
+  "safetyPrecautions": "string[]"
 }
 
-## Rules & Examples
+## Important Rules & Examples
 
-1.  **Always return all fields.**
-2.  'safetyPrecautions' must contain between 1 and 5 relevant items.
-3.  If you can identify the food, provide a full analysis.
-    Example for "ผัดไทยกุ้งสด" (Pad Thai with shrimp):
+1.  **IF YOU CAN IDENTIFY THE FOOD**, you **MUST** provide a non-zero \`estimatedCalories\` value and populate all other fields. Provide your best professional estimate.
+    *Example for "ผัดไทยกุ้งสด" (Pad Thai with shrimp):*
+    \`\`\`json
     {
       "foodItem": "ผัดไทยกุ้งสด",
       "nutritionalInformation": {
@@ -102,8 +108,10 @@ Return JSON with the structure defined below.
         "ระวังถั่วลิสงป่นสำหรับผู้ที่แพ้ถั่ว"
       ]
     }
+    \`\`\`
 
-4.  **If you CANNOT identify the food**, you MUST return default values like this:
+2.  **IF YOU CANNOT IDENTIFY THE FOOD**, you **MUST** use these exact default values.
+    \`\`\`json
     {
       "foodItem": "ไม่สามารถระบุชนิดอาหารได้",
       "nutritionalInformation": {
@@ -115,6 +123,7 @@ Return JSON with the structure defined below.
         "โปรดถ่ายภาพให้ชัดเจนขึ้นและลองอีกครั้ง"
       ]
     }
+    \`\`\`
 `,
 });
 
