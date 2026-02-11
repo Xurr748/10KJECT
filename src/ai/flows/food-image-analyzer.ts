@@ -44,11 +44,8 @@ const ScanFoodImageOutputSchema = z.object({
 export type ScanFoodImageOutput = z.infer<typeof ScanFoodImageOutputSchema>;
 
 // This is a more lenient schema for what we expect from the LLM.
-// It allows some properties to be missing.
-const LlmOutputSchema = ScanFoodImageOutputSchema.partial({
-  nutritionalInformation: true,
-  safetyPrecautions: true,
-});
+// It makes all properties, including nested ones, optional.
+const LlmOutputSchema = ScanFoodImageOutputSchema.deepPartial();
 
 export async function scanFoodImage(
   input: ScanFoodImageInput
