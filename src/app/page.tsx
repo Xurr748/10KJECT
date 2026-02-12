@@ -173,9 +173,16 @@ export default function FSFAPage() {
 
   // States for food database modal
   const [isFoodDbOpen, setIsFoodDbOpen] = useState(false);
-  const [databaseFoods, setDatabaseFoods] = useState<FoodItem[]>([]);
-  const [isLoadingFoods, setIsLoadingFoods] = useState(false);
   const [foodSearchTerm, setFoodSearchTerm] = useState('');
+  
+  const foodStorageQuery = useMemo(() => {
+    if (!db) return null;
+    // Real-time query for the central food storage
+    return query(collection(db, 'food_storage'));
+  }, [db]);
+
+  const { data: databaseFoods, loading: isLoadingFoods } = useCollection<FoodItem>(foodStorageQuery);
+
 
   const [countdown, setCountdown] = useState<string>('');
   const [formattedToday, setFormattedToday] = useState<string>('');
@@ -450,29 +457,6 @@ export default function FSFAPage() {
             fetchMonthlyLogs();
         }
     }, [isMonthlyDialogOpen, currentUser, db, toast]);
-
-    // Effect to fetch food database when dialog opens
-    useEffect(() => {
-        const fetchFoods = async () => {
-            if (!db) return;
-            setIsLoadingFoods(true);
-            try {
-                const foodsCollection = collection(db, 'food_items');
-                const foodsSnapshot = await getDocs(foodsCollection);
-                const foodsList = foodsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FoodItem));
-                setDatabaseFoods(foodsList);
-            } catch (error) {
-                console.error("Error fetching food database:", error);
-                toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดฐานข้อมูลอาหารได้", variant: "destructive" });
-            } finally {
-                setIsLoadingFoods(false);
-            }
-        };
-
-        if (isFoodDbOpen) {
-            fetchFoods();
-        }
-    }, [isFoodDbOpen, db, toast]);
 
 
   // --- DATA SAVING (Anonymous User) ---
@@ -1453,5 +1437,7 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+    
 
     
