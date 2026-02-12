@@ -652,61 +652,97 @@ export default function FSFAPage() {
     }
   };
 
+  const dataURLtoBlob = (dataurl: string): Blob | null => {
+    const arr = dataurl.split(',');
+    if (arr.length < 2) {
+      return null;
+    }
+    const mimeMatch = arr[0].match(/:(.*?);/);
+    if (!mimeMatch) {
+      return null;
+    }
+    const mime = mimeMatch[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new Blob([u8arr], { type: mime });
+  };
+
   const handleLogMeal = async () => {
-    if (isLoggingMeal || !imageAnalysisResult || !imageAnalysisResult.nutritionalInformation) return;
     setIsLoggingMeal(true);
-
     try {
-        if (!currentUser || !db) {
-            throw new Error("ผู้ใช้ไม่ได้เข้าสู่ระบบหรือการเชื่อมต่อฐานข้อมูลล้มเหลว");
-        }
+      if (!imageAnalysisResult || !imageAnalysisResult.nutritionalInformation) {
+        toast({ title: "ไม่มีข้อมูลการวิเคราะห์", description: "โปรดวิเคราะห์รูปภาพก่อนบันทึก", variant: "destructive" });
+        return;
+      }
 
-        const mealName = imageAnalysisResult.foodItem;
-        const mealCalories = imageAnalysisResult.nutritionalInformation.estimatedCalories ?? 0;
-        let imageUrl: string | undefined = undefined;
-
-        // Upload image and write to food_storage ONLY if a new file is present.
-        if (selectedFile) {
-            const storage = getStorage();
-            const filePath = `users/${currentUser.uid}/meals/${Date.now()}_${selectedFile.name}`;
-            const storageRef = ref(storage, filePath);
-
-            toast({ title: "กำลังอัปโหลดรูปภาพ...", description: "กรุณารอสักครู่" });
-            const uploadResult = await uploadBytes(storageRef, selectedFile);
-            imageUrl = await getDownloadURL(uploadResult.ref);
-
-            // Now, write to the central food_storage if applicable
-            if (mealCalories > 0) {
-                const foodStorageCollection = collection(db, 'food_storage');
-                await addDoc(foodStorageCollection, { name: mealName, calories: mealCalories, imageUrl: imageUrl });
-                toast({
-                    title: "เพิ่มในคลังข้อมูลกลางสำเร็จ!",
-                    description: "ขอบคุณที่ช่วยทำให้ฐานข้อมูลของเราดีขึ้น"
-                });
-            }
-        }
-
+      const mealName = imageAnalysisResult.foodItem;
+      const mealCalories = imageAnalysisResult.nutritionalInformation.estimatedCalories ?? 0;
+      
+      // Handle Anonymous User first
+      if (!currentUser || currentUser.isAnonymous) {
         const newMeal: Meal = {
             name: mealName,
             calories: mealCalories,
             timestamp: Timestamp.now(),
-            ...(imageUrl && { imageUrl }),
         };
-
         await logMeal(newMeal);
-        toast({ title: "บันทึกมื้ออาหารส่วนตัวสำเร็จ!" });
+        toast({ title: "บันทึกมื้ออาหารส่วนตัวสำเร็จ!", description: "ข้อมูลของคุณจะถูกย้ายเมื่อคุณลงทะเบียน" });
+        return; 
+      }
+
+      // --- LOGGED-IN USER LOGIC ---
+      let imageUrl: string | undefined = undefined;
+      
+      // If there is a preview image, we should try to upload it.
+      if (previewUrl && db) { 
+        const imageBlob = dataURLtoBlob(previewUrl);
+
+        if (imageBlob) {
+          const storage = getStorage();
+          const filePath = `food_storage/${Date.now()}_MOMU.jpg`; // Store in a general folder
+          const storageRef = ref(storage, filePath);
+
+          toast({ title: "กำลังอัปโหลดรูปภาพ...", description: "กรุณารอสักครู่" });
+          const uploadResult = await uploadBytes(storageRef, imageBlob);
+          imageUrl = await getDownloadURL(uploadResult.ref);
+
+          // Now, write to the central food_storage if applicable
+          if (mealCalories > 0 && imageUrl) {
+            const foodStorageCollection = collection(db, 'food_storage');
+            await addDoc(foodStorageCollection, { name: mealName, calories: mealCalories, imageUrl: imageUrl });
+            toast({
+              title: "เพิ่มในคลังข้อมูลกลางสำเร็จ!",
+              description: "ขอบคุณที่ช่วยทำให้ฐานข้อมูลของเราดีขึ้น"
+            });
+          }
+        }
+      }
+
+      const newMeal: Meal = {
+        name: mealName,
+        calories: mealCalories,
+        timestamp: Timestamp.now(),
+        ...(imageUrl && { imageUrl }),
+      };
+
+      await logMeal(newMeal);
+      toast({ title: "บันทึกมื้ออาหารส่วนตัวสำเร็จ!" });
 
     } catch (error) {
-        console.error("Error logging meal:", error);
-        let errorMessage = "ไม่สามารถบันทึกมื้ออาหารได้";
-        if (error instanceof Error && 'code' in error) {
-            if ((error as any).code.includes('permission-denied')) {
-                errorMessage = "ไม่มีสิทธิ์ในการบันทึกข้อมูล โปรดตรวจสอบการตั้งค่า Rules";
-            }
+      console.error("Error logging meal:", error);
+      let errorMessage = "ไม่สามารถบันทึกมื้ออาหารได้";
+      if (error instanceof Error && 'code' in error) {
+        if ((error as any).code.includes('permission-denied')) {
+          errorMessage = "ไม่มีสิทธิ์ในการบันทึกข้อมูล โปรดตรวจสอบการตั้งค่า Rules";
         }
-        toast({ title: "เกิดข้อผิดพลาด", description: errorMessage, variant: "destructive" });
+      }
+      toast({ title: "เกิดข้อผิดพลาด", description: errorMessage, variant: "destructive" });
     } finally {
-        setIsLoggingMeal(false);
+      setIsLoggingMeal(false);
     }
   };
 
