@@ -21,11 +21,6 @@ import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { doc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, updateDoc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
-  setDocumentNonBlocking,
-  addDocumentNonBlocking,
-  updateDocumentNonBlocking,
-} from '@/firebase/non-blocking-updates';
-import {
   initiateEmailSignIn,
   initiateEmailSignUp,
 } from '@/firebase/non-blocking-login';
@@ -269,7 +264,8 @@ export default function FSFAPage() {
             profileToSet = docSnap.data() as UserProfile;
         } else if (localProfileData && Object.keys(localProfileData).length > 0) {
             profileToSet = localProfileData;
-            setDocumentNonBlocking(userDocRef, profileToSet, { merge: true });
+            // Use await here to ensure profile is set before proceeding
+            await setDoc(userDocRef, profileToSet, { merge: true });
         }
         
         if (localLogsData.length > 0) {
@@ -596,7 +592,7 @@ export default function FSFAPage() {
     }
   };
 
-  const handleCalculateBmi = () => {
+  const handleCalculateBmi = async () => {
     const h = parseFloat(height);
     const w = parseFloat(weight);
 
@@ -620,10 +616,16 @@ export default function FSFAPage() {
     
     if (currentUser && db) {
         const userDocRef = doc(db, 'users', currentUser.uid);
-        setDocumentNonBlocking(userDocRef, newProfile, { merge: true });
-        setUserProfile(newProfile); // Optimistic update
-        toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
-        setIsCalculatingBmi(false);
+        try {
+          await doc(userDocRef, newProfile, { merge: true });
+          setUserProfile(newProfile); // Update state after successful write
+          toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
+        } catch (error) {
+          console.error("Error saving profile:", error);
+          toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกโปรไฟล์ได้", variant: "destructive" });
+        } finally {
+          setIsCalculatingBmi(false);
+        }
     } else {
         setUserProfile(newProfile);
         localStorage.setItem('anonymousUserProfile', JSON.stringify(newProfile));
@@ -633,68 +635,76 @@ export default function FSFAPage() {
   };
 
   const logMeal = async (mealToLog: Meal) => {
-    if (!db) throw new Error("Firestore not available");
+    if (!db) {
+        toast({ title: "Database not connected", variant: "destructive" });
+        throw new Error("Firestore not available");
+    }
     
     const startOfTodayUTC = getStartOfUTCDay();
 
-    if (currentUser) {
-      const startOfTomorrowUTC = new Date(startOfTodayUTC);
-      startOfTomorrowUTC.setUTCDate(startOfTomorrowUTC.getUTCDate() + 1);
+    // Logic for anonymous users remains in localStorage
+    if (!currentUser) {
+        const todayDateStr = format(startOfTodayUTC, 'yyyy-MM-dd');
+        const allLogs: DailyLog[] = safeJsonParse(localStorage.getItem('anonymousDailyLogs')) || [];
+        const todayLogIndex = allLogs.findIndex(log => format(log.date.toDate(), 'yyyy-MM-dd') === todayDateStr);
 
-      const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
-      const logQuery = query(
-          logsCollectionRef, 
-          where('date', '>=', Timestamp.fromDate(startOfTodayUTC)),
-          where('date', '<', Timestamp.fromDate(startOfTomorrowUTC))
-      );
-      
-      const logSnapshot = await getDocs(logQuery);
-      
-      if (logSnapshot.empty) {
-        const newLogData: DailyLog = {
-          date: Timestamp.fromDate(startOfTodayUTC),
-          consumedCalories: mealToLog.calories,
-          meals: [mealToLog],
-        };
-        addDocumentNonBlocking(logsCollectionRef, newLogData);
-      } else {
-        const logDocRef = logSnapshot.docs[0].ref;
-        const currentLogData = logSnapshot.docs[0].data() as DailyLog;
-        const updatedMeals = [...currentLogData.meals, mealToLog];
-        const updatedCalories = currentLogData.consumedCalories + mealToLog.calories;
+        let updatedLog: DailyLog;
+        if (todayLogIndex > -1) {
+            const currentLog = allLogs[todayLogIndex];
+            updatedLog = {
+                ...currentLog,
+                consumedCalories: currentLog.consumedCalories + mealToLog.calories,
+                meals: [...currentLog.meals, mealToLog],
+            };
+            allLogs[todayLogIndex] = updatedLog;
+        } else {
+            updatedLog = {
+                date: Timestamp.fromDate(startOfTodayUTC),
+                consumedCalories: mealToLog.calories,
+                meals: [mealToLog],
+            };
+            allLogs.push(updatedLog);
+        }
+        setDailyLog(updatedLog);
+        localStorage.setItem('anonymousDailyLogs', JSON.stringify(allLogs));
+        return; // End execution for anonymous users
+    }
+
+    // --- LOGGED-IN USER LOGIC (NOW FULLY ASYNC/AWAITED) ---
+    const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
+    const q = query(
+        logsCollectionRef, 
+        where('date', '>=', Timestamp.fromDate(startOfTodayUTC)),
+        where('date', '<', new Date(startOfTodayUTC.getTime() + 24 * 60 * 60 * 1000)) // Next day
+    );
+    
+    try {
+        const logSnapshot = await getDocs(q);
         
-        updateDocumentNonBlocking(logDocRef, {
-          meals: updatedMeals,
-          consumedCalories: updatedCalories
-        });
-      }
-    } else { // Anonymous user
-      const todayDateStr = format(startOfTodayUTC, 'yyyy-MM-dd');
-
-      const allLogs: DailyLog[] = safeJsonParse(localStorage.getItem('anonymousDailyLogs')) || [];
-      const todayLogIndex = allLogs.findIndex(log => format(log.date.toDate(), 'yyyy-MM-dd') === todayDateStr);
-
-      let updatedLog: DailyLog;
-
-      if (todayLogIndex > -1) {
-          const currentLog = allLogs[todayLogIndex];
-          updatedLog = {
-              ...currentLog,
-              consumedCalories: currentLog.consumedCalories + mealToLog.calories,
-              meals: [...currentLog.meals, mealToLog],
-          };
-          allLogs[todayLogIndex] = updatedLog;
-      } else {
-          updatedLog = {
-              date: Timestamp.fromDate(startOfTodayUTC),
-              consumedCalories: mealToLog.calories,
-              meals: [mealToLog],
-          };
-          allLogs.push(updatedLog);
-      }
-      
-      setDailyLog(updatedLog);
-      localStorage.setItem('anonymousDailyLogs', JSON.stringify(allLogs));
+        if (logSnapshot.empty) {
+            // CREATE a new daily log for today
+            const newLogData: DailyLog = {
+                date: Timestamp.fromDate(startOfTodayUTC),
+                consumedCalories: mealToLog.calories,
+                meals: [mealToLog],
+            };
+            await addDoc(logsCollectionRef, newLogData);
+        } else {
+            // UPDATE the existing log for today
+            const logDocRef = logSnapshot.docs[0].ref;
+            const currentLogData = logSnapshot.docs[0].data() as DailyLog;
+            const updatedMeals = [...currentLogData.meals, mealToLog];
+            const updatedCalories = currentLogData.consumedCalories + mealToLog.calories;
+            
+            await updateDoc(logDocRef, {
+                meals: updatedMeals,
+                consumedCalories: updatedCalories
+            });
+        }
+    } catch (error) {
+        console.error("Error writing to dailyLog:", error);
+        // Re-throw the error so the calling function can handle it and show a toast
+        throw error;
     }
   };
 
@@ -725,6 +735,7 @@ export default function FSFAPage() {
         ...(imageUrl && { imageUrl }),
       };
 
+      // This will now properly await the database write.
       await logMeal(newMeal);
 
       // Also save to the central food_storage collection if it's a new, identified food
@@ -735,7 +746,8 @@ export default function FSFAPage() {
             calories: mealCalories,
             imageUrl: imageUrl,
         };
-        addDocumentNonBlocking(foodStorageCollection, newStoredFood);
+        // Await this operation as well for consistency and error handling.
+        await addDoc(foodStorageCollection, newStoredFood);
       }
 
       toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
@@ -760,6 +772,7 @@ export default function FSFAPage() {
             imageUrl: food.imageUrl,
         };
 
+        // This call now properly awaits the database write.
         await logMeal(newMeal);
         
         toast({ title: `เพิ่ม '${food.name}' สำเร็จ!`, description: "บันทึกมื้ออาหารของคุณแล้ว" });
