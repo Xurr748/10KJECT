@@ -81,6 +81,12 @@ import { Camera, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserP
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 
+// Helper to get the start of the current day in UTC
+const getStartOfUTCDay = () => {
+    const now = new Date();
+    return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+};
+
 interface UserProfile {
   height?: number;
   weight?: number;
@@ -241,12 +247,6 @@ export default function FSFAPage() {
         return;
     }
 
-    // Helper to get the start of the current day in UTC (which corresponds to 7:00 AM Thailand time)
-    const getStartOfUTCDay = () => {
-        const now = new Date();
-        return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    };
-
     let unsubscribeLog: (() => void) | undefined;
 
     const handleUserLoggedIn = async (user: User) => {
@@ -287,8 +287,15 @@ export default function FSFAPage() {
         setWeight(String(profileToSet.weight || ''));
         
         const startOfTodayUTC = getStartOfUTCDay();
+        const startOfTomorrowUTC = new Date(startOfTodayUTC);
+        startOfTomorrowUTC.setUTCDate(startOfTomorrowUTC.getUTCDate() + 1);
+
         const logsCollection = collection(db, 'users', user.uid, 'dailyLogs');
-        const q = query(logsCollection, where('date', '>=', Timestamp.fromDate(startOfTodayUTC)));
+        const q = query(
+            logsCollection, 
+            where('date', '>=', Timestamp.fromDate(startOfTodayUTC)),
+            where('date', '<', Timestamp.fromDate(startOfTomorrowUTC))
+        );
         
         unsubscribeLog = onSnapshot(q, (querySnapshot) => {
             if (!querySnapshot.empty) {
@@ -644,12 +651,20 @@ export default function FSFAPage() {
   const logMeal = async (mealToLog: Meal) => {
     if (!db) throw new Error("Firestore not available");
     
+    const startOfTodayUTC = getStartOfUTCDay();
+
     if (currentUser) {
-      const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+      const startOfTomorrowUTC = new Date(startOfTodayUTC);
+      startOfTomorrowUTC.setUTCDate(startOfTomorrowUTC.getUTCDate() + 1);
+
       const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
-      const logQuery = query(logsCollectionRef, where('date', '>=', Timestamp.fromDate(startOfTodayUTC)));
+      const logQuery = query(
+          logsCollectionRef, 
+          where('date', '>=', Timestamp.fromDate(startOfTodayUTC)),
+          where('date', '<', Timestamp.fromDate(startOfTomorrowUTC))
+      );
       
-      const logSnapshot = await getDocs(logQuery); 
+      const logSnapshot = await getDocs(logQuery);
       
       if (logSnapshot.empty) {
         const newLogData: DailyLog = {
@@ -670,7 +685,6 @@ export default function FSFAPage() {
         });
       }
     } else { // Anonymous user
-      const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
       const todayDateStr = format(startOfTodayUTC, 'yyyy-MM-dd');
 
       const allLogs: DailyLog[] = safeJsonParse(localStorage.getItem('anonymousDailyLogs')) || [];
