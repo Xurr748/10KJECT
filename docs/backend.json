@@ -134,11 +134,6 @@
           "type": "string",
           "format": "date-time",
           "description": "Timestamp of when the meal was logged."
-        },
-        "imageUrl": {
-          "type": "string",
-          "format": "uri",
-          "description": "URL of the meal image stored in Cloud Storage."
         }
       },
       "required": [
@@ -187,17 +182,11 @@
         "calories": {
           "type": "number",
           "description": "Estimated calories for the food item."
-        },
-        "imageUrl": {
-          "type": "string",
-          "format": "uri",
-          "description": "URL of the food item image stored in Cloud Storage."
         }
       },
       "required": [
         "name",
-        "calories",
-        "imageUrl"
+        "calories"
       ]
     }
   },

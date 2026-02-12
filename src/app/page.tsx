@@ -19,7 +19,7 @@ import {
 import { useAuth, useFirestore, useUser, useCollection } from '@/firebase'; 
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth'; 
 import { doc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, updateDoc, setDoc, limit } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+
 import {
   initiateEmailSignIn,
   initiateEmailSignUp,
@@ -94,20 +94,12 @@ interface Meal {
   name: string;
   calories: number;
   timestamp: Timestamp;
-  imageUrl?: string;
-}
-
-interface DailyLog {
-  date: Timestamp;
-  consumedCalories: number;
-  meals: Meal[];
 }
 
 interface FoodItem {
   id: string;
   name: string;
   calories: number;
-  imageUrl: string;
 }
 
 
@@ -652,86 +644,43 @@ export default function FSFAPage() {
     }
   };
 
-  const dataURLtoBlob = (dataurl: string): Blob | null => {
-    const arr = dataurl.split(',');
-    if (arr.length < 2) {
-      return null;
-    }
-    const mimeMatch = arr[0].match(/:(.*?);/);
-    if (!mimeMatch) {
-      return null;
-    }
-    const mime = mimeMatch[1];
-    const bstr = atob(arr[1]);
-    let n = bstr.length;
-    const u8arr = new Uint8Array(n);
-    while (n--) {
-      u8arr[n] = bstr.charCodeAt(n);
-    }
-    return new Blob([u8arr], { type: mime });
-  };
-
   const handleLogMeal = async () => {
     setIsLoggingMeal(true);
     try {
       if (!imageAnalysisResult || !imageAnalysisResult.nutritionalInformation) {
         toast({ title: "ไม่มีข้อมูลการวิเคราะห์", description: "โปรดวิเคราะห์รูปภาพก่อนบันทึก", variant: "destructive" });
-        return;
-      }
-
-      const mealName = imageAnalysisResult.foodItem;
-      const mealCalories = imageAnalysisResult.nutritionalInformation.estimatedCalories ?? 0;
-      
-      // Handle Anonymous User first
-      if (!currentUser || currentUser.isAnonymous) {
-        const newMeal: Meal = {
-            name: mealName,
-            calories: mealCalories,
-            timestamp: Timestamp.now(),
-        };
-        await logMeal(newMeal);
-        toast({ title: "บันทึกมื้ออาหารส่วนตัวสำเร็จ!", description: "ข้อมูลของคุณจะถูกย้ายเมื่อคุณลงทะเบียน" });
-        return; 
-      }
-
-      // --- LOGGED-IN USER LOGIC ---
-      let imageUrl: string | undefined = undefined;
-      
-      // If there is a preview image, we should try to upload it.
-      if (previewUrl && db) { 
-        const imageBlob = dataURLtoBlob(previewUrl);
-
-        if (imageBlob) {
-          const storage = getStorage();
-          const filePath = `food_storage/${Date.now()}_MOMU.jpg`; // Store in a general folder
-          const storageRef = ref(storage, filePath);
-
-          toast({ title: "กำลังอัปโหลดรูปภาพ...", description: "กรุณารอสักครู่" });
-          const uploadResult = await uploadBytes(storageRef, imageBlob);
-          imageUrl = await getDownloadURL(uploadResult.ref);
-
-          // Now, write to the central food_storage if applicable
-          if (mealCalories > 0 && imageUrl) {
+      } else if (!currentUser || !db) {
+        toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถเชื่อมต่อกับฐานข้อมูลหรือผู้ใช้ได้", variant: "destructive" });
+      } else {
+        // All good, proceed with logging
+        const mealName = imageAnalysisResult.foodItem;
+        const mealCalories = imageAnalysisResult.nutritionalInformation.estimatedCalories ?? 0;
+        
+        // Save to central storage if user is logged in (not anonymous) and calories > 0
+        if (!currentUser.isAnonymous && mealCalories > 0) {
             const foodStorageCollection = collection(db, 'food_storage');
-            await addDoc(foodStorageCollection, { name: mealName, calories: mealCalories, imageUrl: imageUrl });
+            await addDoc(foodStorageCollection, { name: mealName, calories: mealCalories });
             toast({
-              title: "เพิ่มในคลังข้อมูลกลางสำเร็จ!",
-              description: "ขอบคุณที่ช่วยทำให้ฐานข้อมูลของเราดีขึ้น"
+                title: "เพิ่มในคลังข้อมูลกลางสำเร็จ!",
+                description: "ขอบคุณที่ช่วยทำให้ฐานข้อมูลของเราดีขึ้น"
             });
-          }
+        }
+
+        // Log the meal for the user (both anonymous and logged in)
+        const newMeal: Meal = {
+          name: mealName,
+          calories: mealCalories,
+          timestamp: Timestamp.now(),
+        };
+
+        await logMeal(newMeal);
+        
+        if (currentUser.isAnonymous) {
+            toast({ title: "บันทึกมื้ออาหารสำเร็จ!", description: "ข้อมูลของคุณจะถูกย้ายเมื่อคุณลงทะเบียน" });
+        } else {
+            toast({ title: "บันทึกมื้ออาหารส่วนตัวสำเร็จ!" });
         }
       }
-
-      const newMeal: Meal = {
-        name: mealName,
-        calories: mealCalories,
-        timestamp: Timestamp.now(),
-        ...(imageUrl && { imageUrl }),
-      };
-
-      await logMeal(newMeal);
-      toast({ title: "บันทึกมื้ออาหารส่วนตัวสำเร็จ!" });
-
     } catch (error) {
       console.error("Error logging meal:", error);
       let errorMessage = "ไม่สามารถบันทึกมื้ออาหารได้";
@@ -742,7 +691,7 @@ export default function FSFAPage() {
       }
       toast({ title: "เกิดข้อผิดพลาด", description: errorMessage, variant: "destructive" });
     } finally {
-      setIsLoggingMeal(false);
+        setIsLoggingMeal(false);
     }
   };
 
@@ -756,7 +705,6 @@ export default function FSFAPage() {
             name: food.name,
             calories: food.calories,
             timestamp: Timestamp.now(),
-            imageUrl: food.imageUrl,
         };
         await logMeal(newMeal);
         
@@ -1057,10 +1005,7 @@ export default function FSFAPage() {
                     <ScrollArea className="h-96">
                         <div className="space-y-2 pr-4">
                             {filteredFoods.length > 0 ? filteredFoods.map(food => (
-                                <Card key={food.id} className="flex items-center p-2">
-                                    <div className="w-16 h-16 mr-4 relative rounded-md overflow-hidden flex-shrink-0 bg-muted">
-                                        <Image src={food.imageUrl} alt={food.name} fill className="object-cover" data-ai-hint="food meal"/>
-                                    </div>
+                                <Card key={food.id} className="flex items-center p-3">
                                     <div className="flex-grow">
                                         <p className="font-semibold">{food.name}</p>
                                         <p className="text-sm text-muted-foreground">{food.calories.toLocaleString()} kcal</p>
@@ -1325,11 +1270,6 @@ export default function FSFAPage() {
                                         <div className="pl-2 space-y-3 border-l-2 border-primary/50 ml-2">
                                             {groupedMeals[period].map((meal, index) => (
                                                 <div key={index} className="flex justify-between items-center text-sm text-muted-foreground pl-4">
-                                                    {meal.imageUrl && (
-                                                      <div className="w-12 h-12 mr-4 relative rounded-md overflow-hidden flex-shrink-0">
-                                                          <Image src={meal.imageUrl} alt={meal.name} fill className="object-cover" data-ai-hint="food meal" />
-                                                      </div>
-                                                    )}
                                                     <div className="flex-grow truncate pr-2">
                                                         <p className="font-medium text-foreground truncate">{meal.name}</p>
                                                         <p className="text-xs">{meal.timestamp.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.</p>
