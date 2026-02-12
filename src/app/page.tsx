@@ -18,7 +18,7 @@ import {
 } from '@/ai/flows/post-scan-chat';
 import { useAuth, useFirestore, useUser, useCollection } from '@/firebase'; 
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth'; 
-import { doc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, updateDoc, setDoc } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
   initiateEmailSignIn,
@@ -257,62 +257,59 @@ export default function FSFAPage() {
         const localLogsData: DailyLog[] = safeJsonParse(localStorage.getItem('anonymousDailyLogs')) || [];
         
         const userDocRef = doc(db, 'users', user.uid);
-        const docSnap = await getDoc(userDocRef);
+        
+        try {
+            const docSnap = await getDoc(userDocRef);
+            let profileToSet: UserProfile = {};
 
-        let profileToSet: UserProfile = {};
-        if (docSnap.exists()) {
-            profileToSet = docSnap.data() as UserProfile;
-        } else if (localProfileData && Object.keys(localProfileData).length > 0) {
-            profileToSet = localProfileData;
-            // Use await here to ensure profile is set before proceeding
-            await setDoc(userDocRef, profileToSet, { merge: true });
-        }
-        
-        if (localLogsData.length > 0) {
-            const logsCollectionRef = collection(db, 'users', user.uid, 'dailyLogs');
-            const batch = writeBatch(db);
-            for (const log of localLogsData) {
-                const newLogRef = doc(logsCollectionRef);
-                batch.set(newLogRef, log);
+            if (docSnap.exists()) {
+                profileToSet = docSnap.data() as UserProfile;
+            } else if (localProfileData && Object.keys(localProfileData).length > 0) {
+                profileToSet = localProfileData;
+                await setDoc(userDocRef, profileToSet, { merge: true });
             }
-            await batch.commit();
-            toast({ title: "ข้อมูลถูกย้ายแล้ว", description: "ข้อมูลทั้งหมดจากเซสชันที่ไม่ระบุตัวตนของคุณถูกบันทึกไปยังบัญชีใหม่ของคุณแล้ว" });
-            localStorage.removeItem('anonymousUserProfile');
-            localStorage.removeItem('anonymousDailyLogs');
-            localStorage.removeItem('anonymousDailyLog'); // Clean up old key
-        } else if (localProfileData && Object.keys(localProfileData).length > 0) {
-             toast({ title: "ข้อมูลโปรไฟล์ถูกย้ายแล้ว", description: "ข้อมูลโปรไฟล์ของคุณถูกบันทึกไปยังบัญชีใหม่ของคุณแล้ว" });
-             localStorage.removeItem('anonymousUserProfile');
-        }
-        
-        setUserProfile(profileToSet);
-        setHeight(String(profileToSet.height || ''));
-        setWeight(String(profileToSet.weight || ''));
-        
-        const startOfTodayUTC = getStartOfUTCDay();
-        const startOfTomorrowUTC = new Date(startOfTodayUTC);
-        startOfTomorrowUTC.setUTCDate(startOfTomorrowUTC.getUTCDate() + 1);
+            
+            if (localLogsData.length > 0) {
+                const logsCollectionRef = collection(db, 'users', user.uid, 'dailyLogs');
+                const batch = writeBatch(db);
+                for (const log of localLogsData) {
+                    const logDateStr = format(log.date.toDate(), 'yyyy-MM-dd');
+                    const newLogRef = doc(logsCollectionRef, logDateStr);
+                    batch.set(newLogRef, log);
+                }
+                await batch.commit();
+                toast({ title: "ข้อมูลถูกย้ายแล้ว", description: "ข้อมูลทั้งหมดจากเซสชันที่ไม่ระบุตัวตนของคุณถูกบันทึกไปยังบัญชีใหม่ของคุณแล้ว" });
+                localStorage.removeItem('anonymousUserProfile');
+                localStorage.removeItem('anonymousDailyLogs');
+            } else if (localProfileData && Object.keys(localProfileData).length > 0) {
+                 toast({ title: "ข้อมูลโปรไฟล์ถูกย้ายแล้ว", description: "ข้อมูลโปรไฟล์ของคุณถูกบันทึกไปยังบัญชีใหม่ของคุณแล้ว" });
+                 localStorage.removeItem('anonymousUserProfile');
+            }
+            
+            setUserProfile(profileToSet);
+            setHeight(String(profileToSet.height || ''));
+            setWeight(String(profileToSet.weight || ''));
+            
+            const todayDocId = format(getStartOfUTCDay(), 'yyyy-MM-dd');
+            const logDocRef = doc(db, 'users', user.uid, 'dailyLogs', todayDocId);
+            
+            unsubscribeLog = onSnapshot(logDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    setDailyLog(docSnap.data() as DailyLog);
+                    setDailyLogId(docSnap.id);
+                } else {
+                   setDailyLog(null);
+                   setDailyLogId(null);
+                }
+            }, (error) => {
+              console.error("[Log] Error listening to daily log:", error);
+              toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดบันทึกแคลอรี่ได้", variant: "destructive" });
+            });
 
-        const logsCollection = collection(db, 'users', user.uid, 'dailyLogs');
-        const q = query(
-            logsCollection, 
-            where('date', '>=', Timestamp.fromDate(startOfTodayUTC)),
-            where('date', '<', Timestamp.fromDate(startOfTomorrowUTC))
-        );
-        
-        unsubscribeLog = onSnapshot(q, (querySnapshot) => {
-            if (!querySnapshot.empty) {
-                const docSnap = querySnapshot.docs[0];
-                setDailyLog(docSnap.data() as DailyLog);
-                setDailyLogId(docSnap.id);
-            } else {
-               setDailyLog(null);
-               setDailyLogId(null);
-            }
-        }, (error) => {
-          console.error("[Log] Error listening to daily log:", error);
-          toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดบันทึกแคลอรี่ได้", variant: "destructive" });
-        });
+        } catch(e) {
+            console.error("Error handling logged in user:", e);
+            toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถตั้งค่าบัญชีผู้ใช้ได้", variant: "destructive" });
+        }
     };
 
     const handleAnonymousUser = () => {
@@ -327,17 +324,7 @@ export default function FSFAPage() {
         setHeight(String(localProfile.height || ''));
         setWeight(String(localProfile.weight || ''));
 
-        const allLogsRaw = localStorage.getItem('anonymousDailyLogs');
-        let allLogs: DailyLog[] = safeJsonParse(allLogsRaw) || [];
-        
-        if (!allLogsRaw) { 
-            const oldLog = safeJsonParse(localStorage.getItem('anonymousDailyLog'));
-            if (oldLog) {
-                allLogs = [oldLog]; 
-                localStorage.setItem('anonymousDailyLogs', JSON.stringify(allLogs));
-            }
-        }
-        localStorage.removeItem('anonymousDailyLog');
+        const allLogs: DailyLog[] = safeJsonParse(localStorage.getItem('anonymousDailyLogs')) || [];
         
         const todayDateStr = format(getStartOfUTCDay(), 'yyyy-MM-dd');
         const todayLog = allLogs.find(log => format(log.date.toDate(), 'yyyy-MM-dd') === todayDateStr) || null;
@@ -617,7 +604,7 @@ export default function FSFAPage() {
     if (currentUser && db) {
         const userDocRef = doc(db, 'users', currentUser.uid);
         try {
-          await doc(userDocRef, newProfile, { merge: true });
+          await setDoc(userDocRef, newProfile, { merge: true });
           setUserProfile(newProfile); // Update state after successful write
           toast({ title: "คำนวณและบันทึกสำเร็จ", description: `BMI ของคุณคือ ${newProfile.bmi}` });
         } catch (error) {
@@ -671,15 +658,11 @@ export default function FSFAPage() {
     }
 
     // --- LOGGED-IN USER LOGIC (NOW FULLY ASYNC/AWAITED) ---
-    const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
-    const q = query(
-        logsCollectionRef, 
-        where('date', '>=', Timestamp.fromDate(startOfTodayUTC)),
-        where('date', '<', new Date(startOfTodayUTC.getTime() + 24 * 60 * 60 * 1000)) // Next day
-    );
+    const todayDocId = format(startOfTodayUTC, 'yyyy-MM-dd');
+    const logDocRef = doc(db, 'users', currentUser.uid, 'dailyLogs', todayDocId);
     
     try {
-        const logSnapshot = await getDocs(q);
+        const logSnapshot = await getDoc(logDocRef);
         
         if (logSnapshot.empty) {
             // CREATE a new daily log for today
@@ -688,11 +671,10 @@ export default function FSFAPage() {
                 consumedCalories: mealToLog.calories,
                 meals: [mealToLog],
             };
-            await addDoc(logsCollectionRef, newLogData);
+            await setDoc(logDocRef, newLogData);
         } else {
             // UPDATE the existing log for today
-            const logDocRef = logSnapshot.docs[0].ref;
-            const currentLogData = logSnapshot.docs[0].data() as DailyLog;
+            const currentLogData = logSnapshot.data() as DailyLog;
             const updatedMeals = [...currentLogData.meals, mealToLog];
             const updatedCalories = currentLogData.consumedCalories + mealToLog.calories;
             
@@ -735,8 +717,9 @@ export default function FSFAPage() {
         ...(imageUrl && { imageUrl }),
       };
 
-      // This will now properly await the database write.
+      // This will now properly await the database write to the user's log.
       await logMeal(newMeal);
+      toast({ title: "บันทึกมื้ออาหารส่วนตัวสำเร็จ!" });
 
       // Also save to the central food_storage collection if it's a new, identified food
       if (db && currentUser && imageUrl && mealCalories > 0) {
@@ -748,9 +731,11 @@ export default function FSFAPage() {
         };
         // Await this operation as well for consistency and error handling.
         await addDoc(foodStorageCollection, newStoredFood);
+        toast({
+          title: "เพิ่มในคลังข้อมูลกลางสำเร็จ!",
+          description: "ขอบคุณที่ช่วยทำให้ฐานข้อมูลของเราดีขึ้น"
+        });
       }
-
-      toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
 
     } catch (error) {
       console.error("Error logging meal:", error);
@@ -1450,6 +1435,8 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+    
 
     
 
