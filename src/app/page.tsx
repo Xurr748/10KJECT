@@ -664,7 +664,7 @@ export default function FSFAPage() {
     try {
         const logSnapshot = await getDoc(logDocRef);
         
-        if (logSnapshot.empty) {
+        if (!logSnapshot.exists()) {
             // CREATE a new daily log for today
             const newLogData: DailyLog = {
                 date: Timestamp.fromDate(startOfTodayUTC),
@@ -1435,9 +1435,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-
-    
-
-    
-
-    
