@@ -694,63 +694,55 @@ export default function FSFAPage() {
     if (isLoggingMeal || !imageAnalysisResult || !imageAnalysisResult.nutritionalInformation) return;
     setIsLoggingMeal(true);
 
-    const mealName = imageAnalysisResult.foodItem;
-    const mealCalories = imageAnalysisResult.nutritionalInformation.estimatedCalories ?? 0;
-
     try {
+        const mealName = imageAnalysisResult.foodItem;
+        const mealCalories = imageAnalysisResult.nutritionalInformation.estimatedCalories ?? 0;
+
         // --- Anonymous User Flow ---
-        // Simple case: Just save to local storage. No Firestore interaction.
         if (!currentUser) {
             const newMeal: Meal = { name: mealName, calories: mealCalories, timestamp: Timestamp.now() };
-            await logMeal(newMeal); // `logMeal` handles localStorage for anonymous users
+            await logMeal(newMeal);
             toast({ title: "บันทึกมื้ออาหารส่วนตัวสำเร็จ!" });
-            setIsLoggingMeal(false);
-            return;
         }
-
         // --- Authenticated User Flow ---
-        if (!db) throw new Error("การเชื่อมต่อฐานข้อมูลล้มเหลว");
+        else {
+            if (!db) throw new Error("การเชื่อมต่อฐานข้อมูลล้มเหลว");
 
-        let imageUrl: string | undefined = undefined;
+            let imageUrl: string | undefined = undefined;
 
-        // **CRITICAL STEP**: Upload image and write to food_storage ONLY if a new file is present.
-        // This is the only way to get a new image URL to add to the central database.
-        if (selectedFile) {
-            const storage = getStorage();
-            const filePath = `users/${currentUser.uid}/meals/${Date.now()}_${selectedFile.name}`;
-            const storageRef = ref(storage, filePath);
-            
-            toast({ title: "กำลังอัปโหลดรูปภาพ...", description: "กรุณารอสักครู่" });
-            const uploadResult = await uploadBytes(storageRef, selectedFile);
-            imageUrl = await getDownloadURL(uploadResult.ref);
+            // Upload image and write to food_storage ONLY if a new file is present.
+            if (selectedFile) {
+                const storage = getStorage();
+                const filePath = `users/${currentUser.uid}/meals/${Date.now()}_${selectedFile.name}`;
+                const storageRef = ref(storage, filePath);
 
-            // Now, with a confirmed user and a new image URL, write to the central food_storage.
-            if (mealCalories > 0) {
-                const foodStorageCollection = collection(db, 'food_storage');
-                const newStoredFood = {
-                    name: mealName,
-                    calories: mealCalories,
-                    imageUrl: imageUrl,
-                };
-                await addDoc(foodStorageCollection, newStoredFood);
-                toast({
-                    title: "เพิ่มในคลังข้อมูลกลางสำเร็จ!",
-                    description: "ขอบคุณที่ช่วยทำให้ฐานข้อมูลของเราดีขึ้น"
-                });
+                toast({ title: "กำลังอัปโหลดรูปภาพ...", description: "กรุณารอสักครู่" });
+                const uploadResult = await uploadBytes(storageRef, selectedFile);
+                imageUrl = await getDownloadURL(uploadResult.ref);
+
+                // Now, write to the central food_storage.
+                if (mealCalories > 0) {
+                    const foodStorageCollection = collection(db, 'food_storage');
+                    const newStoredFood = { name: mealName, calories: mealCalories, imageUrl: imageUrl };
+                    await addDoc(foodStorageCollection, newStoredFood);
+                    toast({
+                        title: "เพิ่มในคลังข้อมูลกลางสำเร็จ!",
+                        description: "ขอบคุณที่ช่วยทำให้ฐานข้อมูลของเราดีขึ้น"
+                    });
+                }
             }
-        }
-        
-        // **ALWAYS** save to the user's private daily log, with or without a new image.
-        const newMeal: Meal = {
-            name: mealName,
-            calories: mealCalories,
-            timestamp: Timestamp.now(),
-            ...(imageUrl && { imageUrl }), // Include imageUrl if it was just created
-        };
-        
-        await logMeal(newMeal);
-        toast({ title: "บันทึกมื้ออาหารส่วนตัวสำเร็จ!" });
 
+            // ALWAYS save to the user's private daily log.
+            const newMeal: Meal = {
+                name: mealName,
+                calories: mealCalories,
+                timestamp: Timestamp.now(),
+                ...(imageUrl && { imageUrl }),
+            };
+
+            await logMeal(newMeal);
+            toast({ title: "บันทึกมื้ออาหารส่วนตัวสำเร็จ!" });
+        }
     } catch (error) {
         console.error("Error logging meal:", error);
         let errorMessage = "ไม่สามารถบันทึกมื้ออาหารได้";
@@ -763,7 +755,7 @@ export default function FSFAPage() {
     } finally {
         setIsLoggingMeal(false);
     }
-};
+  };
 
   const handleLogMealFromDatabase = async (food: FoodItem) => {
     if (isLoggingMeal) return;
