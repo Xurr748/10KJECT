@@ -77,7 +77,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 
 // Lucide Icons
-import { Camera, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, Send, MessageCircle, ScanLine, Flame, Calculator, PlusCircle, BookCheck, Clock, CalendarDays, BarChart as BarChartIcon, Wheat, Sparkles, Trash2, AreaChart, PieChart, UploadCloud } from 'lucide-react';
+import { Camera, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, Send, MessageCircle, ScanLine, Flame, Calculator, PlusCircle, BookCheck, Clock, CalendarDays, BarChart as BarChartIcon, Wheat, Sparkles, Trash2, AreaChart, PieChart, UploadCloud, Database } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 
@@ -100,6 +100,14 @@ interface DailyLog {
   consumedCalories: number;
   meals: Meal[];
 }
+
+interface FoodItem {
+  id: string;
+  name: string;
+  calories: number;
+  imageUrl: string;
+}
+
 
 // A reviver function for JSON.parse to correctly handle Firestore Timestamps
 const jsonReviver = (key: string, value: any) => {
@@ -156,6 +164,12 @@ export default function FSFAPage() {
   const [monthlyLogs, setMonthlyLogs] = useState<DailyLog[] | null>(null);
   const [isWeeklyLoading, setIsWeeklyLoading] = useState(false);
   const [isMonthlyLoading, setIsMonthlyLoading] = useState(false);
+
+  // States for food database modal
+  const [isFoodDbOpen, setIsFoodDbOpen] = useState(false);
+  const [databaseFoods, setDatabaseFoods] = useState<FoodItem[]>([]);
+  const [isLoadingFoods, setIsLoadingFoods] = useState(false);
+  const [foodSearchTerm, setFoodSearchTerm] = useState('');
 
   const [countdown, setCountdown] = useState<string>('');
   const [formattedToday, setFormattedToday] = useState<string>('');
@@ -430,6 +444,29 @@ export default function FSFAPage() {
         }
     }, [isMonthlyDialogOpen, currentUser, db, toast]);
 
+    // Effect to fetch food database when dialog opens
+    useEffect(() => {
+        const fetchFoods = async () => {
+            if (!db) return;
+            setIsLoadingFoods(true);
+            try {
+                const foodsCollection = collection(db, 'food_items');
+                const foodsSnapshot = await getDocs(foodsCollection);
+                const foodsList = foodsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FoodItem));
+                setDatabaseFoods(foodsList);
+            } catch (error) {
+                console.error("Error fetching food database:", error);
+                toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถโหลดฐานข้อมูลอาหารได้", variant: "destructive" });
+            } finally {
+                setIsLoadingFoods(false);
+            }
+        };
+
+        if (isFoodDbOpen) {
+            fetchFoods();
+        }
+    }, [isFoodDbOpen, db, toast]);
+
 
   // --- DATA SAVING (Anonymous User) ---
   useEffect(() => {
@@ -604,9 +641,67 @@ export default function FSFAPage() {
     }
   };
 
+  const logMeal = async (mealToLog: Meal) => {
+    if (!db) throw new Error("Firestore not available");
+    
+    if (currentUser) {
+      const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+      const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
+      const logQuery = query(logsCollectionRef, where('date', '>=', Timestamp.fromDate(startOfTodayUTC)));
+      
+      const logSnapshot = await getDocs(logQuery); 
+      
+      if (logSnapshot.empty) {
+        const newLogData: DailyLog = {
+          date: Timestamp.fromDate(startOfTodayUTC),
+          consumedCalories: mealToLog.calories,
+          meals: [mealToLog],
+        };
+        addDocumentNonBlocking(logsCollectionRef, newLogData);
+      } else {
+        const logDocRef = logSnapshot.docs[0].ref;
+        const currentLogData = logSnapshot.docs[0].data() as DailyLog;
+        const updatedMeals = [...currentLogData.meals, mealToLog];
+        const updatedCalories = currentLogData.consumedCalories + mealToLog.calories;
+        
+        updateDocumentNonBlocking(logDocRef, {
+          meals: updatedMeals,
+          consumedCalories: updatedCalories
+        });
+      }
+    } else { // Anonymous user
+      const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+      const todayDateStr = format(startOfTodayUTC, 'yyyy-MM-dd');
+
+      const allLogs: DailyLog[] = safeJsonParse(localStorage.getItem('anonymousDailyLogs')) || [];
+      const todayLogIndex = allLogs.findIndex(log => format(log.date.toDate(), 'yyyy-MM-dd') === todayDateStr);
+
+      let updatedLog: DailyLog;
+
+      if (todayLogIndex > -1) {
+          const currentLog = allLogs[todayLogIndex];
+          updatedLog = {
+              ...currentLog,
+              consumedCalories: currentLog.consumedCalories + mealToLog.calories,
+              meals: [...currentLog.meals, mealToLog],
+          };
+          allLogs[todayLogIndex] = updatedLog;
+      } else {
+          updatedLog = {
+              date: Timestamp.fromDate(startOfTodayUTC),
+              consumedCalories: mealToLog.calories,
+              meals: [mealToLog],
+          };
+          allLogs.push(updatedLog);
+      }
+      
+      setDailyLog(updatedLog);
+      localStorage.setItem('anonymousDailyLogs', JSON.stringify(allLogs));
+    }
+  };
 
   const handleLogMeal = async () => {
-    if (isLoggingMeal || !imageAnalysisResult || !imageAnalysisResult.nutritionalInformation || !db) return;
+    if (isLoggingMeal || !imageAnalysisResult || !imageAnalysisResult.nutritionalInformation) return;
     setIsLoggingMeal(true);
   
     const mealName = imageAnalysisResult.foodItem;
@@ -632,67 +727,38 @@ export default function FSFAPage() {
         ...(imageUrl && { imageUrl }),
       };
 
-      if (currentUser) {
-        const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-        const logsCollectionRef = collection(db, 'users', currentUser.uid, 'dailyLogs');
-        const logQuery = query(logsCollectionRef, where('date', '>=', Timestamp.fromDate(startOfTodayUTC)));
-        
-        const logSnapshot = await getDocs(logQuery); 
-        
-        if (logSnapshot.empty) {
-          const newLogData: DailyLog = {
-            date: Timestamp.fromDate(startOfTodayUTC),
-            consumedCalories: newMeal.calories,
-            meals: [newMeal],
-          };
-          addDocumentNonBlocking(logsCollectionRef, newLogData);
-        } else {
-          const logDocRef = logSnapshot.docs[0].ref;
-          const currentLogData = logSnapshot.docs[0].data() as DailyLog;
-          const updatedMeals = [...currentLogData.meals, newMeal];
-          const updatedCalories = currentLogData.consumedCalories + newMeal.calories;
-          
-          updateDocumentNonBlocking(logDocRef, {
-            meals: updatedMeals,
-            consumedCalories: updatedCalories
-          });
-        }
-        toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
-      } else { // Anonymous user
-        const startOfTodayUTC = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-        const todayDateStr = format(startOfTodayUTC, 'yyyy-MM-dd');
+      await logMeal(newMeal);
+      toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
 
-        const allLogs: DailyLog[] = safeJsonParse(localStorage.getItem('anonymousDailyLogs')) || [];
-        const todayLogIndex = allLogs.findIndex(log => format(log.date.toDate(), 'yyyy-MM-dd') === todayDateStr);
-
-        let updatedLog: DailyLog;
-
-        if (todayLogIndex > -1) {
-            const currentLog = allLogs[todayLogIndex];
-            updatedLog = {
-                ...currentLog,
-                consumedCalories: currentLog.consumedCalories + newMeal.calories,
-                meals: [...currentLog.meals, newMeal],
-            };
-            allLogs[todayLogIndex] = updatedLog;
-        } else {
-            updatedLog = {
-                date: Timestamp.fromDate(startOfTodayUTC),
-                consumedCalories: newMeal.calories,
-                meals: [newMeal],
-            };
-            allLogs.push(updatedLog);
-        }
-        
-        setDailyLog(updatedLog);
-        localStorage.setItem('anonymousDailyLogs', JSON.stringify(allLogs));
-        toast({ title: "บันทึกมื้ออาหารสำเร็จ" });
-      }
     } catch (error) {
       console.error("Error logging meal:", error);
       toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกมื้ออาหารได้", variant: "destructive" });
     } finally {
       setIsLoggingMeal(false);
+    }
+  };
+
+  const handleLogMealFromDatabase = async (food: FoodItem) => {
+    if (isLoggingMeal) return;
+    setIsLoggingMeal(true);
+
+    try {
+        const newMeal: Meal = {
+            name: food.name,
+            calories: food.calories,
+            timestamp: Timestamp.now(),
+            imageUrl: food.imageUrl,
+        };
+
+        await logMeal(newMeal);
+        
+        toast({ title: `เพิ่ม '${food.name}' สำเร็จ!`, description: "บันทึกมื้ออาหารของคุณแล้ว" });
+        setIsFoodDbOpen(false); // Close dialog on success
+    } catch (error) {
+        console.error("Error logging meal from database:", error);
+        toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกมื้ออาหารได้", variant: "destructive" });
+    } finally {
+        setIsLoggingMeal(false);
     }
   };
   
@@ -856,6 +922,13 @@ export default function FSFAPage() {
       return Math.min((consumed / goal) * 100, 100); // Cap at 100% for UI
     }, [userProfile.dailyCalorieGoal, dailyLog?.consumedCalories]);
 
+    const filteredFoods = useMemo(() => {
+        if (!foodSearchTerm) return databaseFoods;
+        return databaseFoods.filter(food => 
+            food.name.toLowerCase().includes(foodSearchTerm.toLowerCase())
+        );
+    }, [databaseFoods, foodSearchTerm]);
+
 
   return (
     <div className="min-h-screen bg-background text-foreground font-body">
@@ -866,9 +939,6 @@ export default function FSFAPage() {
                 <span className="text-xl font-bold tracking-tight">MOMU SCAN</span>
             </Link>
           <div className="flex items-center space-x-2">
-             <Link href="/datastore-summary" passHref>
-                <Button variant="ghost" size="sm">สรุปฐานข้อมูล</Button>
-            </Link>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon" className="rounded-full w-9 h-9">
@@ -952,6 +1022,50 @@ export default function FSFAPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      {/* Food DB Dialog */}
+      <Dialog open={isFoodDbOpen} onOpenChange={setIsFoodDbOpen}>
+        <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+                <DialogTitle>เลือกจากรายการอาหาร</DialogTitle>
+                <DialogDescription>ค้นหาและเลือกอาหารจากฐานข้อมูลเพื่อบันทึกแคลอรี่อย่างรวดเร็ว</DialogDescription>
+            </DialogHeader>
+            <div className="pt-4">
+                <Input
+                    placeholder="ค้นหาชื่ออาหาร..."
+                    value={foodSearchTerm}
+                    onChange={(e) => setFoodSearchTerm(e.target.value)}
+                    className="mb-4"
+                />
+                {isLoadingFoods ? (
+                    <div className="flex justify-center items-center h-64">
+                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                    </div>
+                ) : (
+                    <ScrollArea className="h-96">
+                        <div className="space-y-2 pr-4">
+                            {filteredFoods.length > 0 ? filteredFoods.map(food => (
+                                <Card key={food.id} className="flex items-center p-2">
+                                    <div className="w-16 h-16 mr-4 relative rounded-md overflow-hidden flex-shrink-0 bg-muted">
+                                        <Image src={food.imageUrl} alt={food.name} fill className="object-cover" data-ai-hint="food meal"/>
+                                    </div>
+                                    <div className="flex-grow">
+                                        <p className="font-semibold">{food.name}</p>
+                                        <p className="text-sm text-muted-foreground">{food.calories.toLocaleString()} kcal</p>
+                                    </div>
+                                    <Button size="sm" onClick={() => handleLogMealFromDatabase(food)} disabled={isLoggingMeal}>
+                                        {isLoggingMeal ? <Loader2 className="w-4 h-4 animate-spin"/> : 'เพิ่ม'}
+                                    </Button>
+                                </Card>
+                            )) : (
+                                <p className="text-center text-muted-foreground pt-10">ไม่พบรายการอาหารที่ตรงกัน</p>
+                            )}
+                        </div>
+                    </ScrollArea>
+                )}
+            </div>
+        </DialogContent>
+      </Dialog>
 
 
       <main className="container mx-auto grid grid-cols-1 gap-8 px-4 py-8 sm:px-6 lg:grid-cols-5 lg:px-8">
@@ -999,13 +1113,16 @@ export default function FSFAPage() {
                       </div>
                   )}
                 </CardContent>
-                <CardFooter>
+                <CardFooter className="flex flex-col sm:flex-row gap-2">
                      <Button onClick={handleImageAnalysis} disabled={isLoadingImageAnalysis || !previewUrl} className="w-full" size="lg">
                         {isLoadingImageAnalysis ? (
                             <><Loader2 className="animate-spin mr-2 h-5 w-5" />กำลังวิเคราะห์...</>
                         ) : (
                             <> <Sparkles className="mr-2 h-5 w-5" /> วิเคราะห์รูปภาพ </>
                         )}
+                    </Button>
+                    <Button variant="secondary" className="w-full" size="lg" onClick={() => setIsFoodDbOpen(true)}>
+                        <Database className="mr-2 h-5 w-5" /> เลือกจากรายการอาหาร
                     </Button>
                 </CardFooter>
             </Card>
@@ -1158,12 +1275,8 @@ export default function FSFAPage() {
                 <div className="flex justify-between items-center">
                     <CardTitle className="text-xl">ภาพรวมวันนี้</CardTitle>
                      <div className="flex items-center gap-2">
-                        <Dialog open={isWeeklyDialogOpen} onOpenChange={setIsWeeklyDialogOpen}>
-                            <DialogTrigger asChild><Button variant="outline" size="sm"><AreaChart className="h-4 w-4 lg:mr-2"/> <span className="hidden lg:inline">สัปดาห์</span></Button></DialogTrigger>
-                        </Dialog>
-                        <Dialog open={isMonthlyDialogOpen} onOpenChange={setIsMonthlyDialogOpen}>
-                            <DialogTrigger asChild><Button variant="outline" size="sm"><BarChartIcon className="h-4 w-4 lg:mr-2"/> <span className="hidden lg:inline">เดือน</span></Button></DialogTrigger>
-                        </Dialog>
+                        <Button variant="outline" size="sm" onClick={() => setIsWeeklyDialogOpen(true)}><AreaChart className="h-4 w-4 lg:mr-2"/> <span className="hidden lg:inline">สัปดาห์</span></Button>
+                        <Button variant="outline" size="sm" onClick={() => setIsMonthlyDialogOpen(true)}><BarChartIcon className="h-4 w-4 lg:mr-2"/> <span className="hidden lg:inline">เดือน</span></Button>
                     </div>
                 </div>
                 <CardDescription>{formattedToday || <Skeleton className="h-5 w-32" />}</CardDescription>
@@ -1234,7 +1347,6 @@ export default function FSFAPage() {
            </Card>
 
             <Dialog open={isWeeklyDialogOpen} onOpenChange={setIsWeeklyDialogOpen}>
-                <DialogTrigger asChild hidden />
                 <DialogContent className="sm:max-w-lg">
                     <DialogHeader>
                         <DialogTitle>ภาพรวมแคลอรี่สัปดาห์นี้</DialogTitle>
@@ -1271,7 +1383,6 @@ export default function FSFAPage() {
             </Dialog>
 
             <Dialog open={isMonthlyDialogOpen} onOpenChange={setIsMonthlyDialogOpen}>
-                <DialogTrigger asChild hidden />
                 <DialogContent className="max-w-3xl">
                     <DialogHeader>
                         <DialogTitle>ภาพรวมแคลอรี่เดือนนี้</DialogTitle>

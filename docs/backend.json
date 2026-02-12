@@ -36,7 +36,7 @@
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "FoodItem",
       "type": "object",
-      "description": "Represents a food item identified by the AI image scanner.",
+      "description": "Represents a food item from the central food database.",
       "properties": {
         "id": {
           "type": "string",
@@ -46,13 +46,9 @@
           "type": "string",
           "description": "Name of the food item."
         },
-        "nutritionalInformation": {
-          "type": "string",
-          "description": "Detailed nutritional information about the food item."
-        },
-        "safetyAdvice": {
-          "type": "string",
-          "description": "Safety advice related to the consumption of the food item."
+        "calories": {
+          "type": "number",
+          "description": "Estimated calories for the food item."
         },
         "imageUrl": {
           "type": "string",
@@ -63,8 +59,7 @@
       "required": [
         "id",
         "name",
-        "nutritionalInformation",
-        "safetyAdvice",
+        "calories",
         "imageUrl"
       ]
     },
@@ -200,7 +195,7 @@
         "path": "/food_items/{foodItemId}",
         "definition": {
           "schema": { "$ref": "#/entities/FoodItem" },
-          "description": "Collection for storing food items identified by the AI image scanner."
+          "description": "Collection for the central food item database, allowing users to select pre-defined meals."
         }
       },
       {
