@@ -196,6 +196,16 @@ const scanFoodImageFlow = ai.defineFlow(
 
     } catch (err: any) {
       console.error('ScanFoodImageFlow Error:', err);
+      
+      let reasoning = 'เกิดข้อผิดพลาดในการประมวลผลจาก AI'; // Default error
+      const errorMessage = err.message || err.originalMessage || '';
+
+      if (errorMessage.includes('Generative Language API has not been used') && errorMessage.includes('disabled')) {
+        reasoning = 'ข้อผิดพลาด: Generative Language API ยังไม่ได้เปิดใช้งานในโปรเจกต์ Google Cloud ของคุณ โปรดเปิดใช้งานใน Google Cloud Console แล้วลองอีกครั้ง';
+      } else if (errorMessage.includes('API key not valid')) {
+        reasoning = 'ข้อผิดพลาด: GOOGLE_API_KEY ไม่ถูกต้อง โปรดตรวจสอบคีย์ในไฟล์ .env';
+      }
+
       // Return a compliant, "unidentifiable" structure on any unexpected error.
       // This prevents the server action from throwing an unhandled exception.
       return {
@@ -204,7 +214,7 @@ const scanFoodImageFlow = ai.defineFlow(
           nutritionalInformation: {
             estimatedCalories: 0,
             visibleIngredients: [],
-            reasoning: 'เกิดข้อผิดพลาดในการประมวลผลจาก AI',
+            reasoning: reasoning,
             confidence: 0,
           },
       };
