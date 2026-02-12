@@ -32,6 +32,13 @@ service cloud.firestore {
         && resource.data.userId == request.auth.uid;
     }
 
+    // Allow signed-in users to contribute to the central food storage
+    match /food_storage/{foodStorageId} {
+      allow read: if true;
+      allow create: if signedIn();
+      allow update, delete: if false;
+    }
+
     // Allow public read access for summary page
     match /articles/{articleId} {
       allow read: if true;

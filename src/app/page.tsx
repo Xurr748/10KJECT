@@ -742,6 +742,18 @@ export default function FSFAPage() {
       };
 
       await logMeal(newMeal);
+
+      // Also save to the central food_storage collection if it's a new, identified food
+      if (db && currentUser && imageUrl && mealCalories > 0) {
+        const foodStorageCollection = collection(db, 'food_storage');
+        const newStoredFood = {
+            name: mealName,
+            calories: mealCalories,
+            imageUrl: imageUrl,
+        };
+        addDocumentNonBlocking(foodStorageCollection, newStoredFood);
+      }
+
       toast({ title: "บันทึกมื้ออาหารสำเร็จ!" });
 
     } catch (error) {
