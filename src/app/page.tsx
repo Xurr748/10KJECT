@@ -720,7 +720,7 @@ export default function FSFAPage() {
                 const uploadResult = await uploadBytes(storageRef, selectedFile);
                 imageUrl = await getDownloadURL(uploadResult.ref);
 
-                // Now, write to the central food_storage.
+                // Now, write to the central food_storage if applicable
                 if (mealCalories > 0) {
                     const foodStorageCollection = collection(db, 'food_storage');
                     const newStoredFood = { name: mealName, calories: mealCalories, imageUrl: imageUrl };
