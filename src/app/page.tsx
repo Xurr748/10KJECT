@@ -693,57 +693,77 @@ export default function FSFAPage() {
   const handleLogMeal = async () => {
     if (isLoggingMeal || !imageAnalysisResult || !imageAnalysisResult.nutritionalInformation) return;
     setIsLoggingMeal(true);
-  
+
     const mealName = imageAnalysisResult.foodItem;
     const mealCalories = imageAnalysisResult.nutritionalInformation.estimatedCalories ?? 0;
-  
-    let imageUrl: string | undefined = undefined;
 
     try {
-      if (currentUser && selectedFile) {
-        const storage = getStorage();
-        const filePath = `users/${currentUser.uid}/meals/${Date.now()}_${selectedFile.name}`;
-        const storageRef = ref(storage, filePath);
+        // --- Anonymous User Flow ---
+        // Simple case: Just save to local storage. No Firestore interaction.
+        if (!currentUser) {
+            const newMeal: Meal = { name: mealName, calories: mealCalories, timestamp: Timestamp.now() };
+            await logMeal(newMeal); // `logMeal` handles localStorage for anonymous users
+            toast({ title: "บันทึกมื้ออาหารส่วนตัวสำเร็จ!" });
+            setIsLoggingMeal(false);
+            return;
+        }
+
+        // --- Authenticated User Flow ---
+        if (!db) throw new Error("การเชื่อมต่อฐานข้อมูลล้มเหลว");
+
+        let imageUrl: string | undefined = undefined;
+
+        // **CRITICAL STEP**: Upload image and write to food_storage ONLY if a new file is present.
+        // This is the only way to get a new image URL to add to the central database.
+        if (selectedFile) {
+            const storage = getStorage();
+            const filePath = `users/${currentUser.uid}/meals/${Date.now()}_${selectedFile.name}`;
+            const storageRef = ref(storage, filePath);
+            
+            toast({ title: "กำลังอัปโหลดรูปภาพ...", description: "กรุณารอสักครู่" });
+            const uploadResult = await uploadBytes(storageRef, selectedFile);
+            imageUrl = await getDownloadURL(uploadResult.ref);
+
+            // Now, with a confirmed user and a new image URL, write to the central food_storage.
+            if (mealCalories > 0) {
+                const foodStorageCollection = collection(db, 'food_storage');
+                const newStoredFood = {
+                    name: mealName,
+                    calories: mealCalories,
+                    imageUrl: imageUrl,
+                };
+                await addDoc(foodStorageCollection, newStoredFood);
+                toast({
+                    title: "เพิ่มในคลังข้อมูลกลางสำเร็จ!",
+                    description: "ขอบคุณที่ช่วยทำให้ฐานข้อมูลของเราดีขึ้น"
+                });
+            }
+        }
         
-        toast({ title: "กำลังอัปโหลดรูปภาพ...", description: "กรุณารอสักครู่" });
-        const uploadResult = await uploadBytes(storageRef, selectedFile);
-        imageUrl = await getDownloadURL(uploadResult.ref);
-      }
-
-      const newMeal: Meal = {
-        name: mealName,
-        calories: mealCalories,
-        timestamp: Timestamp.now(),
-        ...(imageUrl && { imageUrl }),
-      };
-
-      // This will now properly await the database write to the user's log.
-      await logMeal(newMeal);
-      toast({ title: "บันทึกมื้ออาหารส่วนตัวสำเร็จ!" });
-
-      // Also save to the central food_storage collection if it's a new, identified food
-      if (db && currentUser && imageUrl && mealCalories > 0) {
-        const foodStorageCollection = collection(db, 'food_storage');
-        const newStoredFood = {
+        // **ALWAYS** save to the user's private daily log, with or without a new image.
+        const newMeal: Meal = {
             name: mealName,
             calories: mealCalories,
-            imageUrl: imageUrl,
+            timestamp: Timestamp.now(),
+            ...(imageUrl && { imageUrl }), // Include imageUrl if it was just created
         };
-        // Await this operation as well for consistency and error handling.
-        await addDoc(foodStorageCollection, newStoredFood);
-        toast({
-          title: "เพิ่มในคลังข้อมูลกลางสำเร็จ!",
-          description: "ขอบคุณที่ช่วยทำให้ฐานข้อมูลของเราดีขึ้น"
-        });
-      }
+        
+        await logMeal(newMeal);
+        toast({ title: "บันทึกมื้ออาหารส่วนตัวสำเร็จ!" });
 
     } catch (error) {
-      console.error("Error logging meal:", error);
-      toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถบันทึกมื้ออาหารได้", variant: "destructive" });
+        console.error("Error logging meal:", error);
+        let errorMessage = "ไม่สามารถบันทึกมื้ออาหารได้";
+        if (error instanceof Error && 'code' in error) {
+            if ((error as any).code.includes('permission-denied')) {
+                errorMessage = "ไม่มีสิทธิ์ในการบันทึกข้อมูล โปรดตรวจสอบการตั้งค่า Rules";
+            }
+        }
+        toast({ title: "เกิดข้อผิดพลาด", description: errorMessage, variant: "destructive" });
     } finally {
-      setIsLoggingMeal(false);
+        setIsLoggingMeal(false);
     }
-  };
+};
 
   const handleLogMealFromDatabase = async (food: FoodItem) => {
     if (isLoggingMeal) return;
