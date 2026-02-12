@@ -96,6 +96,12 @@ interface Meal {
   timestamp: Timestamp;
 }
 
+interface DailyLog {
+    date: Timestamp;
+    consumedCalories: number;
+    meals: Meal[];
+}
+
 interface FoodItem {
   id: string;
   name: string;
@@ -219,7 +225,6 @@ export default function FSFAPage() {
                 await addDoc(foodStorageRef, {
                     name: "ต้มยำกุ้ง",
                     calories: 350,
-                    imageUrl: "https://i.imgur.com/J3x23pM.jpeg"
                 });
                 toast({
                     title: "ฐานข้อมูลเริ่มต้นถูกสร้าง",
@@ -630,8 +635,8 @@ export default function FSFAPage() {
             await setDoc(logDocRef, newLogData);
         } else {
             const currentLogData = logSnapshot.data() as DailyLog;
-            const updatedMeals = [...currentLogData.meals, mealToLog];
-            const updatedCalories = currentLogData.consumedCalories + mealToLog.calories;
+            const updatedMeals = [...(currentLogData.meals || []), mealToLog];
+            const updatedCalories = (currentLogData.consumedCalories || 0) + mealToLog.calories;
             
             await updateDoc(logDocRef, {
                 meals: updatedMeals,
@@ -647,53 +652,63 @@ export default function FSFAPage() {
   const handleLogMeal = async () => {
     setIsLoggingMeal(true);
     try {
-      if (!imageAnalysisResult || !imageAnalysisResult.nutritionalInformation) {
-        toast({ title: "ไม่มีข้อมูลการวิเคราะห์", description: "โปรดวิเคราะห์รูปภาพก่อนบันทึก", variant: "destructive" });
-      } else if (!currentUser || !db) {
-        toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถเชื่อมต่อกับฐานข้อมูลหรือผู้ใช้ได้", variant: "destructive" });
-      } else {
-        // All good, proceed with logging
-        const mealName = imageAnalysisResult.foodItem;
-        const mealCalories = imageAnalysisResult.nutritionalInformation.estimatedCalories ?? 0;
-        
-        // Save to central storage if user is logged in (not anonymous) and calories > 0
-        if (!currentUser.isAnonymous && mealCalories > 0) {
-            const foodStorageCollection = collection(db, 'food_storage');
-            await addDoc(foodStorageCollection, { name: mealName, calories: mealCalories });
-            toast({
-                title: "เพิ่มในคลังข้อมูลกลางสำเร็จ!",
-                description: "ขอบคุณที่ช่วยทำให้ฐานข้อมูลของเราดีขึ้น"
-            });
+        if (!imageAnalysisResult || !imageAnalysisResult.nutritionalInformation) {
+            toast({ title: "ไม่มีข้อมูลการวิเคราะห์", description: "โปรดวิเคราะห์รูปภาพก่อนบันทึก", variant: "destructive" });
+            return;
         }
 
-        // Log the meal for the user (both anonymous and logged in)
+        const mealName = imageAnalysisResult.foodItem;
+        const mealCalories = imageAnalysisResult.nutritionalInformation.estimatedCalories ?? 0;
+
+        // Save to central storage if user is logged in (not anonymous) and calories > 0
+        if (currentUser && db && !currentUser.isAnonymous && mealCalories > 0) {
+            const foodStorageCollection = collection(db, 'food_storage');
+            
+            // Check if the food item already exists
+            const q = query(foodStorageCollection, where("name", "==", mealName));
+            const querySnapshot = await getDocs(q);
+
+            if (querySnapshot.empty) {
+                // If it doesn't exist, add it
+                await addDoc(foodStorageCollection, { name: mealName, calories: mealCalories });
+                toast({
+                    title: "เพิ่มในคลังข้อมูลกลางสำเร็จ!",
+                    description: `ขอบคุณที่ช่วยเพิ่ม '${mealName}' เข้าระบบ`
+                });
+            } else {
+                // If it exists, do nothing for the central storage
+                console.log(`'${mealName}' already exists in food_storage. Skipping.`);
+            }
+        }
+
+        // Log the meal for the user's personal log regardless
         const newMeal: Meal = {
-          name: mealName,
-          calories: mealCalories,
-          timestamp: Timestamp.now(),
+            name: mealName,
+            calories: mealCalories,
+            timestamp: Timestamp.now(),
         };
 
         await logMeal(newMeal);
-        
-        if (currentUser.isAnonymous) {
+
+        if (currentUser?.isAnonymous) {
             toast({ title: "บันทึกมื้ออาหารสำเร็จ!", description: "ข้อมูลของคุณจะถูกย้ายเมื่อคุณลงทะเบียน" });
         } else {
             toast({ title: "บันทึกมื้ออาหารส่วนตัวสำเร็จ!" });
         }
-      }
+
     } catch (error) {
-      console.error("Error logging meal:", error);
-      let errorMessage = "ไม่สามารถบันทึกมื้ออาหารได้";
-      if (error instanceof Error && 'code' in error) {
-        if ((error as any).code.includes('permission-denied')) {
-          errorMessage = "ไม่มีสิทธิ์ในการบันทึกข้อมูล โปรดตรวจสอบการตั้งค่า Rules";
+        console.error("Error logging meal:", error);
+        let errorMessage = "ไม่สามารถบันทึกมื้ออาหารได้";
+        if (error instanceof Error && 'code' in error) {
+            if ((error as any).code.includes('permission-denied')) {
+                errorMessage = "ไม่มีสิทธิ์ในการบันทึกข้อมูล โปรดตรวจสอบการตั้งค่า Rules";
+            }
         }
-      }
-      toast({ title: "เกิดข้อผิดพลาด", description: errorMessage, variant: "destructive" });
+        toast({ title: "เกิดข้อผิดพลาด", description: errorMessage, variant: "destructive" });
     } finally {
         setIsLoggingMeal(false);
     }
-  };
+};
 
 
   const handleLogMealFromDatabase = async (food: FoodItem) => {
@@ -857,7 +872,7 @@ export default function FSFAPage() {
         const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
         return daysInMonth.map(day => {
-            const logForDay = monthlyLogs.find(log => format(log.date.toDate(), 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'));
+            const logForDay = monthlyLogs.find(log => format(log.date.toDate(), 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'));
             return {
                 name: format(day, 'd'),
                 calories: logForDay ? logForDay.consumedCalories : 0,
@@ -1004,7 +1019,7 @@ export default function FSFAPage() {
                 ) : (
                     <ScrollArea className="h-96">
                         <div className="space-y-2 pr-4">
-                            {filteredFoods.length > 0 ? filteredFoods.map(food => (
+                            {filteredFoods && filteredFoods.length > 0 ? filteredFoods.map(food => (
                                 <Card key={food.id} className="flex items-center p-3">
                                     <div className="flex-grow">
                                         <p className="font-semibold">{food.name}</p>
@@ -1255,7 +1270,7 @@ export default function FSFAPage() {
 
                  <div>
                     <h3 className="text-md font-semibold mb-3">มื้อที่บันทึกแล้ว</h3>
-                    {dailyLog && dailyLog.meals.length > 0 ? (
+                    {dailyLog && dailyLog.meals && dailyLog.meals.length > 0 ? (
                         <Accordion type="single" collapsible className="w-full" defaultValue={mealPeriodOrder.find(p => groupedMeals[p]) ? `period-${mealPeriodOrder.find(p => groupedMeals[p])}`: undefined}>
                             {mealPeriodOrder.map(period => (
                                 groupedMeals[period] && (
@@ -1379,3 +1394,4 @@ export default function FSFAPage() {
     </div>
   );
 }
+
