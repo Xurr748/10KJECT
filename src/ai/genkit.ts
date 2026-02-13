@@ -1,12 +1,11 @@
 import { genkit } from 'genkit';
 import { googleAI } from '@genkit-ai/google-genai';
 
-// The API key for Google AI is sourced from the GOOGLE_API_KEY environment variable.
-// This is configured in the .env file at the root of the project.
+// The API key for Google AI is hardcoded here.
 export const ai = genkit({
   plugins: [
     googleAI({
-      apiKey: process.env.GOOGLE_API_KEY,
+      apiKey: 'AIzaSyATnl_6_0CGoMZ1lI_fXmr25eHpBeswBTw',
     }),
   ],
 });

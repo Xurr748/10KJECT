@@ -1,17 +1,13 @@
-// This file reads the Firebase configuration from environment variables.
-// It is the standard and recommended way to handle secrets in a Next.js app.
-
-// Ensure you have a .env file in the root of your project with the required variables.
-// See .env.example for the structure.
+// This file contains the Firebase configuration for the app.
+// These values are taken directly from the Firebase console.
 
 export const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || '',
+  apiKey: "AIzaSyCYsCeRqiGfkdSjKPIQxy_HWW2H3KT2XMg",
+  authDomain: "fsfa-tl5x4.firebaseapp.com",
+  projectId: "fsfa-tl5x4",
+  storageBucket: "fsfa-tl5x4.appspot.com",
+  messagingSenderId: "546156811876",
+  appId: "1:546156811876:web:fd69c51b9ce24ef3b77171"
 };
 
 // Validate that the essential Firebase config values are present.
@@ -22,7 +18,7 @@ if (
 ) {
   // This log is helpful for developers to know if their .env is missing.
   console.error(
-    'Firebase configuration is missing or incomplete. Please check your .env file.'
+    'Firebase configuration is missing or incomplete.'
   );
   // In a production environment, you might want to throw an error.
   // throw new Error('Firebase configuration is missing or incomplete.');
