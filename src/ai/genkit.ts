@@ -2,7 +2,7 @@ import { genkit } from 'genkit';
 import { googleAI } from '@genkit-ai/google-genai';
 
 // The API key is hardcoded here to ensure correctness.
-const googleApiKey = "AIzaSyCYsCeRqiGfkdSjKPIQxy_HWW2H3KT2XMg";
+const googleApiKey = "AIzaSyATnl_6_0CGoMZ1lI_fXmr25eHpBeswBTw";
 
 export const ai = genkit({
   plugins: [
