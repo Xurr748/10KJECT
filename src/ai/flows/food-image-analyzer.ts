@@ -64,7 +64,7 @@ const prompt = ai.definePrompt({
   name: 'scanFoodImagePrompt',
   input: { schema: ScanFoodImageInputSchema },
   output: { schema: LlmOutputSchema },
-  model: 'googleai/gemini-1.5-flash-latest',
+  model: 'googleai/gemini-2.5-flash-lite',
   config: {
     temperature: 0.15,
     topP: 0.85,
