@@ -875,7 +875,7 @@ export default function FSFAPage() {
         const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
         return daysInMonth.map(day => {
-            const logForDay = monthlyLogs.find(log => format(log.date.toDate(), 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'));
+            const logForDay = monthlyLogs.find(log => format(log.date.toDate(), 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'));
             return {
                 name: format(day, 'd'),
                 calories: logForDay ? logForDay.consumedCalories : 0,
