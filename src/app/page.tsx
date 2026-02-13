@@ -73,7 +73,7 @@ import { Textarea } from '@/components/ui/textarea';
 
 
 // Lucide Icons
-import { Camera, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, Send, MessageCircle, ScanLine, Flame, Calculator, PlusCircle, BookCheck, Clock, CalendarDays, BarChart as BarChartIcon, Wheat, Sparkles, Trash2, AreaChart, PieChart, UploadCloud, Database } from 'lucide-react';
+import { Camera, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, Send, MessageCircle, ScanLine, Flame, Calculator, PlusCircle, BookCheck, Clock, CalendarDays, BarChart as BarChartIcon, Wheat, Sparkles, Trash2, AreaChart, PieChart, UploadCloud, Database, RotateCw } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
 
@@ -447,7 +447,9 @@ export default function FSFAPage() {
   }, [imageAnalysisResult]);
   
   useEffect(() => {
-    if (chatMessages.length > 0) localStorage.setItem('chatMessages', JSON.stringify(chatMessages));
+    if (chatMessages.length > 0) {
+      localStorage.setItem('chatMessages', JSON.stringify(chatMessages));
+    }
   }, [chatMessages]);
 
   useEffect(() => {
@@ -457,10 +459,7 @@ export default function FSFAPage() {
 
   useEffect(() => {
     if (chatScrollAreaRef.current) {
-      const scrollableViewport = chatScrollAreaRef.current.querySelector('div[data-radix-scroll-area-viewport]');
-      if (scrollableViewport) {
-        scrollableViewport.scrollTop = scrollableViewport.scrollHeight;
-      }
+        chatScrollAreaRef.current.scrollTop = chatScrollAreaRef.current.scrollHeight;
     }
   }, [chatMessages]);
 
@@ -569,6 +568,17 @@ export default function FSFAPage() {
        if(chatInputRef.current) chatInputRef.current.focus();
     }
   };
+
+  const handleResetChat = useCallback(() => {
+    if (window.confirm('คุณต้องการล้างประวัติการสนทนาทั้งหมดใช่หรือไม่?')) {
+      setChatMessages([]);
+      localStorage.removeItem('chatMessages');
+      toast({
+        title: "ล้างประวัติแชทสำเร็จ",
+        description: "คุณสามารถเริ่มต้นการสนทนาใหม่ได้เลย",
+      });
+    }
+  }, [toast]);
 
   const handleCalculateBmi = async () => {
     const h = parseFloat(height);
@@ -875,7 +885,11 @@ export default function FSFAPage() {
         const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
 
         return daysInMonth.map(day => {
-            const logForDay = monthlyLogs.find(log => format(log.date.toDate(), 'yyyy-MM-dd') === format(day, 'yyyy-MM-dd'));
+            const logForDay = monthlyLogs.find(log => {
+                const logDate = format(log.date.toDate(), 'yyyy-MM-dd');
+                const currentDay = format(day, 'yyyy-MM-dd');
+                return logDate === currentDay;
+            });
             return {
                 name: format(day, 'd'),
                 calories: logForDay ? logForDay.consumedCalories : 0,
@@ -1168,11 +1182,19 @@ export default function FSFAPage() {
 
             <Card>
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-xl">
-                        <MessageCircle className="w-6 h-6 text-primary" />
-                        Momu AI Assistant
-                    </CardTitle>
-                    <CardDescription>สอบถามเกี่ยวกับอาหาร โภชนาการ หรือข้อสงสัยอื่นๆ</CardDescription>              
+                    <div className="flex justify-between items-start">
+                        <div>
+                            <CardTitle className="flex items-center gap-2 text-xl">
+                                <MessageCircle className="w-6 h-6 text-primary" />
+                                Momu AI Assistant
+                            </CardTitle>
+                            <CardDescription>สอบถามเกี่ยวกับอาหาร โภชนาการ หรือข้อสงสัยอื่นๆ</CardDescription>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={handleResetChat} className="flex-shrink-0 -mr-2 -mt-2">
+                            <RotateCw className="h-4 w-4 text-muted-foreground" />
+                            <span className="sr-only">รีเซ็ตแชท</span>
+                        </Button>
+                    </div>
                 </CardHeader>
                 <CardContent>
                     <ScrollArea className="h-72 w-full rounded-lg border bg-muted/30 p-4" viewportRef={chatScrollAreaRef}>
@@ -1398,4 +1420,5 @@ export default function FSFAPage() {
   );
 }
 
+    
     
