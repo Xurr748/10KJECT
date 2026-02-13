@@ -188,6 +188,40 @@
         "name",
         "calories"
       ]
+    },
+    "ChatSession": {
+      "title": "Chat Session",
+      "description": "Represents a single chat session with the AI assistant, including the full conversation history.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The UID of the user who owns this chat session."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp of when the chat session was created."
+        },
+        "messages": {
+          "type": "array",
+          "description": "The array of messages in the conversation.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "type": "string",
+                "enum": ["user", "model"]
+              },
+              "content": {
+                "type": "string"
+              }
+            },
+            "required": ["role", "content"]
+          }
+        }
+      },
+      "required": ["userId", "createdAt", "messages"]
     }
   },
   "auth": {
@@ -238,6 +272,13 @@
         "definition": {
           "schema": { "$ref": "#/entities/StoredFoodItem" },
           "description": "Central collection for all food items logged by users via image analysis."
+        }
+      },
+      {
+        "path": "/chats/{chatId}",
+        "definition": {
+          "schema": { "$ref": "#/entities/ChatSession" },
+          "description": "Collection for storing user chat sessions with the AI assistant."
         }
       }
     ],

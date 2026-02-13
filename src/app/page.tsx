@@ -18,7 +18,7 @@ import {
 } from '@/ai/flows/post-scan-chat';
 import { useAuth, useFirestore, useUser, useCollection } from '@/firebase'; 
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth'; 
-import { doc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, updateDoc, setDoc, limit } from 'firebase/firestore';
+import { doc, getDoc, Timestamp, collection, addDoc, query, where, getDocs, onSnapshot, serverTimestamp, writeBatch, updateDoc, setDoc, limit, orderBy, deleteDoc } from 'firebase/firestore';
 
 import {
   initiateEmailSignIn,
@@ -100,6 +100,12 @@ interface DailyLog {
     date: Timestamp;
     consumedCalories: number;
     meals: Meal[];
+}
+
+interface ChatSession {
+    userId: string;
+    createdAt: Timestamp;
+    messages: ChatMessage[];
 }
 
 interface FoodItem {
@@ -187,6 +193,7 @@ export default function FSFAPage() {
   const [chatInput, setChatInput] = useState('');
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [chatId, setChatId] = useState<string | null>(null);
   const chatScrollAreaRef = useRef<HTMLDivElement>(null);
 
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
@@ -245,9 +252,6 @@ export default function FSFAPage() {
     const savedAnalysisResult = safeJsonParse(localStorage.getItem('imageAnalysisResult'));
     if (savedAnalysisResult) setImageAnalysisResult(savedAnalysisResult);
     
-    const savedChatMessages = safeJsonParse(localStorage.getItem('chatMessages'));
-    if (savedChatMessages) setChatMessages(savedChatMessages);
-
     const savedPreviewUrl = localStorage.getItem('previewUrl');
     if (savedPreviewUrl) setPreviewUrl(savedPreviewUrl);
   }, []);
@@ -360,6 +364,46 @@ export default function FSFAPage() {
   }, [currentUser, isAuthLoading, db, toast, resetState]);
 
 
+    // --- CHAT DATA MANAGEMENT ---
+    useEffect(() => {
+        if (isAuthLoading || !db) return; // Wait for auth and db services
+
+        let unsubscribeChat: (() => void) | undefined;
+
+        if (currentUser && !currentUser.isAnonymous) {
+            // --- Logged-in user: Use Firestore ---
+            const chatsRef = collection(db, 'chats');
+            const q = query(chatsRef, where('userId', '==', currentUser.uid), orderBy('createdAt', 'desc'), limit(1));
+
+            unsubscribeChat = onSnapshot(q, (snapshot) => {
+                if (snapshot.empty) {
+                    setChatMessages([]);
+                    setChatId(null);
+                } else {
+                    const chatDoc = snapshot.docs[0];
+                    const chatData = chatDoc.data() as ChatSession;
+                    setChatMessages(chatData.messages || []);
+                    setChatId(chatDoc.id);
+                }
+            }, (error) => {
+                console.error("[Chat] Error listening:", error);
+                toast({ title: "Chat Error", description: "Could not load chat history.", variant: "destructive" });
+            });
+        } else {
+            // --- Anonymous or no user: Use localStorage ---
+            const savedChatMessages = safeJsonParse(localStorage.getItem('chatMessages'));
+            setChatMessages(savedChatMessages || []);
+            setChatId(null);
+        }
+
+        return () => {
+            if (unsubscribeChat) {
+                unsubscribeChat();
+            }
+        };
+    }, [currentUser, isAuthLoading, db, toast]);
+
+
     // Effect to fetch weekly logs when dialog opens
     useEffect(() => {
         const fetchWeeklyLogs = async () => {
@@ -446,13 +490,6 @@ export default function FSFAPage() {
     if (imageAnalysisResult) localStorage.setItem('imageAnalysisResult', JSON.stringify(imageAnalysisResult));
   }, [imageAnalysisResult]);
   
-  useEffect(() => {
-    if (chatMessages.length > 0) {
-      localStorage.setItem('chatMessages', JSON.stringify(chatMessages));
-    } else {
-      localStorage.removeItem('chatMessages');
-    }
-  }, [chatMessages]);
 
   useEffect(() => {
     if (previewUrl) localStorage.setItem('previewUrl', previewUrl);
@@ -552,34 +589,66 @@ export default function FSFAPage() {
     if (!messageContent) return;
 
     const newUserMessage: ChatMessage = { role: 'user', content: messageContent };
-    setChatMessages(prev => [...prev, newUserMessage]);
+    const newMessagesWithUser = [...chatMessages, newUserMessage];
+    setChatMessages(newMessagesWithUser);
     setChatInput('');
     setIsChatLoading(true);
 
     try {
-      const result: AIChatOutput = await chatWithBot({ message: messageContent, history: chatMessages.slice(-5) });
-      const newBotMessage: ChatMessage = { role: 'model', content: result.response };
-      setChatMessages(prev => [...prev, newBotMessage]);
+        const result: AIChatOutput = await chatWithBot({ message: messageContent, history: chatMessages.slice(-5) });
+        const newBotMessage: ChatMessage = { role: 'model', content: result.response };
+        
+        const finalMessages = [...newMessagesWithUser, newBotMessage];
+        setChatMessages(finalMessages);
+
+        if (currentUser && !currentUser.isAnonymous && db) {
+            if (chatId) {
+                const chatDocRef = doc(db, 'chats', chatId);
+                updateDoc(chatDocRef, { messages: finalMessages }); // Non-blocking
+            } else {
+                const newChat: Omit<ChatSession, 'createdAt'> & { createdAt: any } = {
+                    userId: currentUser.uid,
+                    createdAt: serverTimestamp(),
+                    messages: finalMessages,
+                };
+                addDoc(collection(db, 'chats'), newChat); // Non-blocking
+            }
+        } else {
+            localStorage.setItem('chatMessages', JSON.stringify(finalMessages));
+        }
+
     } catch (error) {
-      console.error("Error in chatWithBot:", error);
-      const errorMessage: ChatMessage = { role: 'model', content: "ขออภัยค่ะ มีปัญหาในการเชื่อมต่อกับ AI โปรดลองอีกครั้ง" };
-      setChatMessages(prev => [...prev, errorMessage]);
-      toast({ title: "Chatbot Error", variant: "destructive" });
+        console.error("Error in chatWithBot:", error);
+        const errorMessage: ChatMessage = { role: 'model', content: "ขออภัยค่ะ มีปัญหาในการเชื่อมต่อกับ AI โปรดลองอีกครั้ง" };
+        setChatMessages(prev => [...prev, errorMessage]);
+        toast({ title: "Chatbot Error", variant: "destructive" });
     } finally {
-      setIsChatLoading(false);
-       if(chatInputRef.current) chatInputRef.current.focus();
+        setIsChatLoading(false);
+        if(chatInputRef.current) chatInputRef.current.focus();
     }
   };
 
   const handleResetChat = useCallback(() => {
     if (window.confirm('คุณต้องการล้างประวัติการสนทนาทั้งหมดใช่หรือไม่?')) {
-      setChatMessages([]);
-      toast({
-        title: "ล้างประวัติแชทสำเร็จ",
-        description: "คุณสามารถเริ่มต้นการสนทนาใหม่ได้เลย",
-      });
+      if (currentUser && !currentUser.isAnonymous && db && chatId) {
+        const chatDocRef = doc(db, 'chats', chatId);
+        deleteDoc(chatDocRef)
+          .then(() => {
+              toast({ title: "ล้างประวัติแชทสำเร็จ" });
+          })
+          .catch(error => {
+            console.error("Error deleting chat:", error);
+            toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถล้างประวัติแชทได้", variant: "destructive" });
+        });
+      } else {
+        localStorage.removeItem('chatMessages');
+        setChatMessages([]);
+        toast({
+          title: "ล้างประวัติแชทสำเร็จ",
+        });
+      }
     }
-  }, [toast]);
+  }, [currentUser, db, chatId, toast]);
 
   const handleCalculateBmi = async () => {
     const h = parseFloat(height);
@@ -1420,10 +1489,3 @@ export default function FSFAPage() {
     </div>
   );
 }
-
-    
-    
-
-    
-
-    
