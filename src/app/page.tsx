@@ -449,6 +449,8 @@ export default function FSFAPage() {
   useEffect(() => {
     if (chatMessages.length > 0) {
       localStorage.setItem('chatMessages', JSON.stringify(chatMessages));
+    } else {
+      localStorage.removeItem('chatMessages');
     }
   }, [chatMessages]);
 
@@ -572,7 +574,6 @@ export default function FSFAPage() {
   const handleResetChat = useCallback(() => {
     if (window.confirm('คุณต้องการล้างประวัติการสนทนาทั้งหมดใช่หรือไม่?')) {
       setChatMessages([]);
-      localStorage.removeItem('chatMessages');
       toast({
         title: "ล้างประวัติแชทสำเร็จ",
         description: "คุณสามารถเริ่มต้นการสนทนาใหม่ได้เลย",
@@ -1421,6 +1422,8 @@ export default function FSFAPage() {
 }
 
     
+    
+
     
 
     
