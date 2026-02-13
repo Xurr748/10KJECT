@@ -116,7 +116,7 @@ const jsonReviver = (key: string, value: any) => {
       return new Timestamp(value.seconds, value.nanoseconds);
     }
     if (key === 'date' || key === 'timestamp') {
-       if (typeof value === 'string' && value.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z/)) {
+       if (typeof value === 'string' && value.match(/\d{4}-\d{2}T\d{2}:\d{2}:\d{2}.\d{3}Z/)) {
         return Timestamp.fromDate(new Date(value));
       }
     }
@@ -1182,7 +1182,7 @@ export default function FSFAPage() {
 
             <Card>
                 <CardHeader>
-                    <div className="flex justify-between items-start">
+                    <div className="flex justify-between items-center">
                         <div>
                             <CardTitle className="flex items-center gap-2 text-xl">
                                 <MessageCircle className="w-6 h-6 text-primary" />
@@ -1190,9 +1190,9 @@ export default function FSFAPage() {
                             </CardTitle>
                             <CardDescription>สอบถามเกี่ยวกับอาหาร โภชนาการ หรือข้อสงสัยอื่นๆ</CardDescription>
                         </div>
-                        <Button variant="ghost" size="icon" onClick={handleResetChat} className="flex-shrink-0 -mr-2 -mt-2">
-                            <RotateCw className="h-4 w-4 text-muted-foreground" />
-                            <span className="sr-only">รีเซ็ตแชท</span>
+                        <Button variant="outline" size="sm" onClick={handleResetChat} className="flex-shrink-0">
+                            <RotateCw className="h-4 w-4 mr-2" />
+                            รีเซ็ตแชท
                         </Button>
                     </div>
                 </CardHeader>
@@ -1421,4 +1421,6 @@ export default function FSFAPage() {
 }
 
     
+    
+
     
