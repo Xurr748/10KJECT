@@ -46,7 +46,7 @@ const prompt = ai.definePrompt({
   name: 'postScanChatPrompt',
   input: { schema: ChatInputSchema },
   output: { schema: ChatOutputSchema },
-  model: 'googleai/gemini-1.5-pro-latest',
+  model: 'googleai/gemini-1.5-flash-latest',
   config: {
     temperature: 0.4,
     maxOutputTokens: 400,
