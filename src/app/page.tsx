@@ -766,6 +766,9 @@ export default function FSFAPage() {
       case 'auth/weak-password':
         errorMessage = "รหัสผ่านต้องมี 6 ตัวอักษรขึ้นไป";
         break;
+      case 'auth/requests-to-this-api-identitytoolkit-method-google.cloud.identitytoolkit.v1.authenticationservice.signup-are-blocked.':
+        errorMessage = "การสร้างบัญชีใหม่ถูกปิดกั้นในโปรเจกต์นี้ โปรดเปิดใช้งานใน Firebase Console";
+        break;
       default:
         errorMessage = "การยืนยันตัวตนล้มเหลว โปรดลองอีกครั้ง";
     }
@@ -1395,3 +1398,4 @@ export default function FSFAPage() {
   );
 }
 
+    
