@@ -76,6 +76,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Camera, Brain, AlertCircle, CheckCircle, Info, UserCircle, LogIn, UserPlus, LogOut, Loader2, Send, MessageCircle, ScanLine, Flame, Calculator, PlusCircle, BookCheck, Clock, CalendarDays, BarChart as BarChartIcon, Wheat, Sparkles, Trash2, AreaChart, PieChart, UploadCloud, Database, RotateCw } from 'lucide-react';
 
 const UNIDENTIFIED_FOOD_MESSAGE = "ไม่สามารถระบุชนิดอาหารได้";
+const CHAT_HISTORY_LIMIT = 50;
 
 // Helper to get the start of the current day in UTC
 const getStartOfUTCDay = () => {
@@ -598,7 +599,13 @@ export default function FSFAPage() {
         const result: AIChatOutput = await chatWithBot({ message: messageContent, history: chatMessages.slice(-5) });
         const newBotMessage: ChatMessage = { role: 'model', content: result.response };
         
-        const finalMessages = [...newMessagesWithUser, newBotMessage];
+        let finalMessages = [...newMessagesWithUser, newBotMessage];
+
+        // Trim history if it exceeds the limit
+        if (finalMessages.length > CHAT_HISTORY_LIMIT) {
+            finalMessages = finalMessages.slice(finalMessages.length - CHAT_HISTORY_LIMIT);
+        }
+
         setChatMessages(finalMessages);
 
         if (currentUser && !currentUser.isAnonymous && db) {
@@ -627,28 +634,6 @@ export default function FSFAPage() {
         if(chatInputRef.current) chatInputRef.current.focus();
     }
   };
-
-  const handleResetChat = useCallback(() => {
-    if (window.confirm('คุณต้องการล้างประวัติการสนทนาทั้งหมดใช่หรือไม่?')) {
-      if (currentUser && !currentUser.isAnonymous && db && chatId) {
-        const chatDocRef = doc(db, 'chats', chatId);
-        deleteDoc(chatDocRef)
-          .then(() => {
-              toast({ title: "ล้างประวัติแชทสำเร็จ" });
-          })
-          .catch(error => {
-            console.error("Error deleting chat:", error);
-            toast({ title: "เกิดข้อผิดพลาด", description: "ไม่สามารถล้างประวัติแชทได้", variant: "destructive" });
-        });
-      } else {
-        localStorage.removeItem('chatMessages');
-        setChatMessages([]);
-        toast({
-          title: "ล้างประวัติแชทสำเร็จ",
-        });
-      }
-    }
-  }, [currentUser, db, chatId, toast]);
 
   const handleCalculateBmi = async () => {
     const h = parseFloat(height);
@@ -1252,19 +1237,11 @@ export default function FSFAPage() {
 
             <Card>
                 <CardHeader>
-                    <div className="flex justify-between items-center">
-                        <div>
-                            <CardTitle className="flex items-center gap-2 text-xl">
-                                <MessageCircle className="w-6 h-6 text-primary" />
-                                Momu AI Assistant
-                            </CardTitle>
-                            <CardDescription>สอบถามเกี่ยวกับอาหาร โภชนาการ หรือข้อสงสัยอื่นๆ</CardDescription>
-                        </div>
-                        <Button variant="outline" size="sm" onClick={handleResetChat} className="flex-shrink-0">
-                            <RotateCw className="h-4 w-4 mr-2" />
-                            รีเซ็ตแชท
-                        </Button>
-                    </div>
+                    <CardTitle className="flex items-center gap-2 text-xl">
+                        <MessageCircle className="w-6 h-6 text-primary" />
+                        Momu AI Assistant
+                    </CardTitle>
+                    <CardDescription>สอบถามเกี่ยวกับอาหาร โภชนาการ หรือข้อสงสัยอื่นๆ</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <ScrollArea className="h-72 w-full rounded-lg border bg-muted/30 p-4" viewportRef={chatScrollAreaRef}>
@@ -1489,3 +1466,5 @@ export default function FSFAPage() {
     </div>
   );
 }
+
+    
