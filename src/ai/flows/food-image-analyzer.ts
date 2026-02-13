@@ -171,8 +171,6 @@ const scanFoodImageFlow = ai.defineFlow(
 
       console.log('[scanFoodImageFlow] Raw AI Output:', JSON.stringify(partialOutput));
       
-      // This is a much safer way to build the output,
-      // resilient to null/undefined values at any level from the AI.
       const finalOutput: ScanFoodImageOutput = {
         cuisineType: partialOutput?.cuisineType || 'ไม่สามารถระบุประเภทได้',
         foodItem: partialOutput?.foodItem || 'ไม่สามารถระบุชนิดอาหารได้',
@@ -184,12 +182,23 @@ const scanFoodImageFlow = ai.defineFlow(
         },
       };
 
-      // Additional sanity check: if the AI returns an "unidentifiable" food name,
-      // ensure the calories and confidence are also zero for consistency.
-      if (finalOutput.foodItem === 'ไม่สามารถระบุชนิดอาหารได้') {
+      // Additional sanity checks for consistency and user experience
+      const confidence = finalOutput.nutritionalInformation.confidence;
+      if (finalOutput.foodItem === 'ไม่สามารถระบุชนิดอาหารได้' || confidence < 15) {
+          finalOutput.foodItem = 'ไม่สามารถระบุชนิดอาหารได้';
+          finalOutput.cuisineType = 'ไม่สามารถระบุประเภทได้';
           finalOutput.nutritionalInformation.estimatedCalories = 0;
           finalOutput.nutritionalInformation.confidence = 0;
+          finalOutput.nutritionalInformation.visibleIngredients = [];
+          
+          // Provide a clearer reason if the AI didn't.
+          if (!finalOutput.nutritionalInformation.reasoning || finalOutput.nutritionalInformation.reasoning === 'ไม่มีข้อมูลโภชนาการ') {
+            finalOutput.nutritionalInformation.reasoning = confidence < 15 
+                ? `AI ไม่ค่อยมั่นใจในผลลัพธ์ (ความเชื่อมั่น: ${confidence}%) จึงตีผลว่าไม่สามารถระบุได้`
+                : 'ภาพไม่ชัดเจน หรืออาจไม่ใช่อาหาร';
+          }
       }
+
 
       console.log('[scanFoodImageFlow] Final Parsed Output:', finalOutput);
       return finalOutput;
@@ -197,7 +206,7 @@ const scanFoodImageFlow = ai.defineFlow(
     } catch (err: any) {
       console.error('ScanFoodImageFlow Error:', err);
       
-      let reasoning = 'เกิดข้อผิดพลาดในการประมวลผลจาก AI'; // Default error
+      let reasoning = 'ขออภัยค่ะ AI ไม่สามารถวิเคราะห์รูปภาพได้ในขณะนี้ โปรดลองใช้ภาพอื่นที่ชัดเจนกว่า'; // More user-friendly default error
       const errorMessage = err.message || err.originalMessage || '';
 
       if (errorMessage.includes('Generative Language API has not been used') && errorMessage.includes('disabled')) {
